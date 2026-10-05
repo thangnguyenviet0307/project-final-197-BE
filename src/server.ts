@@ -1,25 +1,26 @@
+import app from "./app.js";
+import mongoose from "mongoose";
 
-import app from './app';
-import mongoose from 'mongoose';
-import {ENV} from './config/env';
+const PORT = Number(process.env["PORT"]) || 3000;
+const MONGODB_URI =
+  process.env["MONGODB_URI"] || "mongodb://localhost:27017/project_final_197";
 
-const PORT = ENV.PORT || 3000;
+const startServer = async (): Promise<void> => {
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      autoIndex: true,
+      serverSelectionTimeoutMS: 5000,
+    });
 
+    console.log("Connected to MongoDB");
 
-//kết nối mongodb qua mongoose
-mongoose.connect(ENV.MONGODB_URI, {
-  autoIndex: true, // Tự động tạo index từ schema
-})
-.then(() => {
-  console.log('Connected to MongoDB');
-  //Sau đó mới đi vào listen server
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
-})
-.catch((error) => {
-  console.error('Error connecting to MongoDB:', error);
-  process.exit(1); // Thoát ứng dụng nếu không kết nối được
-});
+    app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error("Error connecting to MongoDB:", error);
+    process.exit(1);
+  }
+};
 
-
+void startServer();

@@ -1,16 +1,5 @@
 import express, { type NextFunction, type Express, type Request, type Response } from 'express';
-import categoriesRouter from "./routes/v1/categories.route"
-import categoriesRouterV2 from "./routes/v2/categories.route"
-import brandsRouter from "./routes/v1/brands.route"
-import productsRouter from "./routes/v1/products.route"
-import staffsRouter from "./routes/v1/staffs.route"
-import authRouter from "./routes/v1/auth.route"
-import customersRouter from "./routes/v1/customers.route"
-import ordersRouter from "./routes/v1/orders.route"
-import uploadRouter from "./routes/v1/upload.route"
-import emailRouter from "./routes/v1/mail.route"
 import createError from 'http-errors';
-import { appMiddleware } from './middleware/appMiddleware.middleware';
 import cors from 'cors';
 import path from 'node:path';
 import multer from 'multer';
@@ -26,23 +15,13 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use(cors());
 
 //Middleware cấp độ ứng dụng (Application-level middleware)
-app.use(appMiddleware);
 
 /** BEGIN ROUTES */
 app.get('/', (req: Request, res: Response) => {
   res.send('Hello World!');
 });
-//Khai báo route cho categories
-app.use('/api/v1/categories', categoriesRouter);
-app.use('/api/v2/categories', categoriesRouterV2);
-app.use('/api/v1/brands', brandsRouter);
-app.use('/api/v1/products', productsRouter);
-app.use('/api/v1/staffs', staffsRouter);
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/customers', customersRouter);
-app.use('/api/v1/orders', ordersRouter);
-app.use('/api/v1/uploads', uploadRouter);
-app.use('/api/v1/mail', emailRouter);
+//Khai báo route
+
 /** END ROUTES */
 
 

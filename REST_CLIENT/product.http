@@ -1,9 +1,9 @@
 ### Lấy danh sách sản phẩm
-GET http://localhost:3000/api/v1/products
+GET http://localhost:5000/api/v1/products
 Accept: application/json
 
 ### Tạo sản phẩm mới
-POST http://localhost:3000/api/v1/products
+POST http://localhost:5000/api/v1/products
 Content-Type: application/json
 
 {
@@ -20,11 +20,11 @@ Content-Type: application/json
 }
 
 ### Lấy sản phẩm theo id
-GET http://localhost:3000/api/v1/products/ID_HERE
+GET http://localhost:5000/api/v1/products/ID_HERE
 Accept: application/json
 
 ### Cập nhật sản phẩm
-PUT http://localhost:3000/api/v1/products/ID_HERE
+PUT http://localhost:5000/api/v1/products/ID_HERE
 Content-Type: application/json
 
 {
@@ -38,5 +38,5 @@ Content-Type: application/json
 }
 
 ### Xoá sản phẩm
-DELETE http://localhost:3000/api/v1/products/ID_HERE
+DELETE http://localhost:5000/api/v1/products/ID_HERE
 Accept: application/json

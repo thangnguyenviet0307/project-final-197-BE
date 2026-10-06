@@ -1,9 +1,9 @@
 ### Lấy danh sách thương hiệu
-GET http://localhost:3000/api/v1/brands
+GET http://localhost:5000/api/v1/brands
 Accept: application/json
 
 ### Tạo thương hiệu mới
-POST http://localhost:3000/api/v1/brands
+POST http://localhost:5000/api/v1/brands
 Content-Type: application/json
 
 {
@@ -14,11 +14,11 @@ Content-Type: application/json
 }
 
 ### Lấy thương hiệu theo id
-GET http://localhost:3000/api/v1/brands/ID_HERE
+GET http://localhost:5000/api/v1/brands/ID_HERE
 Accept: application/json
 
 ### Cập nhật thương hiệu
-PUT http://localhost:3000/api/v1/brands/ID_HERE
+PUT http://localhost:5000/api/v1/brands/ID_HERE
 Content-Type: application/json
 
 {
@@ -29,5 +29,5 @@ Content-Type: application/json
 }
 
 ### Xoá thương hiệu
-DELETE http://localhost:3000/api/v1/brands/ID_HERE
+DELETE http://localhost:5000/api/v1/brands/ID_HERE
 Accept: application/json

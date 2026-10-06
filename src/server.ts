@@ -1,26 +1,21 @@
-import app from "./app.js";
-import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-const PORT = Number(process.env["PORT"]) || 3000;
-const MONGODB_URI =
-  process.env["MONGODB_URI"] || "mongodb://localhost:27017/project_final_197";
+import app from "./app.js";
+import { connectDatabase } from "./config/database.js";
+
+dotenv.config();
+
+const PORT = Number(process.env["PORT"] || 5000);
 
 const startServer = async (): Promise<void> => {
-  try {
-    await mongoose.connect(MONGODB_URI, {
-      autoIndex: true,
-      serverSelectionTimeoutMS: 5000,
-    });
+  await connectDatabase();
 
-    console.log("Connected to MongoDB");
-
-    app.listen(PORT, () => {
-      console.log(`Server is running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error("Error connecting to MongoDB:", error);
-    process.exit(1);
-  }
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
 };
 
-void startServer();
+startServer().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
+});

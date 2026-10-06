@@ -7,8 +7,9 @@ import express, {
 import createError from "http-errors";
 import cors from "cors";
 import path from "node:path";
-import multer from "multer";
 import brandRoutes from "./routes/v1/brands.route.js";
+import productRoutes from "./routes/v1/products.route.js";
+import errorHandler from "./middlewares/error.handler.js";
 
 const app: Express = express();
 
@@ -28,6 +29,7 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 app.use("/api/v1/brands", brandRoutes);
+app.use("/api/v1/products", productRoutes);
 // Khai báo route
 
 /** END ROUTES */
@@ -45,22 +47,8 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     console.error("err.stack: ", err.stack);
   }
 
-  // 1. Ưu tiên lấy status/statusCode truyền vào
-  let statusCode = err.status || err.statusCode;
-
-  // 2. Nếu là lỗi do chính Multer bắt (ví dụ: Vượt quá 2MB - LIMIT_FILE_SIZE)
-  if (err instanceof multer.MulterError) {
-    statusCode = 400;
-  }
-
-  // 3. Fallback về 500 nếu không xác định được status
-  statusCode = statusCode || 500;
-
-  res.status(statusCode).json({
-    success: false,
-    message: err.message,
-    statusCode,
-  });
+  // forward to centralized handler
+  return errorHandler(err, _req, res, _next as any);
 });
 
 export default app;

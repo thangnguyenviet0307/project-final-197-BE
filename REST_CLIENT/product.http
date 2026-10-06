@@ -1,0 +1,42 @@
+### Lấy danh sách sản phẩm
+GET http://localhost:3000/api/v1/products
+Accept: application/json
+
+### Tạo sản phẩm mới
+POST http://localhost:3000/api/v1/products
+Content-Type: application/json
+
+{
+  "product_name": "iPhone 14 Pro",
+  "price": 29990000,
+  "discount": 10,
+  "category": "CATEGORY_ID_HERE",
+  "brand": "BRAND_ID_HERE",
+  "description": "Điện thoại cao cấp",
+  "model_year": 2023,
+  "slug": "iphone-14-pro",
+  "thumbnail": "https://example.com/iphone14pro.jpg",
+  "stock": 50
+}
+
+### Lấy sản phẩm theo id
+GET http://localhost:3000/api/v1/products/ID_HERE
+Accept: application/json
+
+### Cập nhật sản phẩm
+PUT http://localhost:3000/api/v1/products/ID_HERE
+Content-Type: application/json
+
+{
+  "product_name": "iPhone 14 Pro Max",
+  "price": 34990000,
+  "discount": 5,
+  "description": "Bản mở rộng iPhone 14 Pro Max",
+  "model_year": 2023,
+  "thumbnail": "https://example.com/iphone14promax.jpg",
+  "stock": 30
+}
+
+### Xoá sản phẩm
+DELETE http://localhost:3000/api/v1/products/ID_HERE
+Accept: application/json

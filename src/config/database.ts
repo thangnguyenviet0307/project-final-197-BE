@@ -1,15 +1,22 @@
-// import mongoose from "mongoose";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-// export const connectDatabase = async (): Promise<void> => {
-//   try {
-//     await mongoose.connect(
-//       process.env.MONGODB_URI || "mongodb://localhost:27017/Test_End_NodeJS",
-//     );
+dotenv.config();
 
-//     console.log("MongoDB connected successfully");
-//   } catch (error) {
-//     console.error("MongoDB connection failed:", error);
+export const connectDatabase = async (): Promise<void> => {
+  const mongoUri = process.env["MONGODB_URI"];
 
-//     process.exit(1);
-//   }
-// };
+  if (!mongoUri) {
+    throw new Error(
+      "MONGODB_URI is not defined. Please add it to your .env file.",
+    );
+  }
+
+  try {
+    await mongoose.connect(mongoUri);
+    console.log("MongoDB connected successfully");
+  } catch (error) {
+    console.error("MongoDB connection failed:", error);
+    process.exit(1);
+  }
+};

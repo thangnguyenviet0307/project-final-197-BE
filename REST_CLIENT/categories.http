@@ -21,7 +21,7 @@ Content-Type: application/json
 
 {
   "name": "Sony WH-1000XM5",
-  "description": "Tai nghe bluetoot",
+  "description": "Tai nghe bluetooth",
   "parent": "6ac48655544a1dab86293391"
 }
 

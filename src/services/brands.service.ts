@@ -1,25 +1,45 @@
+import mongoose from 'mongoose';
 import { BrandModel } from '../models/brands.model.js';
-import type { IBrand } from '../models/brands.model.js';
+import type { BrandInput } from '../validations/brands.validation.js';
 
-export class BrandsService {
-  static async getAllBrands() {
-    return await BrandModel.find({ isActive: true }).sort({ createdAt: -1 });
+export class BrandService {
+  // 1. Lấy danh sách tất cả thương hiệu
+  static async getAll() {
+    return BrandModel.find().sort({ createdAt: -1 });
   }
 
-  static async getBrandById(id: string) {
-    return await BrandModel.findById(id);
+  // 2. Lấy thương hiệu theo ID
+  static async getById(id: string) {
+    if (!mongoose.isValidObjectId(id)) {
+      return null;
+    }
+
+    return BrandModel.findById(id);
   }
 
-  static async createBrand(data: Partial<IBrand>) {
-    const newBrand = new BrandModel(data);
-    return await newBrand.save();
+  // 3. Tạo thương hiệu mới
+  static async create(data: BrandInput) {
+    return BrandModel.create(data);
   }
 
-  static async updateBrand(id: string, data: Partial<IBrand>) {
-    return await BrandModel.findByIdAndUpdate(id, data, { new: true });
+  // 4. Cập nhật thương hiệu
+  static async update(id: string, data: BrandInput) {
+    if (!mongoose.isValidObjectId(id)) {
+      return null;
+    }
+
+    return BrandModel.findByIdAndUpdate(id, data, {
+      new: true,
+      runValidators: true,
+    });
   }
 
-  static async deleteBrand(id: string) {
-    return await BrandModel.findByIdAndDelete(id);
+  // 5. Xóa thương hiệu
+  static async delete(id: string) {
+    if (!mongoose.isValidObjectId(id)) {
+      return null;
+    }
+
+    return BrandModel.findByIdAndDelete(id);
   }
 }

@@ -1,142 +1,155 @@
-import type { Request, Response } from 'express';
-import { BrandsService } from '../services/brands.service.js';
-import { buildSlugHelper } from '../helpers/buildSlug.helper.js';
+import type {
+  Request,
+  Response,
+  NextFunction,
+} from 'express';
+
+import { BrandService } from '../services/brands.service.js';
+
+import { validateBrand } from '../validations/brands.validation.js';
+
+import { ApiError } from '../middlewares/error.middleware.js';
 
 export class BrandController {
-  // GET /v1/brands
-  static async getAll(_req: Request, res: Response) {
+  // GET /api/v1/brands
+  static async getAll(
+    _req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const brands = await BrandsService.getAllBrands();
+      const brands = await BrandService.getAll();
 
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
-        data: brands
+        message: 'Get brands successfully',
+        data: brands,
       });
-    } catch (error: any) {
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
+    } catch (error) {
+      next(error);
     }
   }
 
-  // GET /v1/brands/:id
-  static async getById(req: Request, res: Response) {
+  // GET /api/v1/brands/:id
+  static async getById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const id = req.params['id'] as string;
+      const id = String(req.params['id']);
 
-      const brand = await BrandsService.getBrandById(id);
+      const brand = await BrandService.getById(id);
 
       if (!brand) {
-        return res.status(404).json({
-          success: false,
-          message: 'Brand không tồn tại'
-        });
+        throw new ApiError(404, 'Brand not found');
       }
 
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
-        data: brand
+        message: 'Get brand successfully',
+        data: brand,
       });
-    } catch (error: any) {
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
+    } catch (error) {
+      next(error);
     }
   }
 
-  // POST /v1/brands
-  static async create(req: Request, res: Response) {
+  // POST /api/v1/brands
+  static async create(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const { name, description, logo } = req.body;
+      let data;
 
-      const slug = buildSlugHelper(name);
+      try {
+        data = validateBrand(req.body);
+      } catch (error) {
+        throw new ApiError(
+          400,
+          error instanceof Error
+            ? error.message
+            : 'Invalid brand data'
+        );
+      }
 
-      const brand = await BrandsService.createBrand({
-        name,
-        slug,
-        description,
-        logo
-      });
+      const brand = await BrandService.create(data);
 
-      return res.status(201).json({
+      res.status(201).json({
         success: true,
-        data: brand
+        message: 'Brand created successfully',
+        data: brand,
       });
-    } catch (error: any) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
+    } catch (error) {
+      next(error);
     }
   }
 
-  // PUT /v1/brands/:id
-  static async update(req: Request, res: Response) {
+  // PUT /api/v1/brands/:id
+  static async update(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const id = req.params['id'] as string;
+      const id = String(req.params['id']);
 
-      const { name, description, logo, isActive } = req.body;
+      let data;
 
-      const updateData: any = {
-        description,
-        logo,
-        isActive
-      };
-
-      if (name) {
-        updateData.name = name;
-        updateData.slug = buildSlugHelper(name);
+      try {
+        data = validateBrand(req.body);
+      } catch (error) {
+        throw new ApiError(
+          400,
+          error instanceof Error
+            ? error.message
+            : 'Invalid brand data'
+        );
       }
 
-      const updatedBrand = await BrandsService.updateBrand(
+      const brand = await BrandService.update(
         id,
-        updateData
+        data
       );
 
-      if (!updatedBrand) {
-        return res.status(404).json({
-          success: false,
-          message: 'Brand không tồn tại'
-        });
+      if (!brand) {
+        throw new ApiError(404, 'Brand not found');
       }
 
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
-        data: updatedBrand
+        message: 'Brand updated successfully',
+        data: brand,
       });
-    } catch (error: any) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
+    } catch (error) {
+      next(error);
     }
   }
 
-  // DELETE /v1/brands/:id
-  static async delete(req: Request, res: Response) {
+  // DELETE /api/v1/brands/:id
+  static async delete(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const id = req.params['id'] as string;
+      const id = String(req.params['id']);
 
-      const deletedBrand = await BrandsService.deleteBrand(id);
+      const brand = await BrandService.delete(id);
 
-      if (!deletedBrand) {
-        return res.status(404).json({
-          success: false,
-          message: 'Brand không tồn tại'
-        });
+      if (!brand) {
+        throw new ApiError(404, 'Brand not found');
       }
 
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
-        message: 'Xóa Brand thành công'
+        message: 'Brand deleted successfully',
+        data: brand,
       });
-    } catch (error: any) {
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
+    } catch (error) {
+      next(error);
     }
   }
 }

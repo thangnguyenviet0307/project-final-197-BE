@@ -1,51 +1,37 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { Document } from 'mongoose';
 
 export interface IBrand extends Document {
   name: string;
-  slug: string;
-  logo?: string;
   description?: string;
-  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const BrandSchema = new Schema<IBrand>(
+const brandSchema = new Schema<IBrand>(
   {
     name: {
       type: String,
-      required: [true, 'Tên thương hiệu là bắt buộc'],
-      trim: true,
+      required: [true, 'Brand name is required'],
       unique: true,
-      minlength: 2,
-      maxlength: 50,
-    },
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
       trim: true,
-      index: true,
+      minlength: [1, 'Brand name cannot be empty'],
+      maxlength: [100, 'Brand name is too long'],
     },
-    logo: {
-      type: String,
-      default: '',
-    },
+
     description: {
       type: String,
-      maxlength: 500,
+      trim: true,
       default: '',
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
     },
   },
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
-export const BrandModel = mongoose.model<IBrand>('Brand', BrandSchema);
+export const BrandModel = mongoose.model<IBrand>(
+  'Brand',
+  brandSchema
+);

@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:3000/api/v1/brands
+@brandId = 507f1f77bcf86cd799439011
+
+### 1. Lấy toàn bộ Brands
+GET {{baseUrl}}
+
+
+### 2. Lấy Brand theo ID
+GET {{baseUrl}}/{{brandId}}
+
+
+### 3. Thêm Brand mới
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "Sony",
+  "description": "Thương hiệu điện tử Nhật Bản"
+}
+
+
+### 4. Sửa / Cập nhật Brand
+PUT {{baseUrl}}/{{brandId}}
+Content-Type: application/json
+
+{
+  "name": "Sony Updated",
+  "description": "Thương hiệu Sony đã cập nhật"
+}
+
+
+### 5. Xóa Brand
+DELETE {{baseUrl}}/{{brandId}}

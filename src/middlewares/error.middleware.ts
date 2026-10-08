@@ -1,3 +1,4 @@
+
 import type {
   Request,
   Response,
@@ -5,6 +6,7 @@ import type {
 } from 'express';
 
 import mongoose from 'mongoose';
+import { ZodError } from 'zod';
 
 export class ApiError extends Error {
   constructor(
@@ -22,6 +24,22 @@ export function errorMiddleware(
   res: Response,
   _next: NextFunction
 ): void {
+
+  // 1. Lỗi dữ liệu đầu vào từ Zod
+  if (err instanceof ZodError) {
+    res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: err.issues.map((issue) => ({
+        path: issue.path,
+        message: issue.message,
+        code: issue.code,
+      })),
+    });
+    return;
+  }
+
+  // 2. Lỗi nghiệp vụ hoặc không tìm thấy dữ liệu
   if (err instanceof ApiError) {
     res.status(err.statusCode).json({
       success: false,
@@ -30,7 +48,7 @@ export function errorMiddleware(
     return;
   }
 
-  // Trùng tên Brand hoặc unique index khác
+  // 3. Lỗi trùng unique index MongoDB
   if (
     typeof err === 'object' &&
     err !== null &&
@@ -44,14 +62,19 @@ export function errorMiddleware(
     return;
   }
 
+  // 4. Lỗi Validation của Mongoose
   if (err instanceof mongoose.Error.ValidationError) {
     res.status(400).json({
       success: false,
-      message: err.message,
+      message: 'Database validation failed',
+      errors: Object.values(err.errors).map((error) => ({
+        message: error.message,
+      })),
     });
     return;
   }
 
+  // 5. Lỗi Server không xác định
   console.error('API Error:', err);
 
   res.status(500).json({

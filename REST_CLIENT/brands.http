@@ -1,33 +1,46 @@
-@baseUrl = http://localhost:3000/api/v1/brands
-@brandId = 507f1f77bcf86cd799439011
 
-### 1. Lấy toàn bộ Brands
+@baseUrl = http://localhost:3000/api/v1/brands
+
+### 1. GET ALL BRANDS
 GET {{baseUrl}}
 
-
-### 2. Lấy Brand theo ID
-GET {{baseUrl}}/{{brandId}}
-
-
-### 3. Thêm Brand mới
+### 2. CREATE BRAND
 POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "name": "Sony",
-  "description": "Thương hiệu điện tử Nhật Bản"
+  "name": "Nike",
+  "description": "Thuong hieu the thao"
 }
 
-
-### 4. Sửa / Cập nhật Brand
-PUT {{baseUrl}}/{{brandId}}
+### 3. TEST VALIDATION - NAME RONG
+POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "name": "Sony Updated",
-  "description": "Thương hiệu Sony đã cập nhật"
+  "name": "",
+  "description": "Test validation"
 }
 
+### 4. TEST VALIDATION - THIEU NAME
+POST {{baseUrl}}
+Content-Type: application/json
 
-### 5. Xóa Brand
-DELETE {{baseUrl}}/{{brandId}}
+{
+  "description": "Test validation"
+}
+
+### GET BRAND BY ID
+GET http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+
+### 6. UPDATE BRAND
+PUT http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+Content-Type: application/json
+
+{
+  "name": "Nike Updated",
+  "description": "Thuong hieu da cap nhat"
+}
+
+### 7. DELETE BRAND
+DELETE {{baseUrl}}/6ac78ff3021217a6d1059b65

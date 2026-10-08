@@ -1,3 +1,4 @@
+
 import type {
   Request,
   Response,
@@ -5,10 +6,12 @@ import type {
 } from 'express';
 
 import { BrandService } from '../services/brands.service.js';
-
-import { validateBrand } from '../validations/brands.validation.js';
-
 import { ApiError } from '../middlewares/error.middleware.js';
+
+import type {
+  BrandInput,
+  UpdateBrandInput,
+} from '../validations/brands.validation.js';
 
 export class BrandController {
   // GET /api/v1/brands
@@ -62,18 +65,8 @@ export class BrandController {
     next: NextFunction
   ) {
     try {
-      let data;
-
-      try {
-        data = validateBrand(req.body);
-      } catch (error) {
-        throw new ApiError(
-          400,
-          error instanceof Error
-            ? error.message
-            : 'Invalid brand data'
-        );
-      }
+      // Dữ liệu được Zod Middleware kiểm tra trước
+      const data = req.body as BrandInput;
 
       const brand = await BrandService.create(data);
 
@@ -96,23 +89,10 @@ export class BrandController {
     try {
       const id = String(req.params['id']);
 
-      let data;
+      // Dữ liệu được Zod Middleware kiểm tra trước
+      const data = req.body as UpdateBrandInput;
 
-      try {
-        data = validateBrand(req.body);
-      } catch (error) {
-        throw new ApiError(
-          400,
-          error instanceof Error
-            ? error.message
-            : 'Invalid brand data'
-        );
-      }
-
-      const brand = await BrandService.update(
-        id,
-        data
-      );
+      const brand = await BrandService.update(id, data);
 
       if (!brand) {
         throw new ApiError(404, 'Brand not found');

@@ -1,54 +1,33 @@
-export interface BrandInput {
-  name: string;
-  description?: string;
-}
 
-export function validateBrand(data: unknown): BrandInput {
-  // 1. Kiểm tra dữ liệu đầu vào
-  if (
-    typeof data !== 'object' ||
-    data === null ||
-    Array.isArray(data)
-  ) {
-    throw new Error('Invalid brand data');
-  }
+import { z } from "zod";
 
-  const body = data as Record<string, unknown>;
+// Schema tạo thương hiệu
+export const createBrandSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Brand name is required")
+    .max(100, "Brand name must not exceed 100 characters"),
 
-  // 2. Kiểm tra tên thương hiệu
-  const name = body['name'];
+  description: z
+    .string()
+    .trim()
+    .optional(),
+});
 
-  if (
-    typeof name !== 'string' ||
-    name.trim().length === 0
-  ) {
-    throw new Error('Brand name is required');
-  }
+// Schema cập nhật thương hiệu
+export const updateBrandSchema = createBrandSchema
+  .partial()
+  .refine(
+    (data) => Object.keys(data).length > 0,
+    {
+      message: "At least one field is required for update",
+    }
+  );
 
-  if (name.trim().length > 100) {
-    throw new Error(
-      'Brand name must not exceed 100 characters'
-    );
-  }
+// TypeScript Types
+export type BrandInput = z.infer<typeof createBrandSchema>;
 
-  // 3. Kiểm tra mô tả thương hiệu
-  const description = body['description'];
-
-  if (
-    description !== undefined &&
-    typeof description !== 'string'
-  ) {
-    throw new Error('Description must be a string');
-  }
-
-  // 4. Chuẩn hóa dữ liệu
-  const result: BrandInput = {
-    name: name.trim(),
-  };
-
-  if (typeof description === 'string') {
-    result.description = description.trim();
-  }
-
-  return result;
-}
+export type UpdateBrandInput = z.infer<
+  typeof updateBrandSchema
+>;

@@ -1,11 +1,17 @@
+
 import mongoose from 'mongoose';
 import { BrandModel } from '../models/brands.model.js';
-import type { BrandInput } from '../validations/brands.validation.js';
+import type {
+  BrandInput,
+  UpdateBrandInput,
+} from '../validations/brands.validation.js';
 
 export class BrandService {
-  // 1. Lấy danh sách tất cả thương hiệu
+  // 1. Lấy tất cả thương hiệu chưa bị xóa
   static async getAll() {
-    return BrandModel.find().sort({ createdAt: -1 });
+    return BrandModel.find({
+      isDeleted: false,
+    }).sort({ createdAt: -1 });
   }
 
   // 2. Lấy thương hiệu theo ID
@@ -14,32 +20,89 @@ export class BrandService {
       return null;
     }
 
-    return BrandModel.findById(id);
+    return BrandModel.findOne({
+      _id: id,
+      isDeleted: false,
+    });
   }
 
   // 3. Tạo thương hiệu mới
   static async create(data: BrandInput) {
-    return BrandModel.create(data);
+    const slug = data.name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const brandData = {
+      name: data.name,
+      slug,
+      ...(data.description !== undefined
+        ? { description: data.description }
+        : {}),
+    };
+
+    return BrandModel.create(brandData);
   }
 
   // 4. Cập nhật thương hiệu
-  static async update(id: string, data: BrandInput) {
+  static async update(
+    id: string,
+    data: UpdateBrandInput
+  ) {
     if (!mongoose.isValidObjectId(id)) {
       return null;
     }
 
-    return BrandModel.findByIdAndUpdate(id, data, {
-      new: true,
-      runValidators: true,
-    });
+    const updateData: {
+      name?: string;
+      slug?: string;
+      description?: string;
+    } = {};
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+
+      updateData.slug = data.name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    }
+
+    if (data.description !== undefined) {
+      updateData.description = data.description;
+    }
+
+    return BrandModel.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { $set: updateData },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
   }
 
-  // 5. Xóa thương hiệu
+  // 5. Xóa mềm thương hiệu
   static async delete(id: string) {
     if (!mongoose.isValidObjectId(id)) {
       return null;
     }
 
-    return BrandModel.findByIdAndDelete(id);
+    return BrandModel.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
   }
 }

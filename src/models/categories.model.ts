@@ -1,48 +1,22 @@
-import { Schema, model, type Document, type Types } from "mongoose";
+import mongoose from "mongoose";
+import type { ICategories } from "../types/categories.js";
 
-export interface ICategories extends Document {
-  name: string;
-  slug: string;
-  description?: string;
-  parent?: Types.ObjectId | null;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const categoriesSchema = new Schema<ICategories>(
+// Create a schema for the category model
+const categoriesSchema = new mongoose.Schema<ICategories>(
   {
-    name: {
-      type: String,
-      required: [true, "Category name is required"],
-      trim: true,
-      unique: true,
-    },
-    slug: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      index: true,
-    },
-    description: {
-      type: String,
-      trim: true,
-    },
-    parent: {
-      type: Schema.Types.ObjectId,
-      ref: "Category",
-      default: null,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
+    name: { type: String, required: true, trim: true },
+    slug: { type: String, required: true, trim: true, unique: true },
+    description: { type: String },
+    icon: { type: String },
+    parent: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
+    isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
   },
   {
     timestamps: true,
-    versionKey: false,
-  }
+    collection: "categories",
+  },
 );
 
-export const Categories = model<ICategories>("Categories", categoriesSchema);
+export const Categories = mongoose.model<ICategories>("Category", categoriesSchema);

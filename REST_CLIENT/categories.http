@@ -4,7 +4,7 @@
 GET {{baseUrl}}
 
 ### 2. Lấy chi tiết categories theo ID (Thay thế ID thực tế vào đây)
-GET {{baseUrl}}/6ac48655544a1dab86293391
+GET {{baseUrl}}/6ac780788607a66d15735f1e
 
 ### 3. Tạo mới một categories
 POST {{baseUrl}}

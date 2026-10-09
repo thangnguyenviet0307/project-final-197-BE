@@ -1,7 +1,7 @@
-import { Categories, type ICategories } from "../models/categories.model.js";
+import { Categories } from "../models/categories.model.js";
+import type { ICategories } from "../types/categories.js"; 
 import { generateSlug } from "../helpers/slug.helpers.js";
 import createHttpError from "http-errors";
-
 export class CategoriesService {
   // 1. Create a new category
   public static async createCategory(data: Partial<ICategories>): Promise<ICategories> {

@@ -1,19 +1,42 @@
 
 @baseUrl = http://localhost:3000/api/v1/brands
 
+# Thay ID này sau khi tạo Brand thành công
+@brandId = 6aca53ce9a1d386fd9951ca8
+
 ### 1. GET ALL BRANDS
 GET {{baseUrl}}
 
-### 2. CREATE BRAND
+### 2. CREATE BRAND - TEST SHARED SLUG
 POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "name": "Nike",
-  "description": "Thuong hieu the thao"
+  "name": "Samsung Việt Nam 1",
+  "description": "Thương hiệu điện tử"
 }
 
-### 3. TEST VALIDATION - NAME RONG
+### 3. GET BRAND BY ID
+GET {{baseUrl}}/{{brandId}}
+
+### 4. UPDATE BRAND
+PUT {{baseUrl}}/{{brandId}}
+Content-Type: application/json
+
+{
+  "name": "Samsung Việt Nam Updated",
+  "description": "Thương hiệu đã cập nhật"
+}
+
+### 5. TEST UPDATE DESCRIPTION ONLY
+PUT {{baseUrl}}/{{brandId}}
+Content-Type: application/json
+
+{
+  "description": "Cập nhật mô tả bằng Zod"
+}
+
+### 6. TEST VALIDATION - EMPTY NAME
 POST {{baseUrl}}
 Content-Type: application/json
 
@@ -22,7 +45,7 @@ Content-Type: application/json
   "description": "Test validation"
 }
 
-### 4. TEST VALIDATION - THIEU NAME
+### 7. TEST VALIDATION - MISSING NAME
 POST {{baseUrl}}
 Content-Type: application/json
 
@@ -30,17 +53,29 @@ Content-Type: application/json
   "description": "Test validation"
 }
 
-### GET BRAND BY ID
-GET http://localhost:3000/api/v1/brands/6aca4c432237d4c3c8354802
-
-### 6. UPDATE BRAND
-PUT http://localhost:3000/api/v1/brands/6aca4c432237d4c3c8354802
+### 8. TEST VALIDATION - INVALID DESCRIPTION
+POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "name": "Nike Updated",
-  "description": "Thuong hieu da cap nhat"
+  "name": "Validation Test",
+  "description": 123
 }
 
-### 7. DELETE BRAND
-DELETE {{baseUrl}}/6aca4c432237d4c3c8354802
+### 9. TEST DUPLICATE SLUG
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "Samsung Việt Nam",
+  "description": "Test duplicate slug"
+}
+
+### 10. DELETE BRAND - SOFT DELETE
+DELETE {{baseUrl}}/{{brandId}}
+
+### 11. GET BRAND AFTER DELETE
+GET {{baseUrl}}/{{brandId}}
+
+### 12. GET ALL AFTER DELETE
+GET {{baseUrl}}

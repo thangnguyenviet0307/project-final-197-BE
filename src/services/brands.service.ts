@@ -1,13 +1,15 @@
 
 import mongoose from 'mongoose';
 import { BrandModel } from '../models/brands.model.js';
+import { buildSlug } from '../helpers/buildSlug.helper.js';
+
 import type {
   BrandInput,
   UpdateBrandInput,
 } from '../validations/brands.validation.js';
 
 export class BrandService {
-  // 1. Lấy tất cả thương hiệu chưa bị xóa
+  // 1. Lấy danh sách thương hiệu chưa bị xóa
   static async getAll() {
     return BrandModel.find({
       isDeleted: false,
@@ -28,13 +30,7 @@ export class BrandService {
 
   // 3. Tạo thương hiệu mới
   static async create(data: BrandInput) {
-    const slug = data.name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    const slug = buildSlug(data.name);
 
     const brandData = {
       name: data.name,
@@ -64,14 +60,7 @@ export class BrandService {
 
     if (data.name !== undefined) {
       updateData.name = data.name;
-
-      updateData.slug = data.name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+      updateData.slug = buildSlug(data.name);
     }
 
     if (data.description !== undefined) {
@@ -79,8 +68,13 @@ export class BrandService {
     }
 
     return BrandModel.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      { $set: updateData },
+      {
+        _id: id,
+        isDeleted: false,
+      },
+      {
+        $set: updateData,
+      },
       {
         new: true,
         runValidators: true,
@@ -95,14 +89,19 @@ export class BrandService {
     }
 
     return BrandModel.findOneAndUpdate(
-      { _id: id, isDeleted: false },
+      {
+        _id: id,
+        isDeleted: false,
+      },
       {
         $set: {
           isDeleted: true,
           deletedAt: new Date(),
         },
       },
-      { new: true }
+      {
+        new: true,
+      }
     );
   }
 }

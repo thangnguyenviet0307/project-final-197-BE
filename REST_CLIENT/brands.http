@@ -1,0 +1,46 @@
+
+@baseUrl = http://localhost:3000/api/v1/brands
+
+### 1. GET ALL BRANDS
+GET {{baseUrl}}
+
+### 2. CREATE BRAND
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "Nike",
+  "description": "Thuong hieu the thao"
+}
+
+### 3. TEST VALIDATION - NAME RONG
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "",
+  "description": "Test validation"
+}
+
+### 4. TEST VALIDATION - THIEU NAME
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "description": "Test validation"
+}
+
+### GET BRAND BY ID
+GET http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+
+### 6. UPDATE BRAND
+PUT http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+Content-Type: application/json
+
+{
+  "name": "Nike Updated",
+  "description": "Thuong hieu da cap nhat"
+}
+
+### 7. DELETE BRAND
+DELETE {{baseUrl}}/6ac78ff3021217a6d1059b65

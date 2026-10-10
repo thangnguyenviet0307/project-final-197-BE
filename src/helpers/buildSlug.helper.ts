@@ -1,18 +1,30 @@
 // import slugify from "slugify";
 
-
 // /**
 //  * Ex: iphone 14 pro max -> iphone-14-pro-max
-//  * @param str 
+//  * @param str
 //  * @returns slug được tạo từ chuỗi str
 //  */
 // export const buildSlug = (str: string): string => {
 //   return slugify(str, {
-//     replacement: "-", // replace spaces with replacement character, defaults to `-`
-//     remove: undefined, // remove characters that match regex, defaults to `undefined`
-//     lower: true, // convert to lower case, defaults to `false`
-//     strict: true, // strip special characters except replacement, defaults to `false`
-//     locale: "vi", // language code of the locale to use
-//     trim: true, // trim leading and trailing replacement chars, defaults to `true`
+//     replacement: "-",
+//     remove: undefined,
+//     lower: true,
+//     strict: true,
+//     locale: "vi",
+//     trim: true,
 //   });
 // };
+
+// Hàm tạo slug của Brands API
+export const buildSlugHelper = (text: string): string => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/([^0-9a-z-\s])/g, '')
+    .replace(/(\s+)/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};

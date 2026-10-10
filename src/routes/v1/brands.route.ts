@@ -1,12 +1,38 @@
-import { Router, type Router as ExpressRouter } from "express";
-import brandsController from "../../controllers/brands.controller.js";
+import { Router } from 'express';
+import type { Router as RouterType } from 'express';
 
-const router: ExpressRouter = Router();
+import { BrandController } from '../../controllers/brands.controller.js';
 
-router.get("/", brandsController.getAllBrands);
-router.post("/", brandsController.createBrand);
-router.get("/:id", brandsController.getBrandById);
-router.put("/:id", brandsController.updateBrand);
-router.delete("/:id", brandsController.deleteBrand);
+import { validate } from '../../middlewares/validate.middleware.js';
+
+import {
+  createBrandSchema,
+  updateBrandSchema,
+} from '../../validations/brands.validation.js';
+
+const router: RouterType = Router();
+
+// GET: Lấy danh sách thương hiệu
+router.get('/', BrandController.getAll);
+
+// GET: Lấy thương hiệu theo ID
+router.get('/:id', BrandController.getById);
+
+// POST: Tạo thương hiệu (validate bằng Zod)
+router.post(
+  '/',
+  validate(createBrandSchema),
+  BrandController.create
+);
+
+// PUT: Cập nhật thương hiệu (validate bằng Zod)
+router.put(
+  '/:id',
+  validate(updateBrandSchema),
+  BrandController.update
+);
+
+// DELETE: Xóa thương hiệu
+router.delete('/:id', BrandController.delete);
 
 export default router;

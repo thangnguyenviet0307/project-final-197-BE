@@ -31,10 +31,10 @@ Content-Type: application/json
 }
 
 ### GET BRAND BY ID
-GET http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+GET http://localhost:3000/api/v1/brands/6aca4c432237d4c3c8354802
 
 ### 6. UPDATE BRAND
-PUT http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+PUT http://localhost:3000/api/v1/brands/6aca4c432237d4c3c8354802
 Content-Type: application/json
 
 {
@@ -43,4 +43,4 @@ Content-Type: application/json
 }
 
 ### 7. DELETE BRAND
-DELETE {{baseUrl}}/6ac78ff3021217a6d1059b65
+DELETE {{baseUrl}}/6aca4c432237d4c3c8354802

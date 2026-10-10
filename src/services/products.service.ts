@@ -1,4 +1,4 @@
-import slugify from "slugify";
+import { buildSlug } from "../helpers/buildSlug.helper.js";
 import Product from "../models/product.model.js";
 
 export type ProductInput = {
@@ -13,13 +13,6 @@ export type ProductInput = {
   thumbnail?: string | null;
   stock?: number;
 };
-
-const buildSlug = (name: string): string =>
-  slugify(name, {
-    lower: true,
-    strict: true,
-    trim: true,
-  });
 
 const getAllProducts = async (): Promise<any[]> => {
   return Product.find()

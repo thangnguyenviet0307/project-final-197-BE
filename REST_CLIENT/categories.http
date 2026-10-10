@@ -1,4 +1,4 @@
-@baseUrl = http://localhost:3000/api/v1/categories
+@baseUrl = http://localhost:5000/api/v1/categories
 
 ### 1. Lấy danh sách tất cả categories
 GET {{baseUrl}}
@@ -22,7 +22,7 @@ Content-Type: application/json
 {
   "name": "Sony WH-1000XM5",
   "description": "Tai nghe bluetooth",
-  "parent": "6ac48655544a1dab86293391"
+  "parent": "6aca42f4eda4a5bd7bb9ee34"
 }
 
 ### 5. Cập nhật categories theo ID

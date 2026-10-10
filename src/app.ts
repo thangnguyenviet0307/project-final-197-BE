@@ -7,7 +7,6 @@ import express, {
 import createError from "http-errors";
 import cors from "cors";
 import path from "node:path";
-import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
@@ -27,7 +26,6 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-app.use("/api/v1/brands", brandRoutes);
 app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/categories", categoriesRouter);
 /** END ROUTES */

@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:3000/api/v1/categories
+
+### 1. Lấy danh sách tất cả categories
+GET {{baseUrl}}
+
+### 2. Lấy chi tiết categories theo ID (Thay thế ID thực tế vào đây)
+GET {{baseUrl}}/6ac780788607a66d15735f1e
+
+### 3. Tạo mới một categories
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "Tai nghe",
+  "description": "Các sản phẩm tai nghe chất lượng"
+}
+
+### 4. Tạo danh mục con (Có truyền parent ID)
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "Sony WH-1000XM5",
+  "description": "Tai nghe bluetooth",
+  "parent": "6ac48655544a1dab86293391"
+}
+
+### 5. Cập nhật categories theo ID
+PUT {{baseUrl}}/6ac48655544a1dab86293391
+Content-Type: application/json
+
+{
+  "name": "Tai nghe sony",
+  "description": "Cập nhật mô tả mới"
+}
+
+### 6. Xóa categories theo ID
+DELETE {{baseUrl}}/6ac48655544a1dab86293391

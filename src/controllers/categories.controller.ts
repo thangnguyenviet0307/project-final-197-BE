@@ -14,7 +14,7 @@ export class CategoriesController {
   });
 
   // 2. Get all categories
-  public static getAllCategories: RequestHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  public static getAllCategories: RequestHandler = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     const categoriesList = await CategoriesService.getAllCategories();
     res.status(200).json({
       success: true,

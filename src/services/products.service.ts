@@ -1,5 +1,5 @@
-import { buildSlug } from "../helpers/buildSlug.helper.js";
 import Product from "../models/product.model.js";
+import { buildSlug } from "../helpers/buildSlug.helper.js";
 
 export type ProductVariantInput = {
   sku: string;
@@ -28,13 +28,6 @@ export type ProductInput = {
   is_active?: boolean;
   variants?: ProductVariantInput[];
 };
-
-const buildSlug = (name: string): string =>
-  slugify(name, {
-    lower: true,
-    strict: true,
-    trim: true,
-  });
 
 const normalizeVariant = (
   variant: ProductVariantInput,

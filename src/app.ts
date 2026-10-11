@@ -1,4 +1,3 @@
-
 import express, {
   type NextFunction,
   type Express,
@@ -9,11 +8,14 @@ import express, {
 import createError from "http-errors";
 import cors from "cors";
 import path from "node:path";
-import "./models/brand.model.js";
-import "./models/category.model.js";
+import { BrandModel } from "./models/brands.model.js";
+import { Categories } from "./models/categories.model.js";
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";
+
+void BrandModel;
+void Categories;
 
 import {
   errorHandler,

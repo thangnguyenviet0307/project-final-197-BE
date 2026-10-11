@@ -2,12 +2,18 @@ import type { NextFunction, Request, Response } from "express";
 import productService from "../services/products.service.js";
 
 const getAllProducts = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const items = await productService.getAllProducts();
+    const { sku, color, size } = req.query as {
+      sku?: string | undefined;
+      color?: string | undefined;
+      size?: string | undefined;
+    };
+
+    const items = await productService.getAllProducts({ sku, color, size });
 
     return res.status(200).json({
       success: true,
@@ -16,7 +22,94 @@ const getAllProducts = async (
       data: items,
     });
   } catch (error) {
-    next(error);
+    return next(error);
+  }
+};
+
+const getProductBySku = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const sku = req.params["sku"];
+
+    if (!sku || Array.isArray(sku)) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "SKU không hợp lệ",
+        data: null,
+      });
+    }
+
+    const product = await productService.getProductBySku(sku);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        statusCode: 404,
+        message: "Không tìm thấy sản phẩm theo SKU",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      statusCode: 200,
+      message: "Tìm sản phẩm theo SKU thành công",
+      data: product,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getVariantByProductAndVariantId = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const productId = req.params["productId"];
+    const variantId = req.params["variantId"];
+
+    if (
+      !productId ||
+      Array.isArray(productId) ||
+      !variantId ||
+      Array.isArray(variantId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "productId hoặc variantId không hợp lệ",
+        data: null,
+      });
+    }
+
+    const result = await productService.getVariantByProductAndVariantId(
+      productId,
+      variantId,
+    );
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        statusCode: 404,
+        message: "Không tìm thấy biến thể sản phẩm",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      statusCode: 200,
+      message: "Lấy biến thể sản phẩm thành công",
+      data: result,
+    });
+  } catch (error) {
+    return next(error);
   }
 };
 
@@ -158,6 +251,8 @@ const deleteProduct = async (
 
 export default {
   getAllProducts,
+  getProductBySku,
+  getVariantByProductAndVariantId,
   getProductById,
   createProduct,
   updateProduct,

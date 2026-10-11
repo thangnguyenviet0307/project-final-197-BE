@@ -7,6 +7,8 @@ import express, {
 import createError from "http-errors";
 import cors from "cors";
 import path from "node:path";
+import "./models/brand.model.js";
+import "./models/category.model.js";
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";

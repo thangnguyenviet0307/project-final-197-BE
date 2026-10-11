@@ -10,17 +10,61 @@ Content-Type: application/json
   "product_name": "iPhone 14 Pro",
   "price": 29990000,
   "discount": 10,
-  "category": "CATEGORY_ID_HERE",
-  "brand": "BRAND_ID_HERE",
+  "category": "6aca4304eda4a5bd7bb9ee35",
+  "brand": "6aca59972970f2f1349bbd5f",
   "description": "Điện thoại cao cấp",
   "model_year": 2023,
   "slug": "iphone-14-pro",
   "thumbnail": "https://example.com/iphone14pro.jpg",
-  "stock": 50
+  "stock": 50,
+  "variants": [
+    {
+      "sku": "IP14P-128-BLK",
+      "variant_name": "Black - 128GB",
+      "color": "Black",
+      "size": "128GB",
+      "price": 29990000,
+      "stock": 20,
+      "image": "https://example.com/iphone14pro-black.jpg",
+      "images": [
+        "https://example.com/iphone14pro-black.jpg",
+        "https://example.com/iphone14pro-black-2.jpg"
+      ],
+      "attributes": {
+        "storage": "128GB",
+        "color": "Black"
+      }
+    },
+    {
+      "sku": "IP14P-256-BLK",
+      "variant_name": "Black - 256GB",
+      "color": "Black",
+      "size": "256GB",
+      "price": 33990000,
+      "stock": 12,
+      "image": "https://example.com/iphone14pro-black-256.jpg",
+      "attributes": {
+        "storage": "256GB",
+        "color": "Black"
+      }
+    }
+  ]
 }
 
 ### Lấy sản phẩm theo id
-GET http://localhost:5000/api/v1/products/ID_HERE
+GET http://localhost:5000/api/v1/products/6acb9c9a3319003dfb1ec60b
+Accept: application/json
+
+### Tìm sản phẩm theo SKU
+GET http://localhost:5000/api/v1/products/sku/IP14P-128-BLK
+Accept: application/json
+
+### Lọc sản phẩm theo color / size
+GET http://localhost:5000/api/v1/products?color=Black&size=128GB
+Accept: application/json
+
+### Lấy variant theo product id và variant id
+GET http://localhost:5000/api/v1/products/6acb9c9a3319003dfb1ec60b/variants/6acb9c9a3319003dfb1ec60c
 Accept: application/json
 
 ### Cập nhật sản phẩm
@@ -34,9 +78,23 @@ Content-Type: application/json
   "description": "Bản mở rộng iPhone 14 Pro Max",
   "model_year": 2023,
   "thumbnail": "https://example.com/iphone14promax.jpg",
-  "stock": 30
+  "stock": 30,
+  "variants": [
+    {
+      "sku": "IP14PM-256-SG",
+      "variant_name": "Silver - 256GB",
+      "color": "Silver",
+      "size": "256GB",
+      "price": 34990000,
+      "stock": 8,
+      "attributes": {
+        "storage": "256GB",
+        "color": "Silver"
+      }
+    }
+  ]
 }
 
 ### Xoá sản phẩm
-DELETE http://localhost:5000/api/v1/products/ID_HERE
+DELETE http://localhost:5000/api/v1/products/6aca4354eda4a5bd7bb9ee36
 Accept: application/json

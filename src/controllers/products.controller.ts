@@ -16,7 +16,7 @@ const getAllProducts = async (
       data: items,
     });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 

@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const connectDatabase = async (): Promise<void> => {
-  const mongoUri = process.env["MONGODB_URI"];
-  console.log("MONGODB_URI:", mongoUri);
+  const mongoUri = process.env["MONGODB_URI"] || "mongodb://localhost:27017/project_final_197";
+  
   if (!mongoUri) {
     throw new Error(
       "MONGODB_URI is not defined. Please add it to your .env file.",

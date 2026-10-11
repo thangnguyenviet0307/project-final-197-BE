@@ -1,5 +1,8 @@
+
 import mongoose from 'mongoose';
+
 import { BrandModel } from '../models/brands.model.js';
+import { buildSlug } from '../helpers/buildSlug.helper.js';
 
 import type {
   BrandInput,
@@ -28,13 +31,8 @@ export class BrandService {
 
   // 3. Tạo thương hiệu mới
   static async create(data: BrandInput) {
-    const slug = data.name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    // Sử dụng hàm buildSlug của nhóm
+    const slug = buildSlug(data.name);
 
     const brandData = {
       name: data.name,
@@ -65,13 +63,8 @@ export class BrandService {
     if (data.name !== undefined) {
       updateData.name = data.name;
 
-      updateData.slug = data.name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/đ/g, 'd')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+      // Sử dụng hàm buildSlug của nhóm
+      updateData.slug = buildSlug(data.name);
     }
 
     if (data.description !== undefined) {

@@ -12,36 +12,37 @@ import path from "node:path";
 
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
+import categoriesRouter from "./routes/v1/categories.route.js";
 
-import { errorMiddleware } from "./middlewares/error.middleware.js";
-import errorHandler from "./middlewares/error.handler.js";
+import {
+  errorHandler,
+  errorMiddleware,
+} from "./middlewares/error.middleware.js";
 
 const app: Express = express();
 
-// Middleware để parse JSON body
+// Cấu hình CORS & Parse JSON
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Cấu hình tài nguyên tĩnh
 app.use(express.static(path.resolve(process.cwd(), "public")));
 
-// Enable CORS
-app.use(cors());
-
 /** BEGIN ROUTES */
 
-// Route trang chủ
 app.get("/", (_req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-// Brands API
-// Sử dụng Error Middleware riêng của Brands
+// Brands API của bạn
 app.use("/api/v1/brands", brandRoutes, errorMiddleware);
 
-// Products API
-// Giữ nguyên Route của team
+// Products API của team
 app.use("/api/v1/products", productRoutes);
+
+// Categories API của team
+app.use("/api/v1/categories", categoriesRouter);
 
 /** END ROUTES */
 
@@ -52,18 +53,13 @@ app.use((_req: Request, _res: Response, next: NextFunction) => {
   next(createError(404, "Not Found"));
 });
 
-// Global Error Handler của team
-app.use((
-  err: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+// Middleware xử lý lỗi tập trung
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   if (process.env["NODE_ENV"] === "development") {
     console.error("err.stack: ", err.stack);
   }
 
-  return errorHandler(err, req, res, next);
+  return errorHandler(err, _req, res, _next as any);
 });
 
 export default app;

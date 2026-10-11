@@ -1,11 +1,11 @@
 import { Categories } from "../models/categories.model.js";
 import type { ICategories } from "../types/categories.js"; 
-import { generateSlug } from "../helpers/slug.helpers.js";
+import { buildSlug } from "../helpers/slug.helpers.js";
 import createHttpError from "http-errors";
 export class CategoriesService {
   // 1. Create a new category
   public static async createCategory(data: Partial<ICategories>): Promise<ICategories> {
-    const slug = generateSlug(data.name!);
+    const slug = buildSlug (data.name!);
 
     const categoriesName = data.name as string;
     const existingCategories = await Categories.findOne({ 
@@ -46,7 +46,7 @@ export class CategoriesService {
     }
 
     if (data.name && data.name !== categories.name) {
-      data.slug = generateSlug(data.name);
+      data.slug = buildSlug(data.name);
       
       const categoriesName = data.name as string;
       const categoriesSlug = data.slug as string;

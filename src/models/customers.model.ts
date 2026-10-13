@@ -1,93 +1,91 @@
 
-import { model, Schema } from "mongoose";
-import type {
-  ICustomer,
-  ICustomerAddress,
-} from "../types/customers.js";
-
-const addressSchema = new Schema<ICustomerAddress>(
-  {
-    recipientName: { type: String, required: true, trim: true },
-    phone: { type: String, required: true, trim: true },
-    province: { type: String, required: true, trim: true },
-    ward: { type: String, required: true, trim: true },
-    detail: { type: String, required: true, trim: true },
-    isDefault: { type: Boolean, default: false },
-  },
-  { _id: true },
-);
+import mongoose, { Schema, model } from "mongoose";
+import type { ICustomer } from "../types/customers.js";
 
 const customerSchema = new Schema<ICustomer>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
+    customer_id: {
+      type: Number,
+      required: true,
+      unique: true,
+      min: 1,
     },
 
-    fullName: {
+    first_name: {
       type: String,
       required: true,
       trim: true,
-      minlength: 2,
-      maxlength: 100,
-},
+      maxlength: 50,
+    },
+
+    last_name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
 
     phone: {
       type: String,
+      required: true,
       trim: true,
+      maxlength: 50,
+      unique: true,
     },
 
-    avatarUrl: {
+    email: {
       type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      maxlength: 150,
+      unique: true,
     },
 
-    gender: {
-      type: String,
-      enum: ["male", "female", "other"],
-    },
-
-    dateOfBirth: {
-      type: Date,
-    },
-
-    addresses: {
-      type: [addressSchema],
-      default: [],
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-
-    isDeleted: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-
-    deletedAt: {
+    birthday: {
       type: Date,
       default: null,
+    },
+
+    street: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 255,
+    },
+
+    city: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
+
+    state: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
+
+    zip_code: {
+      type: String,
+      maxlength: 5,
+      default: null,
+    },
+
+    password: {
+      type: String,
+      default: null,
+      select: false,
     },
   },
   {
     timestamps: true,
     collection: "customers",
-  },
+  }
 );
 
-customerSchema.index(
-  { userId: 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      userId: { $type: "objectId" },
-    },
-  },
-);
-
-export const CustomerModel = model<ICustomer>(
-  "Customer",
-  customerSchema,
-);
+export const CustomerModel =
+  mongoose.models["Customer"] ||
+  model<ICustomer>("Customer", customerSchema);

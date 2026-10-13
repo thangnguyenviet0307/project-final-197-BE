@@ -1,26 +1,18 @@
-import type { Types } from "mongoose";
-import type { BaseDocument } from "./common.types.js";
 
-export interface ICustomerAddress {
-  recipientName: string;
+import type { Document } from "mongoose";
+
+export interface ICustomer extends Document {
+  customer_id: number;
+  first_name: string;
+  last_name: string;
   phone: string;
-  province: string;
-  ward: string;
-  detail: string;
-  isDefault?: boolean;
+  email: string;
+  birthday?: Date | null;
+  street: string;
+  city: string;
+  state: string;
+  zip_code?: string | null;
+  password?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
-
-export interface ICustomer {
-  userId?: Types.ObjectId;
-  fullName: string;
-  phone?: string;
-  avatarUrl?: string;
-  gender?: "male" | "female" | "other";
-  dateOfBirth?: Date;
-  addresses?: ICustomerAddress[];
-  isActive?: boolean;
-  isDeleted?: boolean;
-  deletedAt?: Date | null;
-}
-
-export type ICustomerDocument = ICustomer & BaseDocument;

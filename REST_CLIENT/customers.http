@@ -1,0 +1,62 @@
+@baseUrl = http://localhost:3000/api/v1/customers
+
+@customerId = 6acf63b20244042072ffbd54
+
+### 1. GET ALL CUSTOMERS
+GET {{baseUrl}}
+
+### 2. CREATE CUSTOMER
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "first_name": "Nguyen",
+  "last_name": "Hoang",
+  "phone": "0912345678",
+  "email": "hoang197@example.com",
+  "birthday": "2003-05-15",
+  "street": "123 Nguyen Trai",
+  "city": "Ho Chi Minh",
+  "state": "Vietnam",
+  "password": "Password123"
+}
+
+### 3. GET CUSTOMER BY ID
+GET {{baseUrl}}/{{customerId}}
+
+### 4. UPDATE CUSTOMER
+PUT {{baseUrl}}/{{customerId}}
+Content-Type: application/json
+
+{
+  "first_name": "Tran",
+  "last_name": "Hoang",
+  "phone": "0987654321",
+  "city": "Da Nang"
+}
+
+### 5. DELETE CUSTOMER
+DELETE {{baseUrl}}/{{customerId}}
+
+### 6. TEST VALIDATION - EMPTY NAME
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "first_name": "",
+  "last_name": "Hoang",
+  "phone": "0911111111",
+  "email": "test197@example.com",
+  "street": "123 ABC",
+  "city": "Hanoi",
+  "state": "Vietnam"
+}
+
+### 7. TEST INVALID ID
+GET {{baseUrl}}/123
+
+### 8. TEST EMPTY UPDATE
+PUT {{baseUrl}}/{{customerId}}
+Content-Type: application/json
+
+{}

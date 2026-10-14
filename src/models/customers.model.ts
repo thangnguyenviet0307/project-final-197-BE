@@ -1,16 +1,9 @@
 
-import mongoose, { Schema, model } from "mongoose";
+import { Schema, model } from "mongoose";
 import type { ICustomer } from "../types/customers.js";
 
 const customerSchema = new Schema<ICustomer>(
   {
-    customer_id: {
-      type: Number,
-      required: true,
-      unique: true,
-      min: 1,
-    },
-
     first_name: {
       type: String,
       required: true,
@@ -68,12 +61,6 @@ const customerSchema = new Schema<ICustomer>(
       maxlength: 50,
     },
 
-    zip_code: {
-      type: String,
-      maxlength: 5,
-      default: null,
-    },
-
     password: {
       type: String,
       default: null,
@@ -87,5 +74,4 @@ const customerSchema = new Schema<ICustomer>(
 );
 
 export const CustomerModel =
-  mongoose.models["Customer"] ||
   model<ICustomer>("Customer", customerSchema);

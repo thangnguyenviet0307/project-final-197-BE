@@ -1,0 +1,29 @@
+@baseUrl = https://project-final-197-be.onrender.com/api/v1/users
+@userId = 2231143153252
+
+### 1. Lấy danh sách tất cả users
+GET {{baseUrl}}
+
+### 2. Lấy chi tiết user theo ID (Thay thế ID thực tế vào đây)
+GET {{baseUrl}}/{{userId}}
+
+### 3. Tạo mới một user
+POST {{baseUrl}}
+Content-Type: application/json
+
+{
+  "name": "ronaldo",
+  "email": "ronaldo@example.com",
+  "password": "SecurePassword123"
+}
+
+### 4. Cập nhật thông tin user theo ID
+PATCH {{baseUrl}}/{{userId}}
+Content-Type: application/json
+
+{
+  "name": "ronaldo Updated"
+}
+
+### 5. Xóa user theo ID
+DELETE {{baseUrl}}/{{userId}}

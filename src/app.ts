@@ -13,6 +13,7 @@ import { Categories } from "./models/categories.model.js";
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";
+import { userRoute } from "./routes/v1/user.route.js";
 
 void BrandModel;
 void Categories;
@@ -38,14 +39,17 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-// Brands API của bạn
+// Brands API 
 app.use("/api/v1/brands", brandRoutes, errorMiddleware);
 
-// Products API của team
+// Products API
 app.use("/api/v1/products", productRoutes);
 
-// Categories API của team
+// Categories API 
 app.use("/api/v1/categories", categoriesRouter);
+
+// Users API 
+app.use("/api/v1/users", userRoute); 
 
 /** END ROUTES */
 

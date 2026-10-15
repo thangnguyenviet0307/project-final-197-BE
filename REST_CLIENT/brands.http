@@ -1,5 +1,6 @@
 
-@baseUrl = http://localhost:3000/api/v1/brands
+@baseUrl = https://project-final-197-be.onrender.com/api/v1/brands
+@brandId = 6ac78ff3021217a6d1059b65
 
 ### 1. GET ALL BRANDS
 GET {{baseUrl}}
@@ -31,10 +32,10 @@ Content-Type: application/json
 }
 
 ### GET BRAND BY ID
-GET http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+GET {{baseUrl}}/{{brandId}}
 
 ### 6. UPDATE BRAND
-PUT http://localhost:3000/api/v1/brands/6ac78ff3021217a6d1059b65
+PUT {{baseUrl}}/{{brandId}}
 Content-Type: application/json
 
 {
@@ -43,4 +44,4 @@ Content-Type: application/json
 }
 
 ### 7. DELETE BRAND
-DELETE {{baseUrl}}/6ac78ff3021217a6d1059b65
+DELETE {{baseUrl}}/{{brandId}}

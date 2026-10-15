@@ -1,17 +1,25 @@
+@baseUrl = https://project-final-197-be.onrender.com/api/v1/products
+@productId = 6acb9c9a3319003dfb1ec60b
+@variantId = 6acb9c9a3319003dfb1ec60c
+@productIdToUpdate = ID_HERE
+@productIdToDelete = 6aca4354eda4a5bd7bb9ee36
+@categoryId = 6aca4304eda4a5bd7bb9ee35
+@brandId = 6aca59972970f2f1349bbd5f
+
 ### Lấy danh sách sản phẩm
-GET http://localhost:5000/api/v1/products
+GET {{baseUrl}}
 Accept: application/json
 
 ### Tạo sản phẩm mới
-POST http://localhost:5000/api/v1/products
+POST {{baseUrl}}
 Content-Type: application/json
 
 {
   "product_name": "iPhone 14 Pro",
   "price": 29990000,
   "discount": 10,
-  "category": "6aca4304eda4a5bd7bb9ee35",
-  "brand": "6aca59972970f2f1349bbd5f",
+  "category": "{{categoryId}}",
+  "brand": "{{brandId}}",
   "description": "Điện thoại cao cấp",
   "model_year": 2023,
   "slug": "iphone-14-pro",
@@ -52,23 +60,23 @@ Content-Type: application/json
 }
 
 ### Lấy sản phẩm theo id
-GET http://localhost:5000/api/v1/products/6acb9c9a3319003dfb1ec60b
+GET {{baseUrl}}/{{productId}}
 Accept: application/json
 
 ### Tìm sản phẩm theo SKU
-GET http://localhost:5000/api/v1/products/sku/IP14P-128-BLK
+GET {{baseUrl}}/sku/IP14P-128-BLK
 Accept: application/json
 
 ### Lọc sản phẩm theo color / size
-GET http://localhost:5000/api/v1/products?color=Black&size=128GB
+GET {{baseUrl}}?color=Black&size=128GB
 Accept: application/json
 
 ### Lấy variant theo product id và variant id
-GET http://localhost:5000/api/v1/products/6acb9c9a3319003dfb1ec60b/variants/6acb9c9a3319003dfb1ec60c
+GET {{baseUrl}}/{{productId}}/variants/{{variantId}}
 Accept: application/json
 
 ### Cập nhật sản phẩm
-PUT http://localhost:5000/api/v1/products/ID_HERE
+PUT {{baseUrl}}/{{productIdToUpdate}}
 Content-Type: application/json
 
 {
@@ -96,5 +104,5 @@ Content-Type: application/json
 }
 
 ### Xoá sản phẩm
-DELETE http://localhost:5000/api/v1/products/6aca4354eda4a5bd7bb9ee36
+DELETE {{baseUrl}}/{{productIdToDelete}}
 Accept: application/json

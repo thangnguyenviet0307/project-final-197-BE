@@ -1,10 +1,13 @@
-@baseUrl = http://localhost:3000/api/v1/categories
+@baseUrl = https://project-final-197-be.onrender.com/api/v1/categories
+@categoryDetailsId = 6ac780788607a66d15735f1e
+@categoryId = 6ac48655544a1dab86293391
+@parentCategoryId = 6aca42f4eda4a5bd7bb9ee34
 
 ### 1. Lấy danh sách tất cả categories
 GET {{baseUrl}}
 
 ### 2. Lấy chi tiết categories theo ID (Thay thế ID thực tế vào đây)
-GET {{baseUrl}}/6ace137af5e8d54abe07d45d
+GET {{baseUrl}}/{{categoryDetailsId}}
 
 ### 3. Tạo mới một categories
 POST {{baseUrl}}
@@ -22,11 +25,11 @@ Content-Type: application/json
 {
   "name": "Sony WH-1000XM5",
   "description": "Tai nghe bluetooth",
-  "parent": "6aca42f4eda4a5bd7bb9ee34"
+  "parent": "{{parentCategoryId}}"
 }
 
 ### 5. Cập nhật categories theo ID
-PUT {{baseUrl}}/6ac48655544a1dab86293391
+PUT {{baseUrl}}/{{categoryId}}
 Content-Type: application/json
 
 {
@@ -35,4 +38,4 @@ Content-Type: application/json
 }
 
 ### 6. Xóa categories theo ID
-DELETE {{baseUrl}}/6ac48655544a1dab86293391
+DELETE {{baseUrl}}/{{categoryId}}

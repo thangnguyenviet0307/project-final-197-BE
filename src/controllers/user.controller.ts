@@ -3,6 +3,14 @@ import { UserService } from "../services/user.service.js";
 import { asyncHandler } from "../utils/async-handler.util.js";
 
 export const UserController = {
+  login: asyncHandler(async (req: Request, res: Response) => {
+    const result = await UserService.loginUser(req.body);
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  }) as RequestHandler,
+
   getAll: asyncHandler(async (_req: Request, res: Response) => {
     const users = await UserService.getAllUsers();
     res.status(200).json({

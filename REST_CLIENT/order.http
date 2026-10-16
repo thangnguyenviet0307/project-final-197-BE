@@ -1,0 +1,217 @@
+@baseUrl = http://localhost:5000/api/v1
+@token = 
+
+### ============================================
+### AUTH - Login to get token
+### ============================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456"
+}
+
+### Save token from login response
+@token = {{login.response.body.data.accessToken}}
+
+### ============================================
+### ORDERS API
+### ============================================
+
+### 1. Create Order (Admin/Staff)
+# @name createOrder
+POST {{baseUrl}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "670a1b2c3d4e5f6a7b8c9d01",
+  "requireDate": "2026-10-20",
+  "orderNote": "Giao hàng giờ hành chính",
+  "street": "123 Nguyen Van Linh",
+  "city": "Da Nang",
+  "state": "Da Nang",
+  "paymentType": 1,
+  "orderItems": [
+    {
+      "productId": "670a1b2c3d4e5f6a7b8c9d10",
+      "quantity": 2
+    },
+    {
+      "productId": "670a1b2c3d4e5f6a7b8c9d11",
+      "quantity": 1
+    }
+  ]
+}
+
+### 2. Create Order with userId (Admin only)
+# @name createOrderWithAssignee
+POST {{baseUrl}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "670a1b2c3d4e5f6a7b8c9d01",
+  "userId": "670a1b2c3d4e5f6a7b8c9d02",
+  "requireDate": "2026-10-25",
+  "orderNote": "Khách VIP",
+  "street": "456 Le Duan",
+  "city": "Ha Noi",
+  "state": "Ha Noi",
+  "paymentType": 1,
+  "orderItems": [
+    {
+      "productId": "670a1b2c3d4e5f6a7b8c9d10",
+      "quantity": 5
+    }
+  ]
+}
+
+### 3. Get Orders List (with pagination & filters)
+# @name getOrders
+GET {{baseUrl}}/orders?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### 4. Get Orders with filters
+# @name getOrdersFiltered
+GET {{baseUrl}}/orders?page=1&limit=10&orderStatus=1&customerId=670a1b2c3d4e5f6a7b8c9d01
+Authorization: Bearer {{token}}
+
+### 5. Get Order by ID
+# @name getOrderById
+GET {{baseUrl}}/orders/{{createOrder.response.body.data._id}}
+Authorization: Bearer {{token}}
+
+### 6. Update Order Status - Pending to Processing
+# @name updateToProcessing
+PATCH {{baseUrl}}/orders/{{createOrder.response.body.data._id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderStatus": 2,
+  "shippingDate": "2026-10-16T10:00:00Z"
+}
+
+### 7. Update Order Status - Processing to Completed
+# @name updateToCompleted
+PATCH {{baseUrl}}/orders/{{createOrder.response.body.data._id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderStatus": 4
+}
+
+### 8. Update Order Status - Assign to another user (Admin only)
+# @name updateWithAssignee
+PATCH {{baseUrl}}/orders/{{createOrder.response.body.data._id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderStatus": 2,
+  "userId": "670a1b2c3d4e5f6a7b8c9d03"
+}
+
+### 9. Reject Order (restores stock)
+# @name rejectOrder
+PATCH {{baseUrl}}/orders/{{createOrder.response.body.data._id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderStatus": 3
+}
+
+### 10. Delete Order (only Rejected orders)
+# @name deleteOrder
+DELETE {{baseUrl}}/orders/{{rejectOrder.response.body.data._id}}
+Authorization: Bearer {{token}}
+
+### ============================================
+### ERROR CASES FOR TESTING
+### ============================================
+
+### Invalid order status transition (Pending -> Completed)
+# @name invalidTransition
+PATCH {{baseUrl}}/orders/{{createOrder.response.body.data._id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "orderStatus": 4
+}
+
+### Create order with insufficient stock
+# @name insufficientStock
+POST {{baseUrl}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "670a1b2c3d4e5f6a7b8c9d01",
+  "street": "123 Test",
+  "city": "Test City",
+  "state": "Test State",
+  "paymentType": 1,
+  "orderItems": [
+    {
+      "productId": "670a1b2c3d4e5f6a7b8c9d10",
+      "quantity": 999999
+    }
+  ]
+}
+
+### Create order with invalid productId
+# @name invalidProduct
+POST {{baseUrl}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customerId": "670a1b2c3d4e5f6a7b8c9d01",
+  "street": "123 Test",
+  "city": "Test City",
+  "state": "Test State",
+  "paymentType": 1,
+  "orderItems": [
+    {
+      "productId": "invalid-id",
+      "quantity": 1
+    }
+  ]
+}
+
+### Delete non-rejected order
+# @name deleteNonRejected
+DELETE {{baseUrl}}/orders/{{createOrder.response.body.data._id}}
+Authorization: Bearer {{token}}
+
+### Get non-existent order
+# @name getNonExistent
+GET {{baseUrl}}/orders/507f1f77bcf86cd799439011
+Authorization: Bearer {{token}}
+
+### Unauthorized request (no token)
+# @name unauthorized
+GET {{baseUrl}}/orders
+
+### Forbidden - Staff trying to delete (needs orders:delete permission)
+# @name forbidden
+DELETE {{baseUrl}}/orders/{{rejectOrder.response.body.data._id}}
+Authorization: Bearer {{staffToken}}
+
+### ============================================
+### ORDER STATUS ENUM REFERENCE
+### ============================================
+# OrderStatus:
+# 1 = Pending (Chờ xử lý)
+# 2 = Processing (Đang xử lý)
+# 3 = Rejected (Từ chối)
+# 4 = Completed (Hoàn thành)
+
+# PaymentType:
+# 1 = COD (Thanh toán khi nhận hàng)

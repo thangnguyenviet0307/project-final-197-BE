@@ -1,0 +1,47 @@
+@baseUrl = http://localhost:5000/api/v1
+
+### ============================================
+### 1. LOGIN ADMIN (dùng khi DB đã có user)
+### ============================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456"
+}
+
+@adminToken = {{login.response.body.data.accessToken}}
+
+### ============================================
+### 2. CREATE USER BY ADMIN
+### ============================================
+# @name createUser
+POST {{baseUrl}}/users
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "email": "staff1@example.com",
+  "password": "staff123456",
+  "firstName": "Nhan",
+  "lastName": "Vien",
+  "role": "staff",
+  "active": true
+}
+
+### ============================================
+### 3. NẾU DB CHƯA CÓ USER (chỉ dùng 1 lần)
+### ============================================
+# POST {{baseUrl}}/auth/bootstrap
+# Content-Type: application/json
+#
+# {
+#   "email": "admin@example.com",
+#   "password": "123456",
+#   "firstName": "System",
+#   "lastName": "Admin",
+#   "role": "admin",
+#   "active": true
+# }

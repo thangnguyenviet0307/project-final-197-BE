@@ -1,17 +1,17 @@
 import { z } from "zod";
-import type { Request, Response, NextFunction } from "express";
+import { objectId, paginationSchema } from "./common.validation.js";
 
-const ProductVariantSchema = z.object({
+export const productVariantSchema = z.object({
   sku: z
     .string()
     .trim()
-    .min(3)
-    .max(64)
-    .regex(/^[A-Z0-9-]+$/),
+    .min(3, "SKU phải có ít nhất 3 ký tự")
+    .max(64, "SKU tối đa 64 ký tự")
+    .regex(/^[A-Z0-9-]+$/, "SKU chỉ được chứa chữ cái, số và dấu gạch ngang"),
   variant_name: z.string().trim().min(1).max(100).nullable().optional(),
   color: z.string().trim().max(50).nullable().optional(),
   size: z.string().trim().max(50).nullable().optional(),
-  price: z.number().min(0),
+  price: z.number().min(0, "Giá biến thể không được nhỏ hơn 0"),
   compare_at_price: z.number().min(0).nullable().optional(),
   stock: z.number().int().min(0).optional().default(0),
   image: z.string().trim().max(255).nullable().optional(),
@@ -25,60 +25,38 @@ const ProductVariantSchema = z.object({
     .default({}),
 });
 
-const productBase = {
+export const createProductSchema = z.object({
   product_name: z.string().trim().min(3).max(255),
   price: z.number().min(0).optional().default(0),
   discount: z.number().min(0).max(70).optional().default(0),
-  category: z.string().regex(/^[0-9a-fA-F]{24}$/),
-  brand: z.string().regex(/^[0-9a-fA-F]{24}$/),
+  category: objectId,
+  brand: objectId,
   description: z.string().trim().max(2000).nullable().optional(),
-  model_year: z.number().int().min(1900),
+  model_year: z
+    .number()
+    .int()
+    .min(1900)
+    .max(new Date().getFullYear() + 2),
   slug: z.string().trim().min(3).max(255).optional(),
   thumbnail: z.string().trim().max(255).nullable().optional(),
   stock: z.number().int().min(0).optional().default(0),
   is_active: z.boolean().optional().default(true),
-  variants: z.array(ProductVariantSchema).optional().default([]),
-};
+  variants: z.array(productVariantSchema).optional().default([]),
+});
 
-const CreateProductSchema = z.object(productBase);
-const UpdateProductSchema = z.object(productBase).partial();
-
-const IdParamSchema = z.object({ id: z.string().regex(/^[0-9a-fA-F]{24}$/) });
-
-const sendZodError = (res: Response, issues: any) =>
-  res.status(400).json({
-    success: false,
-    statusCode: 400,
-    message: "Dữ liệu không hợp lệ",
-    data: issues,
+export const updateProductSchema = createProductSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field is required for update",
   });
 
-export const validateCreateProduct = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  const result = CreateProductSchema.safeParse(req.body);
-  if (!result.success) {
-    return sendZodError(res, result.error.format());
-  }
+export const productIdParamSchema = z.object({ id: objectId });
 
-  req.body = result.data as any;
-  return next();
-};
+export const getProductsQuerySchema = paginationSchema.extend({
+  sku: z.string().trim().min(1).optional(),
+  color: z.string().trim().optional(),
+  size: z.string().trim().optional(),
+});
 
-export const validateUpdateProduct = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
-  const params = IdParamSchema.safeParse(req.params);
-  if (!params.success) return sendZodError(res, params.error.format());
-
-  const result = UpdateProductSchema.safeParse(req.body);
-  if (!result.success) return sendZodError(res, result.error.format());
-
-  req.params = params.data as any;
-  req.body = result.data as any;
-  return next();
-};
+export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;

@@ -1,0 +1,215 @@
+@baseUrl = http://localhost:5000/api/v1
+@token = 
+
+### ============================================
+### AUTH - Login to get token
+### ============================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456"
+}
+
+### Save token from login response
+@token = {{login.response.body.data.accessToken}}
+
+### ============================================
+### CUSTOMERS API
+### ============================================
+
+### 1. Create Customer
+# @name createCustomer
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Nguyen Van",
+  "lastName": "An",
+  "email": "nguyenvanan@example.com",
+  "phone": "0901234567",
+  "address": {
+    "street": "123 Nguyen Trai",
+    "city": "Da Nang",
+    "state": "Da Nang"
+  },
+  "isActive": true
+}
+
+### 2. Create Customer 2
+# @name createCustomer2
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Le Thi",
+  "lastName": "Binh",
+  "email": "lethibinh@example.com",
+  "phone": "0912345678",
+  "address": {
+    "street": "456 Le Duan",
+    "city": "Ha Noi",
+    "state": "Ha Noi"
+  },
+  "isActive": true
+}
+
+### 3. Create Customer 3 (for testing)
+# @name createCustomer3
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Tran Van",
+  "lastName": "Cuong",
+  "email": "trancuong@example.com",
+  "phone": "0987654321",
+  "address": {
+    "street": "789 Hoang Hoa Tham",
+    "city": "Ho Chi Minh",
+    "state": "Ho Chi Minh"
+  },
+  "isActive": true
+}
+
+### 4. Get Customers List
+# @name getCustomers
+GET {{baseUrl}}/customers?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### 5. Get Customers with Search
+# @name searchCustomers
+GET {{baseUrl}}/customers?page=1&limit=10&search=nguyen
+Authorization: Bearer {{token}}
+
+### 6. Get Customers with Active Filter
+# @name getActiveCustomers
+GET {{baseUrl}}/customers?page=1&limit=10&isActive=true
+Authorization: Bearer {{token}}
+
+### 7. Get Customer by ID
+# @name getCustomerById
+GET {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
+Authorization: Bearer {{token}}
+
+### 8. Update Customer
+# @name updateCustomer
+PUT {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "phone": "0909998888",
+  "address": {
+    "street": "999 Hung Vuong",
+    "city": "Da Nang",
+    "state": "Da Nang"
+  }
+}
+
+### 9. Update Customer - Deactivate
+# @name deactivateCustomer
+PUT {{baseUrl}}/customers/{{createCustomer2.response.body.data._id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "isActive": false
+}
+
+### 10. Delete Customer
+# @name deleteCustomer
+DELETE {{baseUrl}}/customers/{{createCustomer3.response.body.data._id}}
+Authorization: Bearer {{token}}
+
+### ============================================
+### ERROR CASES FOR TESTING
+### ============================================
+
+### Create customer with duplicate email
+# @name duplicateEmail
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "nguyenvanan@example.com",
+  "phone": "0999999999",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with invalid email
+# @name invalidEmail
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "not-an-email",
+  "phone": "0999999999",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with short phone
+# @name shortPhone
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "test123@example.com",
+  "phone": "123",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with missing required fields
+# @name missingFields
+POST {{baseUrl}}/customers
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "email": "missing@example.com"
+}
+
+### Get non-existent customer
+# @name getNonExistentCustomer
+GET {{baseUrl}}/customers/507f1f77bcf86cd799439011
+Authorization: Bearer {{token}}
+
+### Delete non-existent customer
+# @name deleteNonExistentCustomer
+DELETE {{baseUrl}}/customers/507f1f77bcf86cd799439011
+Authorization: Bearer {{token}}
+
+### Unauthorized (no token)
+# @name unauthorized
+GET {{baseUrl}}/customers
+
+### Forbidden - Staff without customers:delete permission
+# @name forbiddenDelete
+DELETE {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
+Authorization: Bearer {{staffToken}}

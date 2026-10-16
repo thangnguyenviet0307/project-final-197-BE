@@ -1,0 +1,129 @@
+@baseUrl = http://localhost:5000/api/v1
+@token = 
+@refreshToken = 
+
+### ============================================
+### BOOTSTRAP - Tạo admin đầu tiên (chỉ chạy 1 lần)
+### ============================================
+# @name bootstrap
+POST {{baseUrl}}/auth/bootstrap
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456",
+  "firstName": "Admin",
+  "lastName": "System",
+  "role": "admin",
+  "active": true
+}
+
+### Save tokens from bootstrap
+@token = {{bootstrap.response.body.data.accessToken}}
+@refreshToken = {{bootstrap.response.body.data.refreshToken}}
+
+### ============================================
+### AUTH - Login
+### ============================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456"
+}
+
+### Save tokens
+@token = {{login.response.body.data.accessToken}}
+@refreshToken = {{login.response.body.data.refreshToken}}
+
+### ============================================
+### AUTH - Refresh Token
+### ============================================
+# @name refresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### Update token with new one
+@token = {{refresh.response.body.data.accessToken}}
+@refreshToken = {{refresh.response.body.data.refreshToken}}
+
+### ============================================
+### AUTH - Logout
+### ============================================
+# @name logout
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### ============================================
+### ERROR CASES
+### ============================================
+
+### Bootstrap when already exists
+# @name bootstrapExists
+POST {{baseUrl}}/auth/bootstrap
+Content-Type: application/json
+
+{
+  "email": "admin2@example.com",
+  "password": "12345678",
+  "firstName": "Admin2",
+  "lastName": "Test",
+  "role": "admin"
+}
+
+### Login with wrong password
+# @name wrongPassword
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "wrongpassword"
+}
+
+### Login with non-existent email
+# @name nonExistentEmail
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "noone@example.com",
+  "password": "123456"
+}
+
+### Login with missing fields
+# @name missingFields
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Refresh with invalid token
+# @name invalidRefresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid-token-here"
+}
+
+### Refresh without token
+# @name noRefresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{}
+
+### Logout without auth
+# @name logoutNoAuth
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json

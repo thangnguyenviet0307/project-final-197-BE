@@ -1,5 +1,5 @@
 
-@baseUrl = https://project-final-197-be.onrender.com/api/v1/brands
+@baseUrl = http://localhost:5000/api/v1/brands
 @brandId = 6ac78ff3021217a6d1059b65
 
 ### 1. GET ALL BRANDS

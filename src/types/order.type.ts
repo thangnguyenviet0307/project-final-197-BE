@@ -8,7 +8,7 @@ export enum OrderStatus {
 }
 
 export enum PaymentType {
-  COD = 1
+  COD = 1,
 }
 
 // order_items: sub schema (embedding) của Order
@@ -25,7 +25,7 @@ export interface IOrder {
   orderDate: Date;
   requireDate?: Date;
   shippingDate?: Date;
-  staffId?: Types.ObjectId;
+  userId?: Types.ObjectId; // User (Admin/Staff) đang phụ trách đơn
   orderNote?: string;
   street: string;
   city: string;

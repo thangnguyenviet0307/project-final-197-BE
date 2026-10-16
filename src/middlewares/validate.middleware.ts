@@ -1,45 +1,58 @@
+import type { Request, Response, NextFunction, RequestHandler } from "express";
 
-import type {
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-} from "express";
+import { type ZodTypeAny, ZodError } from "zod";
 
-import {
-  type ZodType,
-  type ZodTypeAny,
-  ZodError,
-} from "zod";
+export interface ValidationSchema {
+  body?: ZodTypeAny;
+  query?: ZodTypeAny;
+  params?: ZodTypeAny;
+}
 
-// ======================================
-// Brands API - Validation Middleware
-// ======================================
+const isValidationSchema = (
+  value: ZodTypeAny | ValidationSchema,
+): value is ValidationSchema => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    ("body" in value || "query" in value || "params" in value)
+  );
+};
 
-export const validate = (schema: ZodType): RequestHandler => {
-  return (req, _res, next) => {
-    const result = schema.safeParse(req.body);
+export const validate = (
+  schema: ZodTypeAny | ValidationSchema,
+): RequestHandler => {
+  return async (req, _res, next) => {
+    try {
+      const schemas = isValidationSchema(schema) ? schema : { body: schema };
 
-    if (!result.success) {
-      next(result.error);
-      return;
+      if (schemas.body) {
+        req.body = (await schemas.body.parseAsync(req.body)) as typeof req.body;
+      }
+
+      if (schemas.query) {
+        req.query = (await schemas.query.parseAsync(
+          req.query,
+        )) as typeof req.query;
+      }
+
+      if (schemas.params) {
+        req.params = (await schemas.params.parseAsync(
+          req.params,
+        )) as typeof req.params;
+      }
+
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    req.body = result.data;
-    next();
   };
 };
 
-// ======================================
-// Validation Middleware của team
-// Giữ nguyên logic hiện tại
-// ======================================
-
-export const validateData = (schema: ZodTypeAny) => {
+export const validateData = (schema: ZodTypeAny): RequestHandler => {
   return async (
     req: Request,
-    res: Response,
-    next: NextFunction
+    _res: Response,
+    next: NextFunction,
   ): Promise<void> => {
     try {
       await schema.parseAsync({
@@ -51,14 +64,7 @@ export const validateData = (schema: ZodTypeAny) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        res.status(400).json({
-          success: false,
-          message: "Validation failed",
-          errors: error.issues.map((err) => ({
-            field: err.path.join("."),
-            message: err.message,
-          })),
-        });
+        next(error);
         return;
       }
 

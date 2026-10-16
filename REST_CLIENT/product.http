@@ -1,4 +1,4 @@
-@baseUrl = https://project-final-197-be.onrender.com/api/v1/products
+@baseUrl = http://localhost:5000/api/v1/products
 @productId = 6acb9c9a3319003dfb1ec60b
 @variantId = 6acb9c9a3319003dfb1ec60c
 @productIdToUpdate = ID_HERE

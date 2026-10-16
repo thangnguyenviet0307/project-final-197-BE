@@ -2,18 +2,19 @@
 @baseUrl = http://localhost:3000/api/v1/users
 
 //KHAI BÁO TOKEN
-@adminToken =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-@staffToken = Bearer YOUR_STAFF_JWT_TOKEN_HERE
+@adminToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjE1OTA0NSwiZXhwIjoxNzkyMjQ1NDQ1fQ.dkwYtm0Rl6MGRjf2nL1WC_hiUaU6c4puTrGJ2BSEgws
+@staffToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDBhNDljYWU2ZWI3ZjQxYTVjZDEyOCIsInJvbGUiOiJzdGFmZiIsImlhdCI6MTc5MjA1ODcwNCwiZXhwIjoxNzkyMTQ1MTA0fQ.h-xeexYReAlY0nHh-GarjsvDzH0oTOYWVyht5g2VyF8  
 
 @userId = 6ad0a245ae6eb7f41a5cd126
 
 ### Tạo một tài khoản Admin mới để test
 POST {{baseUrl}}
 Content-Type: application/json
+Authorization: {{adminToken}}
 
 {
   "fullName": "Super Admin",
-  "email": "superadmin@gmail.com",
+  "email": "superadmin2@gmail.com",
   "password": "AdminPassword123",
   "role": "admin"
 }

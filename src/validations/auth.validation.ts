@@ -1,11 +1,19 @@
-import { z } from 'zod';
-import { createUserSchema } from './user.validation.js';
+import { z } from "zod";
 
 export const loginSchema = z.object({
-  email: z.string().trim().email('Email không hợp lệ').toLowerCase(),
-  password: z.string().min(1, 'Mật khẩu không được để trống'),
+  body: z.object({
+    email: z.string().trim().email("Email không hợp lệ"),
+    password: z.string().trim().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  }),
 });
 
-export const bootstrapSchema = createUserSchema;
-
-export type LoginInput = z.infer<typeof loginSchema>;
+export const bootstrapSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email("Email không hợp lệ"),
+    password: z.string().trim().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+    firstName: z.string().trim().min(1, "Tên không được để trống"),
+    lastName: z.string().trim().min(1, "Họ không được để trống"),
+    role: z.enum(["admin", "staff"]).default("admin"),
+    active: z.boolean().default(true),
+  }),
+});

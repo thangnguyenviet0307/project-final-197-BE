@@ -1,33 +1,51 @@
-import { Router, type Router as RouterType } from 'express';
-import { userController } from '../../controllers/user.controller.js';
-import { authenticate, requirePermission } from '../../middlewares/auth.middleware.js';
-import { validate } from '../../middlewares/validate.middleware.js';
-import { Permission } from '../../types/permission.type.js';
-import { idParamSchema } from '../../validations/common.validation.js';
+import { Router, type Router as RouterType } from "express";
+import { userController } from "../../controllers/user.controller.js";
+import {
+  authenticate,
+  requirePermission,
+} from "../../middlewares/auth.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { Permission } from "../../types/permission.type.js";
+import { idParamSchema } from "../../validations/common.validation.js";
 import {
   createUserSchema,
   getUsersQuerySchema,
   updateUserSchema,
-} from '../../validations/user.validation.js';
+} from "../../validations/user.validation.js";
 
 const router: RouterType = Router();
 
 router.use(authenticate);
 
-router.get('/', requirePermission(Permission.UserView), validate({ query: getUsersQuerySchema }), userController['getUsers']!);
-router.get('/:id', requirePermission(Permission.UserView), validate({ params: idParamSchema }), userController['getUserById']!);
-router.post('/', requirePermission(Permission.UserCreate), validate({ body: createUserSchema }), userController['createUser']!);
+router.get(
+  "/",
+  requirePermission(Permission.UserView),
+  validate({ query: getUsersQuerySchema }),
+  userController["getUsers"]!,
+);
+router.get(
+  "/:id",
+  requirePermission(Permission.UserView),
+  validate({ params: idParamSchema }),
+  userController["getUserById"]!,
+);
+router.post(
+  "/",
+  requirePermission(Permission.UserCreate),
+  validate({ body: createUserSchema }),
+  userController["createUser"]!,
+);
 router.put(
-  '/:id',
+  "/:id",
   requirePermission(Permission.UserUpdate),
   validate({ params: idParamSchema, body: updateUserSchema }),
-  userController['updateUser']!,
+  userController["updateUser"]!,
 );
 router.delete(
-  '/:id',
+  "/:id",
   requirePermission(Permission.UserDelete),
   validate({ params: idParamSchema }),
-  userController['deleteUser']!,
+  userController["deleteUser"]!,
 );
 
 export default router;

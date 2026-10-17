@@ -14,7 +14,7 @@ POST {{baseUrl}}
 Content-Type: application/json
 
 {
-  "name": "Tai nghe",
+  "name": "Tai nghe 2",
   "description": "Các sản phẩm tai nghe chất lượng"
 }
 

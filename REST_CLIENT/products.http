@@ -1,11 +1,11 @@
 # Select PRODUCT_ID/VARIANT_ID in REST_CLIENT/.env or create a test product first.
 @baseUrl = http://127.0.0.1:5001/api/v1/products
-@productId = __PRODUCT_ID__
-@variantId = __VARIANT_ID__
-@productIdToUpdate = __PRODUCT_ID__
-@productIdToDelete = __PRODUCT_ID__
-@categoryId = __CATEGORY_ID__
-@brandId = __BRAND_ID__
+@productId = {{$dotenv PRODUCT_ID}}
+@variantId = {{$dotenv VARIANT_ID}}
+@categoryId = {{$dotenv CATEGORY_ID}}
+@brandId = {{$dotenv BRAND_ID}}
+@primarySku = IP15P-512-BLK
+@secondarySku = IP15P-2T-BLK
 
 ### Lấy danh sách sản phẩm
 GET {{baseUrl}}
@@ -20,43 +20,43 @@ Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "product_name": "iPhone 14 Pro",
+  "product_name": "iPhone 15 Pro",
   "price": 29990000,
   "discount": 10,
   "category": "{{categoryId}}",
   "brand": "{{brandId}}",
   "description": "Điện thoại cao cấp",
   "model_year": 2023,
-  "slug": "iphone-14-pro",
-  "thumbnail": "https://example.com/iphone14pro.jpg",
+  "slug": "iphone-15-pro",
+  "thumbnail": "https://example.com/iphone15pro.jpg",
   "variants": [
     {
-      "sku": "IP14P-128-BLK",
-      "variant_name": "Black - 128GB",
+      "sku": "{{primarySku}}",
+      "variant_name": "Black - 512GB",
       "color": "Black",
-      "size": "128GB",
+      "size": "512GB",
       "price": 29990000,
       "stock": 20,
-      "image": "https://example.com/iphone14pro-black.jpg",
+      "image": "https://example.com/iphone15pro-black.jpg",
       "images": [
-        "https://example.com/iphone14pro-black.jpg",
-        "https://example.com/iphone14pro-black-2.jpg"
+        "https://example.com/iphone15pro-black.jpg",
+        "https://example.com/iphone15pro-black-2.jpg"
       ],
       "attributes": {
-        "storage": "128GB",
+        "storage": "512GB",
         "color": "Black"
       }
     },
     {
-      "sku": "IP14P-256-BLK",
-      "variant_name": "Black - 256GB",
+      "sku": "{{secondarySku}}",
+      "variant_name": "Black - 2TB",
       "color": "Black",
-      "size": "256GB",
+      "size": "2TB",
       "price": 33990000,
       "stock": 12,
-      "image": "https://example.com/iphone14pro-black-256.jpg",
+      "image": "https://example.com/iphone15pro-black-256.jpg",
       "attributes": {
-        "storage": "256GB",
+        "storage": "2TB",
         "color": "Black"
       }
     }
@@ -70,13 +70,13 @@ Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Tìm sản phẩm theo SKU
-GET {{baseUrl}}/sku/IP14P-128-BLK
+GET {{baseUrl}}/sku/{{primarySku}}
 x-rest-client-auth: primary
 Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Lọc sản phẩm theo color / size
-GET {{baseUrl}}?color=Black&size=128GB
+GET {{baseUrl}}?color=Black&size=512GB
 x-rest-client-auth: primary
 Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
@@ -88,7 +88,7 @@ Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Cập nhật sản phẩm
-PUT {{baseUrl}}/{{productIdToUpdate}}
+PUT {{baseUrl}}/{{productId}}
 x-rest-client-auth: primary
 Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
@@ -99,7 +99,7 @@ Content-Type: application/json
 }
 
 ### Xoá sản phẩm
-DELETE {{baseUrl}}/{{productIdToDelete}}
+DELETE {{baseUrl}}/{{productId}}
 x-rest-client-auth: primary
 Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json

@@ -6,17 +6,21 @@ import express from "express";
 import { z } from "zod";
 import { validate } from "../dist/middlewares/validate.middleware.js";
 import { errorMiddleware } from "../dist/middlewares/error.middleware.js";
-import { getCustomersQuerySchema } from "../dist/validations/customer.validation.js";
-import { createUserSchema, updateUserSchema } from "../dist/validations/user.validation.js";
-import { createProductSchema } from "../dist/validations/product.validation.js";
-import { updateProductSchema } from "../dist/validations/product.validation.js";
-import { updateCustomerSchema } from "../dist/validations/customer.validation.js";
+import { getCustomersQuerySchema } from "../dist/validations/customers.validation.js";
+import { createUserSchema, updateUserSchema } from "../dist/validations/users.validation.js";
+import { createProductSchema } from "../dist/validations/products.validation.js";
+import { updateProductSchema } from "../dist/validations/products.validation.js";
+import { updateCustomerSchema } from "../dist/validations/customers.validation.js";
+import { updateBrandSchema } from "../dist/validations/brands.validation.js";
+import { updateCategoriesSchema } from "../dist/validations/categories.validation.js";
+import { getOrdersQuerySchema, updateOrderStatusSchema } from "../dist/validations/orders.validation.js";
+import jwt from "jsonwebtoken";
 import { escapeRegex } from "../dist/utils/search.js";
-import { User } from "../dist/models/user.model.js";
-import { UserService } from "../dist/services/user.service.js";
+import { User } from "../dist/models/users.model.js";
+import { UserService } from "../dist/services/users.service.js";
 import { login } from "../dist/services/auth.service.js";
 import argon2 from "argon2";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashToken } from "../dist/utils/token.js";
+import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken } from "../dist/utils/token.js";
 
 process.env.JWT_SECRET = randomBytes(32).toString("hex");
 process.env.JWT_REFRESH_SECRET = randomBytes(32).toString("hex");
@@ -156,6 +160,37 @@ test("partial updates never insert create defaults or reset unrelated fields", (
   assert.deepEqual(updateProductSchema.parse({ description: "Updated" }), { description: "Updated" });
   assert.deepEqual(updateCustomerSchema.parse({ firstName: "Updated" }), { firstName: "Updated" });
   assert.equal(updateProductSchema.safeParse({}).success, false);
+  assert.deepEqual(updateBrandSchema.parse({ description: "Updated" }), { description: "Updated" });
+  assert.deepEqual(updateCategoriesSchema.parse({ description: "Updated" }), { description: "Updated" });
+  for (const schema of [updateUserSchema, updateProductSchema, updateCustomerSchema, updateBrandSchema, updateCategoriesSchema]) {
+    assert.equal(schema.safeParse({}).success, false);
+    assert.equal(schema.safeParse({ unknownField: "must not make an update valid" }).success, false);
+  }
+});
+
+test("access and refresh tokens retain separate signing keys and expiration policies", () => {
+  const user = { id: "507f1f77bcf86cd799439011", tokenVersion: 2 };
+  const access = generateAccessToken(user);
+  const refresh = generateRefreshToken(user);
+  assert.equal(verifyAccessToken(access).version, 2);
+  assert.equal(verifyRefreshToken(refresh).version, 2);
+  assert.throws(() => verifyAccessToken(refresh), { status: 401 });
+  assert.throws(() => verifyRefreshToken(access), { status: 401 });
+  const accessClaims = jwt.decode(access);
+  const refreshClaims = jwt.decode(refresh);
+  assert.equal(accessClaims.exp - accessClaims.iat, 15 * 60);
+  assert.equal(refreshClaims.exp - refreshClaims.iat, 7 * 24 * 60 * 60);
+});
+
+test("order query and body accept the same status set, including coerced query strings", () => {
+  for (const status of [1, 2, 3, 4]) {
+    assert.equal(getOrdersQuerySchema.parse({ orderStatus: String(status) }).orderStatus, status);
+    assert.equal(updateOrderStatusSchema.parse({ orderStatus: status }).orderStatus, status);
+  }
+  for (const status of [0, 5, 1.5, -1, 99]) {
+    assert.equal(getOrdersQuerySchema.safeParse({ orderStatus: String(status) }).success, false);
+    assert.equal(updateOrderStatusSchema.safeParse({ orderStatus: status }).success, false);
+  }
 });
 
 test("unexpected errors never disclose their internal message", async () => {

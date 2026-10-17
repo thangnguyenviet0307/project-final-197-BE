@@ -1,5 +1,8 @@
 
 import mongoose from 'mongoose';
+import createHttpError from 'http-errors';
+import Product from '../models/products.model.js';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
 
 import { BrandModel } from '../models/brands.model.js';
 import { buildSlug } from '../helpers/buildSlug.helper.js';
@@ -7,7 +10,7 @@ import { buildSlug } from '../helpers/buildSlug.helper.js';
 import type {
   BrandInput,
   UpdateBrandInput,
-} from '../validations/brands.validation.js';
+} from '../types/brands.js';
 
 export class BrandService {
   // 1. Lấy tất cả thương hiệu chưa bị xóa
@@ -35,6 +38,8 @@ export class BrandService {
     const slug = buildSlug(data.name);
 
     const brandData = {
+      ...(data.logoUrl !== undefined ? { logoUrl: data.logoUrl } : {}),
+      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       name: data.name,
       slug,
       ...(data.description !== undefined
@@ -54,31 +59,23 @@ export class BrandService {
       return null;
     }
 
-    const updateData: {
-      name?: string;
-      slug?: string;
-      description?: string;
-    } = {};
+    const updateData: UpdateBrandInput & { slug?: string } = { ...data };
 
     if (data.name !== undefined) {
-      updateData.name = data.name;
 
       // Sử dụng hàm buildSlug của nhóm
       updateData.slug = buildSlug(data.name);
     }
 
-    if (data.description !== undefined) {
-      updateData.description = data.description;
-    }
-
-    return BrandModel.findOneAndUpdate(
+    return withRelationsTransaction(async (session) => BrandModel.findOneAndUpdate(
       { _id: id, isDeleted: false },
       { $set: updateData },
       {
         new: true,
         runValidators: true,
+        session,
       }
-    );
+    ));
   }
 
   // 5. Xóa mềm thương hiệu
@@ -87,15 +84,18 @@ export class BrandService {
       return null;
     }
 
-    return BrandModel.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      {
-        $set: {
-          isDeleted: true,
-          deletedAt: new Date(),
+    return withRelationsTransaction(async (session) => {
+      if (await Product.exists({ brand: id }).session(session)) throw createHttpError(409, 'Cannot delete a brand referenced by products');
+      return BrandModel.findOneAndUpdate(
+        { _id: id, isDeleted: false },
+        {
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+          },
         },
-      },
-      { new: true }
-    );
+        { new: true, session }
+      );
+    });
   }
 }

@@ -1,8 +1,9 @@
+import { toAuthUser } from "../utils/user-mapper.js";
 import type { Request, RequestHandler } from "express";
 import createHttpError from "http-errors";
-import { User } from "../models/user.model.js";
+import { User } from "../models/users.model.js";
 import type { AuthUser } from "../types/auth.type.js";
-import { Permission } from "../types/permission.type.js";
+import { Permission } from "../types/permissions.type.js";
 import { hasPermission } from "../config/rolePermissions.js";
 import { verifyAccessToken } from "../utils/token.js";
 export interface AuthenticatedRequest extends Request { user?: AuthUser; }
@@ -15,11 +16,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     if (!user || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
       throw createHttpError(401, "Phiên đăng nhập không còn hợp lệ");
     }
-    (req as AuthenticatedRequest).user = {
-      id: user._id.toString(), email: user.email, firstName: user.firstName,
-      lastName: user.lastName, role: user.role, active: user.active,
-      tokenVersion: user.tokenVersion ?? 0,
-    };
+    (req as AuthenticatedRequest).user = toAuthUser(user);
     next();
   } catch (error) { next(error); }
 };

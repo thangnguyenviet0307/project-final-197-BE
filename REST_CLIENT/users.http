@@ -1,7 +1,7 @@
 # Start pnpm.cmd rest-client, then send login in auth.http.
 # Primary login must be an admin. Staff intentionally receives 403 for users APIs.
 @baseUrl = http://127.0.0.1:5001/api/v1/users
-@userId = __STAFF_USER_ID__
+@userId = {{$dotenv STAFF_USER_ID}}
 @staffEmail = {{$dotenv STAFF_LOGIN_EMAIL}}
 @staffPassword = {{$dotenv STAFF_LOGIN_PASSWORD}}
 

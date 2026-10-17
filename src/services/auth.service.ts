@@ -1,18 +1,18 @@
+import { toAuthUser, toPublicUser } from "../utils/user-mapper.js";
 import mongoose from "mongoose";
 import { timingSafeEqual } from "node:crypto";
-import { SystemLock } from "../models/system-lock.model.js";
+import { SystemLock } from "../models/system-locks.model.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
-import { User } from "../models/user.model.js";
+import { User } from "../models/users.model.js";
 import {
-  generateAccessToken,
-  generateRefreshToken,
+  generateTokenPair,
   verifyRefreshToken,
   hashToken,
 } from "../utils/token.js";
-import type { AuthUser } from "../types/auth.type.js";
-import type { CreateUserInput } from "../validations/user.validation.js";
+import type { CreateUserInput } from "../types/users.type.js";
 import { verifyPassword } from "../utils/password.js";
+import { sessionRevocationUpdate } from "../utils/session.js";
 
 export async function login(email: string, password: string) {
   const user = await User.findOne({ email }).select("+password +tokenVersion");
@@ -26,18 +26,9 @@ export async function login(email: string, password: string) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
   }
 
-  const authUser: AuthUser = {
-    id: user._id.toString(),
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    active: true,
-    tokenVersion: user.tokenVersion ?? 0,
-  };
+  const authUser = toAuthUser(user, true);
 
-  const accessToken = generateAccessToken(authUser);
-  const refreshToken = generateRefreshToken(authUser);
+  const { accessToken, refreshToken } = generateTokenPair(authUser);
   const upgradedPassword = verification.needsUpgrade ? await argon2.hash(password) : undefined;
 
   const updated = await User.findOneAndUpdate(
@@ -55,13 +46,7 @@ export async function login(email: string, password: string) {
   if (!updated) throw createHttpError(401, "Account changed; please sign in again");
 
   return {
-    user: {
-      id: authUser.id,
-      email: authUser.email,
-      firstName: authUser.firstName,
-      lastName: authUser.lastName,
-      role: authUser.role,
-    },
+    user: toPublicUser(authUser),
     accessToken,
     refreshToken,
   };
@@ -77,19 +62,16 @@ export async function bootstrapAdmin(input: Omit<CreateUserInput, "role">, suppl
     if (await User.countDocuments().session(session)) throw createHttpError(403, "System already initialized");
     await SystemLock.create([{ _id: "admin-bootstrap" }], { session });
     const user = new User({ ...input, password, role: "admin", active: true, tokenVersion: 0 });
-    const authUser: AuthUser = { id: String(user._id), email: user.email,
-      firstName: user.firstName, lastName: user.lastName, role: user.role, active: true, tokenVersion: 0 };
-    const accessToken = generateAccessToken(authUser);
-    const refreshToken = generateRefreshToken(authUser);
+    const authUser = toAuthUser(user, true);
+    const { accessToken, refreshToken } = generateTokenPair(authUser);
     user.refreshToken = hashToken(refreshToken);
     await user.save({ session });
-    return { user: { id: authUser.id, email: user.email, firstName: user.firstName,
-      lastName: user.lastName, role: user.role }, accessToken, refreshToken };
+    return { user: toPublicUser(authUser), accessToken, refreshToken };
   });
 }
 
 export async function logout(userId: string) {
-  await User.findByIdAndUpdate(userId, { $set: { refreshToken: null }, $inc: { tokenVersion: 1 } });
+  await User.findByIdAndUpdate(userId, sessionRevocationUpdate());
 }
 
 export async function refresh(refreshToken: string) {
@@ -98,19 +80,8 @@ export async function refresh(refreshToken: string) {
   if (!user || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
     throw createHttpError(401, "Refresh token không hợp lệ");
   }
-
-  const authUser: AuthUser = {
-    id: user._id.toString(),
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    active: user.active,
-    tokenVersion: user.tokenVersion ?? 0,
-  };
-
-  const newAccessToken = generateAccessToken(authUser);
-  const newRefreshToken = generateRefreshToken(authUser);
+  const authUser = toAuthUser(user);
+  const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokenPair(authUser);
   const rotated = await User.findOneAndUpdate(
     { _id: user._id, refreshToken: hashToken(refreshToken), tokenVersion: decoded.version, active: true },
     { $set: { refreshToken: hashToken(newRefreshToken) } },

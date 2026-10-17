@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, beforeEach } from "node:test";
+import { SystemLock } from "../dist/models/system-locks.model.js";
+import { BrandModel } from "../dist/models/brands.model.js";
+import { Categories } from "../dist/models/categories.model.js";
 import mongoose from "mongoose";
-import { Customer } from "../dist/models/customer.model.js";
-import { User } from "../dist/models/user.model.js";
-import Product from "../dist/models/product.model.js";
-import { Order } from "../dist/models/order.model.js";
-import { createOrder, updateOrderStatus, deleteOrder } from "../dist/services/order.services.js";
-import { createOrderSchema, updateOrderStatusSchema } from "../dist/validations/order.validation.js";
+import { Customer } from "../dist/models/customers.model.js";
+import { User } from "../dist/models/users.model.js";
+import Product from "../dist/models/products.model.js";
+import { Order } from "../dist/models/orders.model.js";
+import { createOrder, updateOrderStatus, deleteOrder } from "../dist/services/orders.services.js";
+import { createOrderSchema, updateOrderStatusSchema } from "../dist/validations/orders.validation.js";
 import productService from "../dist/services/products.service.js";
 import { refresh, logout } from "../dist/services/auth.service.js";
 import { generateRefreshToken, hashToken } from "../dist/utils/token.js";
@@ -17,6 +20,12 @@ process.env.JWT_REFRESH_SECRET = randomBytes(32).toString("hex");
 const id = () => new mongoose.Types.ObjectId();
 const actor = { id: String(id()), role: "admin", tokenVersion: 0 };
 const customerId = String(id());
+beforeEach((t) => {
+  t.mock.method(SystemLock, 'updateOne', async () => ({ acknowledged: true }));
+  for (const model of [BrandModel, Categories]) {
+    t.mock.method(model, 'exists', () => ({ session() { return this; }, then(resolve) { return Promise.resolve({ _id: id() }).then(resolve); } }));
+  }
+});
 function transactionHarness(t) {
   const session = {};
   const state = { committed: false, aborted: false };
@@ -25,8 +34,8 @@ function transactionHarness(t) {
     try { const result = await callback(session); state.committed = true; return result; }
     catch (error) { state.aborted = true; throw error; }
   });
-  t.mock.method(Customer, "exists", () => ({ session: async (actual) => {
-    assert.equal(actual, session); return { _id: customerId };
+  t.mock.method(Customer, "findOne", () => ({ session: async (actual) => {
+    assert.equal(actual, session); return { _id: customerId, firstName: 'Original', lastName: 'Customer', email: 'original@example.com', phone: '0123456789' };
   } }));
   return { session, state };
 }
@@ -52,6 +61,7 @@ test("order reserves only the selected variant, merges duplicates and snapshots 
   assert.equal(product.variants[1].stock, 3);
   assert.equal(product.stock, 5);
   assert.equal(order.totalAmount, 67.5);
+  assert.equal(order.customerSnapshot.email, 'original@example.com');
   assert.equal(state.committed, true);
 });
 
@@ -151,11 +161,12 @@ test("logout clears the refresh token and increments session version", async (t)
 });
 
 test("product creation aggregates variant stock and price when omitted", async (t) => {
+  transactionHarness(t);
   t.mock.method(Product, "exists", async () => null);
-  t.mock.method(Product, "create", async (payload) => {
-    assert.equal(payload.stock, 7);
-    assert.equal(payload.price, 15);
-    return new Product(payload);
+  t.mock.method(Product.prototype, "save", async function () {
+    assert.equal(this.stock, 7);
+    assert.equal(this.price, 15);
+    return this;
   });
   await productService.createProduct({ product_name: "Test product", model_year: 2025,
     brand: String(id()), category: String(id()), variants: [

@@ -8,6 +8,8 @@ interface PasswordVerification {
 
 export async function verifyPassword(hash: string, password: string): Promise<PasswordVerification> {
   if (/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash)) {
+    // bcrypt cannot authenticate the suffix beyond 72 bytes; never migrate that suffix.
+    if (bcrypt.truncates(password)) return { valid: false, needsUpgrade: false };
     return { valid: await bcrypt.compare(password, hash), needsUpgrade: true };
   }
   if (/^\$argon2(?:id|i|d)\$/.test(hash)) {

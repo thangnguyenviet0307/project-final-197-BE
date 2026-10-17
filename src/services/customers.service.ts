@@ -1,13 +1,15 @@
 import createHttpError from "http-errors";
 import { escapeRegex } from "../utils/search.js";
-import { Customer } from '../models/customer.model.js';
-import type { ICustomer } from '../types/customer.type.js';
+import { Customer } from '../models/customers.model.js';
+import { Order } from '../models/orders.model.js';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
+import type { ICustomer } from '../types/customers.type.js';
 import { buildPagination } from '../utils/pagination.js';
 import type {
   CreateCustomerInput,
   GetCustomersQuery,
   UpdateCustomerInput,
-} from '../validations/customer.validation.js';
+} from '../types/customers.type.js';
 
 export async function getCustomers({ page, limit, search, isActive }: GetCustomersQuery) {
   const filter: Record<string, unknown> = {};
@@ -47,17 +49,22 @@ export async function createCustomer(input: CreateCustomerInput): Promise<ICusto
 }
 
 export async function updateCustomer(id: string, input: UpdateCustomerInput): Promise<ICustomer | null> {
-  if (input.email) {
-    const existing = await Customer.findOne({ email: input.email, _id: { $ne: id } });
-    if (existing) throw createHttpError(409, 'Email already exists');
-  }
+  return withRelationsTransaction(async (session) => {
+    if (input.email) {
+      const existing = await Customer.findOne({ email: input.email, _id: { $ne: id } });
+      if (existing) throw createHttpError(409, 'Email already exists');
+    }
 
-  const customer = await Customer.findByIdAndUpdate(id, input, { new: true, runValidators: true }).select('-__v');
-  return customer;
+    const customer = await Customer.findByIdAndUpdate(id, input, { new: true, runValidators: true, session }).select('-__v');
+    return customer;
+  });
 }
 
 export async function deleteCustomer(id: string) {
-  const customer = await Customer.findByIdAndDelete(id);
-  if (!customer) throw createHttpError(404, 'Customer not found');
-  return customer;
+  return withRelationsTransaction(async (session) => {
+    if (await Order.exists({ customerId: id }).session(session)) throw createHttpError(409, 'Cannot delete a customer referenced by orders');
+    const customer = await Customer.findByIdAndDelete(id, { session });
+    if (!customer) throw createHttpError(404, 'Customer not found');
+    return customer;
+  });
 }

@@ -1,8 +1,8 @@
 # Detail/update/delete: choose CATEGORY_ID in REST_CLIENT/.env; missing IDs return 400.
 @baseUrl = http://127.0.0.1:5001/api/v1/categories
-@categoryDetailsId = __CATEGORY_ID__
-@categoryId = __CATEGORY_ID__
-@parentCategoryId = __CATEGORY_ID__
+@categoryDetailsId = {{$dotenv CATEGORY_ID}}
+@categoryId = {{$dotenv CATEGORY_ID}}
+@parentCategoryId = {{$dotenv PARENT_CATEGORY_ID}}
 
 ### 1. Lấy danh sách tất cả categories
 GET {{baseUrl}}

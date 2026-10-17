@@ -1,14 +1,14 @@
 import { Router, type Router as RouterType } from 'express';
-import { customerController } from '../../controllers/customer.controller.js';
+import { customerController } from '../../controllers/customers.controller.js';
 import { authenticate, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
-import { Permission } from '../../types/permission.type.js';
+import { Permission } from '../../types/permissions.type.js';
 import { idParamSchema } from '../../validations/common.validation.js';
 import {
   createCustomerSchema,
   getCustomersQuerySchema,
   updateCustomerSchema,
-} from '../../validations/customer.validation.js';
+} from '../../validations/customers.validation.js';
 
 const router: RouterType = Router();
 

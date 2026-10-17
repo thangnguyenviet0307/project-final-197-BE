@@ -205,6 +205,17 @@ test("secondary customers do not overwrite the selected primary customer ID", as
   assert.equal(values.CUSTOMER_2_ID, id);
 });
 
+test('oversized JSON is rejected with a consistent 413 without reaching the backend', async (t) => {
+  let forwarded = false;
+  const fixture = await setup(t, (_req, res) => { forwarded = true; reply(res, {}); });
+  const response = await fixture.json('/orders', { text: 'x'.repeat(1024 * 1024) });
+  assert.equal(response.status, 413);
+  const body = await response.json();
+  assert.equal(body.statusCode, 413);
+  assert.equal(body.success, false);
+  assert.equal(forwarded, false);
+});
+
 test("all HTTP files use the local proxy and have parseable JSON bodies without embedded JWTs", async () => {
   for (const file of await readdir("REST_CLIENT")) {
     if (!file.endsWith(".http")) continue;

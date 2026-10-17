@@ -13,10 +13,15 @@ export const connectDatabase = async (): Promise<void> => {
   }
 
   try {
-    await mongoose.connect(mongoUri);
+    await mongoose.connect(mongoUri, { autoIndex: process.env['NODE_ENV'] !== 'production' });
+    const topology = await mongoose.connection.db!.admin().command({ hello: 1 });
+    if (!topology['setName'] && topology['msg'] !== 'isdbgrid') {
+      await mongoose.disconnect();
+      throw new Error('MongoDB must be a replica set or sharded cluster for transactions');
+    }
     console.log("MongoDB connected successfully");
   } catch (error) {
-    console.error("MongoDB connection failed:", error);
+    console.error("MongoDB connection failed; check connectivity and transaction support");
     throw error;
   }
 };

@@ -1,17 +1,7 @@
-import { Schema, model, type Document } from "mongoose";
-
-export interface IUser extends Document {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  role: "admin" | "staff";
-  active: boolean;
-  tokenVersion: number;
-  refreshToken?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { removeUserSecrets } from "../utils/user-mapper.js";
+import { Schema, model } from "mongoose";
+import type { IUser } from "../types/users.type.js";
+export type { IUser } from "../types/users.type.js";
 
 const userSchema = new Schema<IUser>(
   {
@@ -61,18 +51,7 @@ const userSchema = new Schema<IUser>(
   },
 );
 
-userSchema.set("toJSON", { transform: (_doc, ret) => {
-  const output = ret as unknown as Record<string, unknown>;
-  delete output["password"];
-  delete output["refreshToken"];
-  delete output["tokenVersion"];
-  return output;
-} });
-userSchema.set("toObject", { transform: (_doc, ret) => {
-  const output = ret as unknown as Record<string, unknown>;
-  delete output["password"];
-  delete output["refreshToken"];
-  delete output["tokenVersion"];
-  return output;
-} });
+const stripSecrets = (_doc: unknown, value: unknown) => removeUserSecrets(value as Record<string, unknown>);
+userSchema.set("toJSON", { transform: stripSecrets });
+userSchema.set("toObject", { transform: stripSecrets });
 export const User = model<IUser>("User", userSchema);

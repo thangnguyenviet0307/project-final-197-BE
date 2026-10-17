@@ -1,5 +1,5 @@
 import { sendResponse } from "../helpers/response.helper.js";
-import type { GetCustomersQuery } from "../validations/customer.validation.js";
+import type { GetCustomersQuery } from "../types/customers.type.js";
 import type { Request, Response, RequestHandler } from 'express';
 import {
   getCustomers,
@@ -7,7 +7,7 @@ import {
   createCustomer,
   updateCustomer,
   deleteCustomer,
-} from '../services/customer.service.js';
+} from '../services/customers.service.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
 import { ApiError } from '../middlewares/error.middleware.js';
 

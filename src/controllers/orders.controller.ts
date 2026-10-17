@@ -6,9 +6,10 @@ import {
   createOrder,
   updateOrderStatus,
   deleteOrder,
-} from '../services/order.services.js';
+  assignOrder,
+} from '../services/orders.services.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
-import type { GetOrdersQuery, UpdateOrderStatusInput } from '../validations/order.validation.js';
+import type { GetOrdersQuery, UpdateOrderStatusInput } from '../types/orders.type.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
 
 const getOrdersHandler: RequestHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -72,6 +73,10 @@ const deleteOrderHandler: RequestHandler = asyncHandler(async (req: Authenticate
 });
 
 export const orderController: Record<string, RequestHandler> = {
+  assignOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await assignOrder(req.user!, req.params['id'] as string, req.body.userId);
+    sendResponse(res, 200, { success: true, message: 'Order reassigned', data: order });
+  }),
   getOrders: getOrdersHandler,
   getOrderById: getOrderByIdHandler,
   createOrder: createOrderHandler,

@@ -2,14 +2,14 @@ import "dotenv/config";
 import { createHash, randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import createHttpError from "http-errors";
-import type { AuthUser } from "../types/auth.type.js";
+import type { AuthUser, JwtPayload, TokenPair } from "../types/auth.type.js";
 
 const secret = (name: string): string => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 };
-interface TokenPayload { userId: string; version: number; }
+type TokenPayload = JwtPayload;
 export const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
 function verify(token: string, key: string): TokenPayload {
   try {
@@ -24,13 +24,18 @@ function verify(token: string, key: string): TokenPayload {
     throw error;
   }
 }
+function signToken(user: AuthUser, secretName: "JWT_SECRET" | "JWT_REFRESH_SECRET", expiresIn: "15m" | "7d"): string {
+  return jwt.sign({ userId: user.id, version: user.tokenVersion ?? 0 }, secret(secretName),
+    { algorithm: "HS256", expiresIn, jwtid: randomUUID() });
+}
 export function generateAccessToken(user: AuthUser): string {
-  return jwt.sign({ userId: user.id, version: user.tokenVersion ?? 0 }, secret("JWT_SECRET"),
-    { algorithm: "HS256", expiresIn: "15m", jwtid: randomUUID() });
+  return signToken(user, "JWT_SECRET", "15m");
 }
 export function generateRefreshToken(user: AuthUser): string {
-  return jwt.sign({ userId: user.id, version: user.tokenVersion ?? 0 }, secret("JWT_REFRESH_SECRET"),
-    { algorithm: "HS256", expiresIn: "7d", jwtid: randomUUID() });
+  return signToken(user, "JWT_REFRESH_SECRET", "7d");
+}
+export function generateTokenPair(user: AuthUser): TokenPair {
+  return { accessToken: generateAccessToken(user), refreshToken: generateRefreshToken(user) };
 }
 export const verifyAccessToken = (token: string): TokenPayload => verify(token, secret("JWT_SECRET"));
 export const verifyRefreshToken = (token: string): TokenPayload => verify(token, secret("JWT_REFRESH_SECRET"));

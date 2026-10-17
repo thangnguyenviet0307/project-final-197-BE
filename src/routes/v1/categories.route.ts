@@ -5,7 +5,7 @@ import {
   requirePermission,
 } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
-import { Permission } from "../../types/permission.type.js";
+import { Permission } from "../../types/permissions.type.js";
 import { idParamSchema } from "../../validations/common.validation.js";
 import {
   createCategoriesSchema,

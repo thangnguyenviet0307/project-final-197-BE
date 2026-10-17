@@ -1,251 +1,130 @@
+import { assertFound } from "../utils/assert-found.js";
+import type { RequestHandler } from "express";
+import { asyncHandler } from "../utils/async-handler.util.js";
 import { sendResponse } from "../helpers/response.helper.js";
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
 import productService from "../services/products.service.js";
 
-const getAllProducts = async (
+const getAllProducts: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const filters = req.query as unknown as import("../validations/product.validation.js").GetProductsQuery;
-    const result = await productService.getAllProducts(filters);
+  const filters = req.query as unknown as import("../types/products.type.js").GetProductsQuery;
+  const result = await productService.getAllProducts(filters);
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Lấy danh sách sản phẩm thành công",
-      ...result,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Lấy danh sách sản phẩm thành công",
+    ...result,
+  });
+});
 
-const getProductBySku = async (
+const getProductBySku: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const sku = req.params["sku"];
+  const sku = req.params["sku"] as string;
 
-    if (!sku || Array.isArray(sku)) {
-      return sendResponse(res, 400, {
-        success: false,
-        statusCode: 400,
-        message: "SKU không hợp lệ",
-        data: null,
-      });
-    }
+  const product = await productService.getProductBySku(sku);
 
-    const product = await productService.getProductBySku(sku);
+  assertFound(product, "Không tìm thấy sản phẩm theo SKU");
 
-    if (!product) {
-      return sendResponse(res, 404, {
-        success: false,
-        statusCode: 404,
-        message: "Không tìm thấy sản phẩm theo SKU",
-        data: null,
-      });
-    }
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Tìm sản phẩm theo SKU thành công",
+    data: product,
+  });
+});
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Tìm sản phẩm theo SKU thành công",
-      data: product,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const getVariantByProductAndVariantId = async (
+const getVariantByProductAndVariantId: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const productId = req.params["productId"];
-    const variantId = req.params["variantId"];
+  const productId = req.params["productId"] as string;
+  const variantId = req.params["variantId"] as string;
 
-    if (
-      !productId ||
-      Array.isArray(productId) ||
-      !variantId ||
-      Array.isArray(variantId)
-    ) {
-      return sendResponse(res, 400, {
-        success: false,
-        statusCode: 400,
-        message: "productId hoặc variantId không hợp lệ",
-        data: null,
-      });
-    }
+  const result = await productService.getVariantByProductAndVariantId(
+    productId,
+    variantId,
+  );
 
-    const result = await productService.getVariantByProductAndVariantId(
-      productId,
-      variantId,
-    );
+  assertFound(result, "Không tìm thấy biến thể sản phẩm");
 
-    if (!result) {
-      return sendResponse(res, 404, {
-        success: false,
-        statusCode: 404,
-        message: "Không tìm thấy biến thể sản phẩm",
-        data: null,
-      });
-    }
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Lấy biến thể sản phẩm thành công",
+    data: result,
+  });
+});
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Lấy biến thể sản phẩm thành công",
-      data: result,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const getProductById = async (
+const getProductById: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const id = req.params["id"];
+  const id = req.params["id"] as string;
 
-    if (!id || Array.isArray(id)) {
-      return sendResponse(res, 400, {
-        success: false,
-        statusCode: 400,
-        message: "ID sản phẩm không hợp lệ",
-        data: null,
-      });
-    }
+  const product = await productService.getProductById(id);
 
-    const product = await productService.getProductById(id);
+  assertFound(product, "Không tìm thấy sản phẩm");
 
-    if (!product) {
-      return sendResponse(res, 404, {
-        success: false,
-        statusCode: 404,
-        message: "Không tìm thấy sản phẩm",
-        data: null,
-      });
-    }
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Lấy sản phẩm thành công",
+    data: product,
+  });
+});
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Lấy sản phẩm thành công",
-      data: product,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const createProduct = async (
+const createProduct: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const product = await productService.createProduct(req.body);
+  const product = await productService.createProduct(req.body);
 
-    return sendResponse(res, 201, {
-      success: true,
-      statusCode: 201,
-      message: "Tạo sản phẩm thành công",
-      data: product,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
+  return sendResponse(res, 201, {
+    success: true,
+    message: "Tạo sản phẩm thành công",
+    data: product,
+  });
+});
 
-const updateProduct = async (
+const updateProduct: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const id = req.params["id"];
+  const id = req.params["id"] as string;
 
-    if (!id || Array.isArray(id)) {
-      return sendResponse(res, 400, {
-        success: false,
-        statusCode: 400,
-        message: "ID sản phẩm không hợp lệ",
-        data: null,
-      });
-    }
+  const product = await productService.updateProduct(id, req.body);
 
-    const product = await productService.updateProduct(id, req.body);
+  assertFound(product, "Không tìm thấy sản phẩm để cập nhật");
 
-    if (!product) {
-      return sendResponse(res, 404, {
-        success: false,
-        statusCode: 404,
-        message: "Không tìm thấy sản phẩm để cập nhật",
-        data: null,
-      });
-    }
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Cập nhật sản phẩm thành công",
+    data: product,
+  });
+});
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Cập nhật sản phẩm thành công",
-      data: product,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const deleteProduct = async (
+const deleteProduct: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
-  next: NextFunction,
 ) => {
-  try {
-    const id = req.params["id"];
+  const id = req.params["id"] as string;
 
-    if (!id || Array.isArray(id)) {
-      return sendResponse(res, 400, {
-        success: false,
-        statusCode: 400,
-        message: "ID sản phẩm không hợp lệ",
-        data: null,
-      });
-    }
+  const product = await productService.deleteProduct(id);
 
-    const product = await productService.deleteProduct(id);
+  assertFound(product, "Không tìm thấy sản phẩm để xoá");
 
-    if (!product) {
-      return sendResponse(res, 404, {
-        success: false,
-        statusCode: 404,
-        message: "Không tìm thấy sản phẩm để xoá",
-        data: null,
-      });
-    }
+  return sendResponse(res, 200, {
+    success: true,
+    message: "Xoá sản phẩm thành công",
+    data: product,
+  });
+});
 
-    return sendResponse(res, 200, {
-      success: true,
-      statusCode: 200,
-      message: "Xoá sản phẩm thành công",
-      data: product,
-    });
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export default {
+const productsController: Record<
+  "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
+  "getProductById" | "createProduct" | "updateProduct" | "deleteProduct", RequestHandler
+> = {
   getAllProducts,
   getProductBySku,
   getVariantByProductAndVariantId,
@@ -254,3 +133,4 @@ export default {
   updateProduct,
   deleteProduct,
 };
+export default productsController;

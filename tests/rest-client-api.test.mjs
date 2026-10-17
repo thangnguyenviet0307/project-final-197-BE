@@ -8,12 +8,12 @@ import { test } from "node:test";
 import mongoose from "mongoose";
 import argon2 from "argon2";
 import dotenv from "dotenv";
-import { User } from "../dist/models/user.model.js";
+import { User } from "../dist/models/users.model.js";
 import { BrandModel } from "../dist/models/brands.model.js";
 import { Categories } from "../dist/models/categories.model.js";
-import Product from "../dist/models/product.model.js";
-import { Customer } from "../dist/models/customer.model.js";
-import { Order } from "../dist/models/order.model.js";
+import Product from "../dist/models/products.model.js";
+import { Customer } from "../dist/models/customers.model.js";
+import { Order } from "../dist/models/orders.model.js";
 import { createRestClientProxy } from "../scripts/rest-client-proxy.mjs";
 
 process.env.JWT_SECRET = randomBytes(32).toString("hex");
@@ -30,13 +30,16 @@ test("admin login through the proxy authenticates every API and preserves detail
     Categories: new Categories({ name: "Fixture category", slug: "fixture-category" }),
     Product: new Product({ product_name: "Fixture product", slug: "fixture-product", price: 100, stock: 5, discount: 10,
       variants: [{ sku: 'FIXTURE-A', price: 25, stock: 5 }] }),
-    Customer: new Customer({ firstName: "Fixture", lastName: "Customer" }),
+    Customer: new Customer({ firstName: "Fixture", lastName: "Customer", email: 'fixture@example.com', phone: '0123456789' }),
     Order: new Order({ orderStatus: 1 }),
   };
   const queried = new Set();
+  entries.Product.brand = entries.Brand._id;
+  entries.Product.category = entries.Categories._id;
   // Real Express routes/controllers/services/middleware, only database execution is mocked.
   t.mock.method(mongoose.Query.prototype, "exec", async function () {
     const model = this.model.modelName;
+    if (model === 'SystemLock') return { acknowledged: true };
     queried.add(model);
     if (this.op === "countDocuments") return 1;
     if (this.op === "findOneAndUpdate" && model === "User") {

@@ -1,6 +1,6 @@
 export function validateEnvironment(environment: NodeJS.ProcessEnv = process.env): void {
   for (const name of ["MONGODB_URI", "JWT_SECRET", "JWT_REFRESH_SECRET"]) {
-    if (!environment[name]) throw new Error(`Missing required environment variable: ${name}`);
+    if (!environment[name]?.trim()) throw new Error(`Missing required environment variable: ${name}`);
   }
   if (environment["JWT_SECRET"] === environment["JWT_REFRESH_SECRET"]) {
     throw new Error("JWT_SECRET and JWT_REFRESH_SECRET must be different");

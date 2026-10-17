@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { User } from '../dist/models/user.model.js';
-import { Customer } from '../dist/models/customer.model.js';
+import { User } from '../dist/models/users.model.js';
+import { Customer } from '../dist/models/customers.model.js';
 import { generateAccessToken } from '../dist/utils/token.js';
 import { createRestClientProxy } from '../scripts/rest-client-proxy.mjs';
 
@@ -16,10 +16,13 @@ process.env.JWT_SECRET = randomBytes(32).toString('hex');
 process.env.JWT_REFRESH_SECRET = randomBytes(32).toString('hex');
 const { default: app } = await import('../dist/app.js');
 
-test('actual customer.http requests create separate ID slots and update/delete the correct customer', async (t) => {
+test('actual customers.http requests create separate ID slots and update/delete the correct customer', async (t) => {
+  t.mock.method(mongoose.connection, 'transaction', async (callback) => callback({}));
   const admin = new User({ email: 'fixture@example.com', firstName: 'Test', lastName: 'Admin', role: 'admin', active: true, tokenVersion: 0 });
   const records = new Map();
   t.mock.method(mongoose.Query.prototype, 'exec', async function () {
+    if (this.model.modelName === 'SystemLock') return { acknowledged: true };
+    if (this.model.modelName === 'Order') return null;
     if (this.model.modelName === 'User') return admin;
     assert.equal(this.model.modelName, 'Customer');
     const filter = this.getFilter();
@@ -54,7 +57,7 @@ test('actual customer.http requests create separate ID slots and update/delete t
     await unlink(envPath);
     await rmdir(directory);
   });
-  const source = await readFile('REST_CLIENT/customer.http', 'utf8');
+  const source = await readFile('REST_CLIENT/customers.http', 'utf8');
   assert.doesNotMatch(source, /__CUSTOMER(?:_2|_3)?_ID__/);
   const values = async () => dotenv.parse(await readFile(envPath));
   async function sendNamed(name) {

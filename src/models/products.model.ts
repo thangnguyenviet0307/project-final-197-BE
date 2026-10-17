@@ -1,3 +1,4 @@
+import { sumVariantStock } from "../utils/inventory.js";
 import mongoose, { Schema } from "mongoose";
 
 const productVariantSchema = new Schema(
@@ -145,6 +146,21 @@ const productSchema = new Schema(
   },
 );
 
+productSchema.pre("validate", function () {
+  if (!Number.isSafeInteger(this.stock)) this.invalidate("stock", "Stock must be a safe integer");
+  const ids = new Set<string>();
+  const skus = new Set<string>();
+  for (const variant of this.variants) {
+    if (ids.has(String(variant._id))) this.invalidate("variants", "Duplicate variant ID");
+    if (skus.has(variant.sku)) this.invalidate("variants", "Duplicate variant SKU");
+    ids.add(String(variant._id));
+    skus.add(variant.sku);
+    if (!Number.isSafeInteger(variant.stock)) this.invalidate("variants", "Variant stock must be a safe integer");
+  }
+  if (this.variants.length && this.stock !== sumVariantStock(this.variants)) {
+    this.invalidate("stock", "Stock must equal the sum of variant stocks");
+  }
+});
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 
 const Product = mongoose.model("Product", productSchema);

@@ -3,14 +3,13 @@
 # IDs and sessions are shared automatically through REST_CLIENT/.env.
 # IMPORTANT: completion and cancellation below are ALTERNATIVE workflows, not one sequence.
 # A Rejected (3) or Completed (4) order is final. Do not reuse it for another status test.
-# If @orderId is a literal ID, creating a new order does NOT change that variable:
-# copy the NEW response data._id into @orderId before testing the new order.
+# ORDER_ID is refreshed after each successful create; create a NEW order for each workflow.
 @baseUrl = http://127.0.0.1:5001/api/v1/orders
-@customerId = 6ad2ef5bff6ee22668cd4eaa
-@productId = 6acb9c9a3319003dfb1ec60b
-@variantId = 6acb9c9a3319003dfb1ec60c
-@userId = 6ad09f3dae6eb7f41a5cd123
-@orderId = 6ad2f1ef0850d7c024fbef65
+@customerId = {{$dotenv CUSTOMER_ID}}
+@productId = {{$dotenv PRODUCT_ID}}
+@variantId = {{$dotenv VARIANT_ID}}
+@userId = {{$dotenv USER_ID}}
+@orderId = {{$dotenv ORDER_ID}}
 
 ### Route check only (expected 400 validation error; does NOT create an order)
 # @name checkOrderEndpoint
@@ -64,6 +63,14 @@ Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 { "orderStatus": 2, "userId": "{{userId}}" }
+
+### Reassign an open order (admin only; status is preserved)
+PATCH {{baseUrl}}/{{orderId}}/assignee
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "userId": "{{$dotenv STAFF_USER_ID}}" }
 
 ### FLOW A - Step 2: Processing -> Completed (4). STOP this workflow here.
 PATCH {{baseUrl}}/{{orderId}}/status

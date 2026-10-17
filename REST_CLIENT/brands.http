@@ -1,7 +1,7 @@
 
 # Detail/update/delete: set BRAND_ID in REST_CLIENT/.env to the record you choose from Get All.
 @baseUrl = http://127.0.0.1:5001/api/v1/brands
-@brandId = __BRAND_ID__
+@brandId = {{$dotenv BRAND_ID}}
 
 ### 1. GET ALL BRANDS
 GET {{baseUrl}}

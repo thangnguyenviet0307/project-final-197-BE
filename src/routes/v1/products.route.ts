@@ -1,3 +1,4 @@
+import { objectId } from "../../validations/common.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
 import productsController from "../../controllers/products.controller.js";
@@ -6,13 +7,13 @@ import {
   requirePermission,
 } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
-import { Permission } from "../../types/permission.type.js";
+import { Permission } from "../../types/permissions.type.js";
 import {
   createProductSchema,
   getProductsQuerySchema,
   productIdParamSchema,
   updateProductSchema,
-} from "../../validations/product.validation.js";
+} from "../../validations/products.validation.js";
 
 const router: ExpressRouter = Router();
 
@@ -29,8 +30,8 @@ router.get(
   requirePermission(Permission.ProductView),
   validate({
     params: z.object({
-      productId: z.string().regex(/^[0-9a-fA-F]{24}$/),
-      variantId: z.string().regex(/^[0-9a-fA-F]{24}$/),
+      productId: objectId,
+      variantId: objectId,
     }),
   }),
   productsController.getVariantByProductAndVariantId,

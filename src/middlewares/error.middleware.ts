@@ -45,6 +45,11 @@ export function errorMiddleware(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (res.headersSent) { _next(err); return; }
+  if (err instanceof SyntaxError && hasStatusCode(err) && err.statusCode === 400) {
+    sendResponse(res, 400, { success: false, message: "Invalid JSON request body", data: null });
+    return;
+  }
   if (err instanceof ZodError) {
     sendResponse(res, 400, {
       success: false,
@@ -67,15 +72,6 @@ export function errorMiddleware(
     sendResponse(res, 400, { success: false, message: "Invalid identifier or value", data: null });
     return;
   }
-  if (err instanceof ApiError) {
-    sendResponse(res, err.statusCode, {
-      success: false,
-      data: null,
-      message: err.statusCode >= 500 ? "Internal server error" : err.message,
-    });
-    return;
-  }
-
   if (hasDuplicateKeyError(err)) {
     const field =
       err.keyPattern && Object.keys(err.keyPattern).length > 0
@@ -113,6 +109,7 @@ export function errorMiddleware(
   }
 
   if (err instanceof Error) {
+    console.error("Unhandled API error", { name: err.name });
     sendResponse(res, 500, {
       success: false,
       data: null,

@@ -1,17 +1,17 @@
 import { Router, type Router as RouterType } from "express";
-import { userController } from "../../controllers/user.controller.js";
+import { userController } from "../../controllers/users.controller.js";
 import {
   authenticate,
   requirePermission,
 } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
-import { Permission } from "../../types/permission.type.js";
+import { Permission } from "../../types/permissions.type.js";
 import { idParamSchema } from "../../validations/common.validation.js";
 import {
   createUserSchema,
   getUsersQuerySchema,
   updateUserSchema,
-} from "../../validations/user.validation.js";
+} from "../../validations/users.validation.js";
 
 const router: RouterType = Router();
 

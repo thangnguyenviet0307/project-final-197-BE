@@ -12,9 +12,9 @@ import path from "node:path";
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";
-import orderRoutes from "./routes/v1/order.route.js";
-import customerRoutes from "./routes/v1/customer.route.js";
-import userRoutes from "./routes/v1/user.route.js";
+import orderRoutes from "./routes/v1/orders.route.js";
+import customerRoutes from "./routes/v1/customers.route.js";
+import userRoutes from "./routes/v1/users.route.js";
 import authRoutes from "./routes/v1/auth.route.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 

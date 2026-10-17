@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import dotenv from "dotenv";
+import createHttpError from "http-errors";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const resources = {
@@ -11,7 +12,7 @@ const resources = {
   "/api/v1/customers": "CUSTOMER_ID", "/api/v1/products": "PRODUCT_ID",
   "/api/v1/orders": "ORDER_ID",
 };
-const savedIds = new Set([...Object.values(resources), "VARIANT_ID", "USER_ID", "STAFF_USER_ID", "CUSTOMER_2_ID", "CUSTOMER_3_ID"]);
+const savedIds = new Set([...Object.values(resources), "VARIANT_ID", "USER_ID", "STAFF_USER_ID", "CUSTOMER_2_ID", "CUSTOMER_3_ID", "PARENT_CATEGORY_ID"]);
 const proxyVersion = "3";
 
 function resolveSavedIds(value, values) {
@@ -23,6 +24,11 @@ function resolveSavedIds(value, values) {
     }
     return id;
   });
+}
+
+function sendProxyError(res, statusCode, message) {
+  res.writeHead(statusCode, { "content-type": "application/json" });
+  res.end(JSON.stringify({ success: false, statusCode, message, data: null }));
 }
 
 export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", envPath = join(root, "REST_CLIENT/.env") } = {}) {
@@ -54,8 +60,7 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
     res.setHeader("x-rest-client-proxy-version", proxyVersion);
     // Only editor/CLI requests: a browser page must not capture sessions into the workspace.
     if (req.headers.origin || !req.url?.startsWith("/api/v1/")) {
-      res.writeHead(403, { "content-type": "application/json" });
-      res.end(JSON.stringify({ success: false, message: "Local REST Client API requests only", data: null }));
+      sendProxyError(res, 403, "Local REST Client API requests only");
       return;
     }
     let requestUrl = req.url;
@@ -74,9 +79,9 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
       if (req.headers["content-type"]?.includes("application/json")) {
         const chunks = [];
         let length = 0;
-        for await (const chunk of req) {
+        for await (const chunk of req.iterator({ destroyOnReturn: false })) {
           length += chunk.length;
-          if (length > 1024 * 1024) throw new Error("REST Client request body exceeds 1 MB");
+          if (length > 1024 * 1024) throw createHttpError(413, "REST Client request body exceeds 1 MB");
           chunks.push(chunk);
         }
         const text = resolveSavedIds(Buffer.concat(chunks).toString("utf8"), values);
@@ -84,18 +89,17 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
         requestBody = Buffer.from(text);
       }
     } catch (error) {
-      res.writeHead(400, { "content-type": "application/json" });
-      res.end(JSON.stringify({ success: false, statusCode: 400,
-        message: error.code === "ENOENT" ? "REST_CLIENT/.env not found. Configure the local session file first."
-          : error instanceof SyntaxError ? "Invalid JSON request body" : error.message,
-        data: null }));
+      req.resume();
+      const statusCode = error.statusCode === 413 ? 413 : error.code && error.code !== "ENOENT" ? 500 : 400;
+      sendProxyError(res, statusCode, error.code === "ENOENT" ? "REST_CLIENT/.env not found. Configure the local session file first."
+          : error.code ? "Cannot read REST Client configuration; check local file permissions"
+          : error instanceof SyntaxError ? "Invalid JSON request body" : error.message);
       return;
     }
     const path = new URL(requestUrl, target).pathname.replace(/\/$/, "");
     const auth = req.headers["x-rest-client-auth"];
     if (auth !== undefined && auth !== "primary" && auth !== "staff") {
-      res.writeHead(400, { "content-type": "application/json" });
-      res.end(JSON.stringify({ success: false, statusCode: 400, message: "Unknown REST Client session", data: null }));
+      sendProxyError(res, 400, "Unknown REST Client session");
       return;
     }
     const staff = auth !== undefined ? auth === "staff" : req.headers["x-rest-client-session"] === "staff";
@@ -116,15 +120,12 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
         // Do not rely on editor variable expansion or cache tokens in process.env.
         const token = values[`${prefix}ACCESS_TOKEN`];
         if (!token || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
-          res.writeHead(401, { "content-type": "application/json" });
-          res.end(JSON.stringify({ success: false, statusCode: 401,
-            message: `No valid saved ${staff ? "staff" : "primary"} session. Send ${staff ? "staffLogin" : "login"} in auth.http first.`, data: null }));
+          sendProxyError(res, 401, `No valid saved ${staff ? "staff" : "primary"} session. Send ${staff ? "staffLogin" : "login"} in auth.http first.`);
           return;
         }
         headers.authorization = `Bearer ${token}`;
       } catch {
-        res.writeHead(401, { "content-type": "application/json" });
-        res.end(JSON.stringify({ success: false, statusCode: 401, message: "Cannot read REST_CLIENT/.env; log in again through the proxy", data: null }));
+        sendProxyError(res, 401, "Cannot read REST_CLIENT/.env; log in again through the proxy");
         return;
       }
     }
@@ -168,8 +169,7 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
           res.writeHead(response.statusCode ?? 502, response.headers);
           res.end(buffer);
         } catch {
-          res.writeHead(502, { "content-type": "application/json" });
-          res.end(JSON.stringify({ success: false, message: "Cannot save REST Client session; check local .env permissions", data: null }));
+          sendProxyError(res, 502, "Cannot save REST Client session; check local .env permissions");
         }
       });
       response.on("error", () => { if (!res.destroyed) res.destroy(); });
@@ -177,8 +177,7 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
     upstream.setTimeout(15000, () => upstream.destroy(new Error("Backend timeout")));
     upstream.on("error", () => {
       if (res.headersSent) { res.destroy(); return; }
-      res.writeHead(502, { "content-type": "application/json" });
-      res.end(JSON.stringify({ success: false, message: "Local backend unavailable; start pnpm dev first", data: null }));
+      sendProxyError(res, 502, "Local backend unavailable; start pnpm dev first");
     });
     req.on("aborted", () => upstream.destroy());
     if (requestBody !== undefined) upstream.end(requestBody);

@@ -1,4 +1,4 @@
-import { Permission } from '../types/permission.type.js';
+import { Permission } from '../types/permissions.type.js';
 
 export type Role = 'admin' | 'staff';
 

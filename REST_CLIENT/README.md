@@ -16,7 +16,7 @@ Các file `.http` dùng cổng **5001**; ứng dụng frontend vẫn dùng backe
 
 - Access token hết hạn: gửi **refresh** trong `auth.http`; cả hai token dùng chung được cập nhật tự động. Refresh không tự chạy ngầm; nếu refresh token cũng hết hạn, đăng nhập lại.
 - **logout** thành công sẽ xóa token dùng chung.
-- Test quyền staff: tạo tài khoản ở `user.http`, hoặc cấu hình tài khoản staff có sẵn trong `STAFF_LOGIN_EMAIL`, `STAFF_LOGIN_PASSWORD`. Gửi **staffLogin** trong `auth.http`; request có `x-rest-client-session: staff` để lưu `STAFF_ACCESS_TOKEN`/`STAFF_REFRESH_TOKEN` riêng, giữ nguyên session chính.
+- Test quyền staff: tạo tài khoản ở `users.http`, hoặc cấu hình tài khoản staff có sẵn trong `STAFF_LOGIN_EMAIL`, `STAFF_LOGIN_PASSWORD`. Gửi **staffLogin** trong `auth.http`; request có `x-rest-client-session: staff` để lưu `STAFF_ACCESS_TOKEN`/`STAFF_REFRESH_TOKEN` riêng, giữ nguyên session chính.
 - Chỉ dùng hai tài khoản khác nhau cho session chính và staff vì backend chỉ lưu một refresh session trên mỗi tài khoản.
 - Request thất bại không ghi đè session đang dùng. Proxy không ghi log token hoặc mật khẩu.
 
@@ -24,11 +24,11 @@ Các file `.http` dùng cổng **5001**; ứng dụng frontend vẫn dùng backe
 
 Thứ tự thuận tiện: tạo brand → category → product → customer → order. Proxy tự ghi các ID thành công vào `BRAND_ID`, `CATEGORY_ID`, `PRODUCT_ID`, `VARIANT_ID` (biến thể đầu tiên), `CUSTOMER_ID`, `ORDER_ID`; tạo user staff cập nhật `STAFF_USER_ID`. Customer 2/3 có ID riêng để không ghi đè customer chính. Nếu dùng dữ liệu có sẵn, lấy `_id` của bản ghi bạn muốn test từ Get All rồi điền vào biến tương ứng trong `.env`.
 
-Các biến ID trong `.http` dùng placeholder như `__BRAND_ID__`; proxy thay bằng ID mới nhất từ `.env` trong URL/query/body. Không thay các placeholder này bằng chuỗi rỗng. Thiếu ID sẽ trả **400 kèm tên biến cần điền**, thay vì âm thầm gọi Get All. Đăng nhập và Get All không tự chọn một bản ghi bất kỳ để tránh các request update/delete tác động nhầm dữ liệu.
+All HTTP files read IDs through `{{$dotenv BRAND_ID}}` and corresponding entries in `.env`. The proxy retains support for old placeholders. Keep variable references so new resources update their selected IDs automatically; parent categories use PARENT_CATEGORY_ID separately.
 
 Các bước update/delete và test lỗi phải được gửi riêng, theo trạng thái hiện tại. Đơn Completed không thể hủy; muốn test hoàn kho, tạo đơn mới rồi chuyển Rejected. Sản phẩm đã có đơn hàng không thể xóa. Chỉ chạy request xóa trên dữ liệu test của bạn; không dùng Send All Requests trên dữ liệu thật.
 
-Riêng `customer.http`, URL chi tiết/update/delete đọc ID trực tiếp bằng `{{$dotenv CUSTOMER_ID}}`, `CUSTOMER_2_ID`, `CUSTOMER_3_ID`, không gửi placeholder `__CUSTOMER_ID__` tới backend. Update chính dùng CUSTOMER_ID; deactivate dùng CUSTOMER_2_ID; delete dùng CUSTOMER_3_ID. Chạy request tạo customer tương ứng trước, hoặc điền chính xác `_id` của dữ liệu test đã có vào đúng biến. Không sao chép CUSTOMER_ID vào cả ba biến nếu bạn không muốn sửa/xóa cùng một khách hàng.
+Riêng `customers.http`, URL chi tiết/update/delete đọc ID trực tiếp bằng `{{$dotenv CUSTOMER_ID}}`, `CUSTOMER_2_ID`, `CUSTOMER_3_ID`, không gửi placeholder `__CUSTOMER_ID__` tới backend. Update chính dùng CUSTOMER_ID; deactivate dùng CUSTOMER_2_ID; delete dùng CUSTOMER_3_ID. Chạy request tạo customer tương ứng trước, hoặc điền chính xác `_id` của dữ liệu test đã có vào đúng biến. Không sao chép CUSTOMER_ID vào cả ba biến nếu bạn không muốn sửa/xóa cùng một khách hàng.
 
 ## Kiểm tra proxy đang chạy
 
@@ -48,6 +48,16 @@ Không chia sẻ hoặc commit `.env`; các file `.http` chỉ chứa tham chi�
 | PATCH | `/api/v1/orders/:id/status` | Đổi trạng thái |
 | DELETE | `/api/v1/orders/:id` | Xóa đơn Rejected |
 
-Trong `order.http`, chạy **checkOrderEndpoint** trước: body `{}` phải trả **400 Validation failed**, xác nhận POST đã khớp route và chưa tạo dữ liệu. Nếu vẫn trả `404 Not Found`, request chưa đến đúng endpoint/backend; dùng Send Request tại dòng POST đầy đủ trong file, kiểm tra cổng `5001`, header proxy v3 và khởi động backend từ đúng thư mục dự án. Không thêm `/create`, `/orders` lần nữa hoặc ID vào URL tạo đơn. POST nhầm `/orders/create` hoặc `/orders/:id` giờ trả 405 kèm URL đúng.
+Trong `orders.http`, chạy **checkOrderEndpoint** trước: body `{}` phải trả **400 Validation failed**, xác nhận POST đã khớp route và chưa tạo dữ liệu. Nếu vẫn trả `404 Not Found`, request chưa đến đúng endpoint/backend; dùng Send Request tại dòng POST đầy đủ trong file, kiểm tra cổng `5001`, header proxy v3 và khởi động backend từ đúng thư mục dự án. Không thêm `/create`, `/orders` lần nữa hoặc ID vào URL tạo đơn. POST nhầm `/orders/create` hoặc `/orders/:id` giờ trả 405 kèm URL đúng.
 
 Sau đó chọn customer đang hoạt động, product đang bán và variant thuộc product đó, kiểm tra còn hàng. Điền ID trong `REST_CLIENT/.env`; đăng nhập sẽ tự điền USER_ID. Tạo đơn thành công trả **201**, lưu ORDER_ID, lấy giá từ server và trừ kho trong transaction. Luồng hợp lệ là `Pending (1) → Processing (2) → Completed (4)`, hoặc `Pending/Processing → Rejected (3)` để hoàn kho. Muốn thử hủy sau khi đã Completed, hãy tạo đơn mới. Chỉ xóa đơn đã Rejected. MongoDB phải hỗ trợ transaction.
+
+
+## Updated data rules
+
+- Keep `{{$dotenv ...}}` references. Successful creation updates the shared ID. Never use Send All Requests on real data.
+- Each completion/cancellation workflow in `orders.http` requires a new order. Creation updates ORDER_ID automatically. Completed/Rejected orders cannot transition again.
+- PATCH `/orders/:id/assignee` changes the handler of an open order without changing its status.
+- Deleting a customer/user/product referenced by orders, or a brand/category referenced by products, returns 409 to preserve relationships.
+- PARENT_CATEGORY_ID must identify a parent different from CATEGORY_ID; creating a category does not overwrite the selected parent.
+- Login/bootstrap/refresh exceed 30 attempts per 15 minutes from one IP returns 429; follow Retry-After.

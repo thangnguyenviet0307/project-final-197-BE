@@ -1,15 +1,16 @@
 import { Router, type Router as RouterType } from 'express';
 import createHttpError from 'http-errors';
-import { orderController } from '../../controllers/order.controller.js';
+import { orderController } from '../../controllers/orders.controller.js';
 import { authenticate, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
-import { Permission } from '../../types/permission.type.js';
+import { Permission } from '../../types/permissions.type.js';
 import { idParamSchema } from '../../validations/common.validation.js';
 import {
   createOrderSchema,
   getOrdersQuerySchema,
   updateOrderStatusSchema,
-} from '../../validations/order.validation.js';
+  assignOrderSchema,
+} from '../../validations/orders.validation.js';
 
 const router: RouterType = Router();
 
@@ -30,6 +31,8 @@ router.delete(
   validate({ params: idParamSchema }),
   orderController['deleteOrder']!,
 );
+router.patch('/:id/assignee', requirePermission(Permission.OrderAssign),
+  validate({ params: idParamSchema, body: assignOrderSchema }), orderController['assignOrder']!);
 
 // A wrong method on a known endpoint should not look like a missing order.
 router.all('/', (_req, res, next) => {

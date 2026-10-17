@@ -10,13 +10,25 @@ export interface AuthUser {
 
 export interface JwtPayload {
   userId: string;
-  email: string;
-  role: string;
+  version: number;
   iat?: number;
   exp?: number;
 }
 
 export interface TokenPair {
   accessToken: string;
+  refreshToken: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+export interface BootstrapInput extends LoginInput {
+  firstName: string;
+  lastName: string;
+  active: true;
+}
+export interface RefreshInput {
   refreshToken: string;
 }

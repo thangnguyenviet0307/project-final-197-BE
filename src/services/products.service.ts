@@ -1,39 +1,16 @@
+import { OPEN_ORDER_STATUSES } from "../types/orders.type.js";
+import { sumVariantStock } from "../utils/inventory.js";
 import { buildPagination } from "../utils/pagination.js";
-import mongoose from "mongoose";
 import createHttpError from "http-errors";
-import { Order } from "../models/order.model.js";
+import { Order } from "../models/orders.model.js";
 import { escapeRegex } from "../utils/search.js";
-import Product from "../models/product.model.js";
+import Product from "../models/products.model.js";
 import { buildSlug } from "../helpers/buildSlug.helper.js";
+import { withRelationsTransaction } from "../utils/relations-transaction.js";
+import { assertActiveCatalog } from "../utils/catalog-reference.js";
 
-export type ProductVariantInput = {
-  _id?: string;
-  sku: string;
-  variant_name?: string | null;
-  color?: string | null;
-  size?: string | null;
-  price?: number;
-  compare_at_price?: number | null;
-  stock?: number;
-  image?: string | null;
-  images?: string[];
-  attributes?: Record<string, string | number | boolean | null>;
-};
-
-export type ProductInput = {
-  product_name: string;
-  price?: number;
-  discount?: number;
-  category: string;
-  brand: string;
-  description?: string | null;
-  model_year: number;
-  slug?: string;
-  thumbnail?: string | null;
-  stock?: number;
-  is_active?: boolean;
-  variants?: ProductVariantInput[];
-};
+import type { ProductVariantInput, ProductInput, UpdateProductInput, GetProductsQuery } from "../types/products.type.js";
+export type { ProductVariantInput, ProductInput } from "../types/products.type.js";
 
 const normalizeVariant = (
   variant: ProductVariantInput,
@@ -83,8 +60,14 @@ const ensureUniqueVariantSkus = async (
   excludeId?: string,
 ): Promise<void> => {
   const seen = new Set<string>();
+  const ids = new Set<string>();
 
   for (const variant of variants) {
+    if (variant._id) {
+      const key = variant._id.toLowerCase();
+      if (ids.has(key)) throw createHttpError(400, "Duplicate variant ID");
+      ids.add(key);
+    }
     const { sku } = variant;
 
     if (!sku) {
@@ -109,8 +92,7 @@ const ensureUniqueVariantSkus = async (
 };
 
 const getAllProducts = async (
-  filters: { page?: number; limit?: number; sku?: string | undefined;
-    color?: string | undefined; size?: string | undefined } = {},
+  filters: Partial<GetProductsQuery> = {},
 ) => {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 10;
@@ -161,21 +143,28 @@ const getProductById = async (id: string) => {
   return Product.findById(id).populate("brand category").lean();
 };
 
-const createProduct = async (payload: ProductInput) => {
+async function findAvailableProductSlug(baseSlug: string, excludeId?: string): Promise<string> {
+  let slug = baseSlug;
+  let counter = 1;
+  while (await Product.exists({ slug, ...(excludeId ? { _id: { $ne: excludeId } } : {}) })) {
+    slug = baseSlug + "-" + counter++;
+  }
+  return slug;
+}
+
+function lowestVariantPrice(variants: ProductVariantInput[]): number | undefined {
+  return variants.length ? Math.min(...variants.map(variant => variant.price)) : undefined;
+}
+
+const createProduct = async (payload: ProductInput) => withRelationsTransaction(async (session) => {
+  await assertActiveCatalog(payload.brand, payload.category, session);
   const name = payload.product_name?.trim();
 
   if (!name) {
     throw createHttpError(400, "Tên sản phẩm là bắt buộc");
   }
 
-  const baseSlug = payload.slug?.trim() || buildSlug(name);
-  let slug = baseSlug;
-  let counter = 1;
-
-  while (await Product.exists({ slug })) {
-    slug = `${baseSlug}-${counter}`;
-    counter += 1;
-  }
+  const slug = await findAvailableProductSlug(payload.slug?.trim() || buildSlug(name));
 
   const normalizedVariants = normalizeVariants(
     payload.variants,
@@ -184,18 +173,10 @@ const createProduct = async (payload: ProductInput) => {
 
   await ensureUniqueVariantSkus(normalizedVariants);
 
-  const variantPriceList = normalizedVariants.map((variant) =>
-    Number(variant.price ?? 0),
-  );
-  const computedPrice =
-    payload.price != null
-      ? Number(payload.price)
-      : variantPriceList.length > 0
-        ? Math.min(...variantPriceList)
-        : 0;
+  const computedPrice = payload.price ?? lowestVariantPrice(normalizedVariants) ?? 0;
 
   const computedStock = normalizedVariants.length
-    ? normalizedVariants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
+    ? sumVariantStock(normalizedVariants)
     : Number(payload.stock ?? 0);
 
   const thumbnail =
@@ -203,7 +184,7 @@ const createProduct = async (payload: ProductInput) => {
     normalizedVariants.find((variant) => Boolean(variant.image))?.image ||
     null;
 
-  const product = await Product.create({
+  const product = new Product({
     ...payload,
     product_name: name,
     slug,
@@ -212,57 +193,52 @@ const createProduct = async (payload: ProductInput) => {
     thumbnail,
     variants: normalizedVariants,
   });
+  await product.save({ session });
 
   return product.toObject();
-};
+});
 
 const updateProduct = async (
   id: string,
-  payload: Partial<ProductInput>,
-) => {
-  const existing = await Product.findById(id);
+  payload: UpdateProductInput,
+) => withRelationsTransaction(async (session) => {
+  const existing = await Product.findById(id).session(session);
 
   if (!existing) return null;
+  if (payload.brand || payload.category || payload.is_active === true) {
+    await assertActiveCatalog(payload.brand ?? existing.brand, payload.category ?? existing.category, session);
+  }
 
   const nextName = payload.product_name?.trim();
 
-  const updated: Partial<ProductInput> & { slug?: string } = {
+  const updated: UpdateProductInput = {
     ...payload,
   };
 
   if (nextName) {
     updated.product_name = nextName;
-    const baseSlug = payload.slug?.trim() || buildSlug(nextName);
-    let slug = baseSlug;
-    let counter = 1;
-
-    while (await Product.exists({ slug, _id: { $ne: id } })) {
-      slug = `${baseSlug}-${counter}`;
-      counter += 1;
-    }
-
-    updated.slug = slug;
+    updated.slug = await findAvailableProductSlug(payload.slug?.trim() || buildSlug(nextName), id);
   }
 
   if (Array.isArray(payload.variants)) {
+    const variants = payload.variants.map((variant) => {
+      if (!variant._id) return variant;
+      const previous = existing.variants.id(variant._id);
+      if (!previous) throw createHttpError(400, "Variant ID does not belong to this product");
+      return { ...previous.toObject(), ...variant, _id: String(previous._id) };
+    });
     const normalizedVariants = normalizeVariants(
-      payload.variants,
+      variants,
       payload.price ?? existing.price ?? 0,
     );
     await ensureUniqueVariantSkus(normalizedVariants, id);
 
     updated.variants = normalizedVariants;
-    const variantPriceList = normalizedVariants.map((variant) =>
-      Number(variant.price ?? 0),
-    );
-    if (payload.price == null && variantPriceList.length > 0) {
-      updated.price = Math.min(...variantPriceList);
+    if (payload.price == null && normalizedVariants.length > 0) {
+      updated.price = lowestVariantPrice(normalizedVariants) ?? 0;
     }
 
-    updated.stock = normalizedVariants.reduce(
-        (sum, variant) => sum + Number(variant.stock ?? 0),
-        0,
-      );
+    updated.stock = normalizedVariants.length ? sumVariantStock(normalizedVariants) : payload.stock ?? existing.stock;
 
     if (!payload.thumbnail && normalizedVariants.length > 0) {
       const firstVariantImage = normalizedVariants.find((variant) =>
@@ -275,13 +251,13 @@ const updateProduct = async (
   }
 
   if (Array.isArray(payload.variants)) {
-    if (payload.variants.length && await Order.exists({ orderStatus: { $in: [1, 2] },
+    if (payload.variants.length && await Order.exists({ orderStatus: { $in: OPEN_ORDER_STATUSES },
       orderItems: { $elemMatch: { productId: id, variantId: { $exists: false } } } })) {
       throw createHttpError(409, "Complete legacy product orders before adding variants");
     }
     const retained = new Set(payload.variants.map((variant) => variant._id).filter(Boolean));
     const removed = existing.variants.filter((variant) => !retained.has(String(variant._id)));
-    if (removed.length && await Order.exists({ orderStatus: { $in: [1, 2] },
+    if (removed.length && await Order.exists({ orderStatus: { $in: OPEN_ORDER_STATUSES },
       orderItems: { $elemMatch: { productId: id, variantId: { $in: removed.map((variant) => variant._id) } } } })) {
       throw createHttpError(409, "Cannot remove variants reserved by open orders");
     }
@@ -289,11 +265,11 @@ const updateProduct = async (
     throw createHttpError(400, "Update stock on individual variants");
   }
   existing.set(updated);
-  await existing.save();
+  await existing.save({ session });
   return existing.toObject();
-};
+});
 
-const deleteProduct = async (id: string) => mongoose.connection.transaction(async (session) => {
+const deleteProduct = async (id: string) => withRelationsTransaction(async (session) => {
   if (await Order.exists({ "orderItems.productId": id }).session(session)) {
     throw createHttpError(409, "Cannot delete products referenced by orders");
   }

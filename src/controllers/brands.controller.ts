@@ -1,129 +1,100 @@
+import { assertFound } from "../utils/assert-found.js";
+import type { RequestHandler } from "express";
+import { asyncHandler } from "../utils/async-handler.util.js";
 import { sendResponse } from "../helpers/response.helper.js";
 import type {
   Request,
   Response,
-  NextFunction,
 } from 'express';
 
 import { BrandService } from '../services/brands.service.js';
-import { ApiError } from '../middlewares/error.middleware.js';
+
 
 import type {
   BrandInput,
   UpdateBrandInput,
-} from '../validations/brands.validation.js';
+} from '../types/brands.js';
 
 export class BrandController {
   // GET /api/v1/brands
-  static async getAll(
+  static getAll: RequestHandler = asyncHandler(async (
     _req: Request,
     res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const brands = await BrandService.getAll();
+  ) => {
+    const brands = await BrandService.getAll();
 
-      sendResponse(res, 200, {
-        success: true,
-        message: 'Get brands successfully',
-        data: brands,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+    sendResponse(res, 200, {
+      success: true,
+      message: 'Get brands successfully',
+      data: brands,
+    });
+  });
 
   // GET /api/v1/brands/:id
-  static async getById(
+  static getById: RequestHandler = asyncHandler(async (
     req: Request,
     res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params['id']);
-      const brand = await BrandService.getById(id);
+  ) => {
+    const id = String(req.params['id']);
+    const brand = await BrandService.getById(id);
 
-      if (!brand) {
-        throw new ApiError(404, 'Brand not found');
-      }
+    assertFound(brand, 'Brand not found');
 
-      sendResponse(res, 200, {
-        success: true,
-        message: 'Get brand successfully',
-        data: brand,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+    sendResponse(res, 200, {
+      success: true,
+      message: 'Get brand successfully',
+      data: brand,
+    });
+  });
 
   // POST /api/v1/brands
-  static async create(
+  static create: RequestHandler = asyncHandler(async (
     req: Request,
     res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const data = req.body as BrandInput;
-      const brand = await BrandService.create(data);
+  ) => {
+    const data = req.body as BrandInput;
+    const brand = await BrandService.create(data);
 
-      sendResponse(res, 201, {
-        success: true,
-        message: 'Brand created successfully',
-        data: brand,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+    sendResponse(res, 201, {
+      success: true,
+      message: 'Brand created successfully',
+      data: brand,
+    });
+  });
 
   // PUT /api/v1/brands/:id
-  static async update(
+  static update: RequestHandler = asyncHandler(async (
     req: Request,
     res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params['id']);
-      const data = req.body as UpdateBrandInput;
+  ) => {
+    const id = String(req.params['id']);
+    const data = req.body as UpdateBrandInput;
 
-      const brand = await BrandService.update(id, data);
+    const brand = await BrandService.update(id, data);
 
-      if (!brand) {
-        throw new ApiError(404, 'Brand not found');
-      }
+    assertFound(brand, 'Brand not found');
 
-      sendResponse(res, 200, {
-        success: true,
-        message: 'Brand updated successfully',
-        data: brand,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+    sendResponse(res, 200, {
+      success: true,
+      message: 'Brand updated successfully',
+      data: brand,
+    });
+  });
 
   // DELETE /api/v1/brands/:id
-  static async delete(
+  static delete: RequestHandler = asyncHandler(async (
     req: Request,
     res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params['id']);
-      const brand = await BrandService.delete(id);
+  ) => {
+    const id = String(req.params['id']);
+    const brand = await BrandService.delete(id);
 
-      if (!brand) {
-        throw new ApiError(404, 'Brand not found');
-      }
+    assertFound(brand, 'Brand not found');
 
-      sendResponse(res, 200, {
-        success: true,
-        message: 'Brand deleted successfully',
-        data: brand,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+    sendResponse(res, 200, {
+      success: true,
+      message: 'Brand deleted successfully',
+      data: brand,
+    });
+  });
 }

@@ -1,8 +1,8 @@
 import { sendResponse } from "../helpers/response.helper.js";
 import type { RequestHandler } from "express";
-import { UserService } from "../services/user.service.js";
+import { UserService } from "../services/users.service.js";
 import { asyncHandler } from "../utils/async-handler.util.js";
-import type { GetUsersQuery } from "../validations/user.validation.js";
+import type { GetUsersQuery } from "../types/users.type.js";
 export const userController: Record<string, RequestHandler> = {
   getUsers: asyncHandler(async (req, res) => {
     const result = await UserService.getAllUsers(req.query as unknown as GetUsersQuery);

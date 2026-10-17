@@ -4,7 +4,7 @@ import { test } from "node:test";
 import mongoose from "mongoose";
 import argon2 from "argon2";
 import bcrypt from "bcryptjs";
-import { User } from "../dist/models/user.model.js";
+import { User } from "../dist/models/users.model.js";
 import { login } from "../dist/services/auth.service.js";
 import { hashToken } from "../dist/utils/token.js";
 

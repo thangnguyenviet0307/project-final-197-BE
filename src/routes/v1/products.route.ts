@@ -15,9 +15,16 @@ import {
   updateProductSchema,
 } from "../../validations/products.validation.js";
 
+import { parseProductImage } from "../../middlewares/product-image.middleware.js";
+import { uploadProductImage } from "../../controllers/product-images.controller.js";
+
 const router: ExpressRouter = Router();
 
 router.use(authenticate);
+
+router.post("/:id/images", requirePermission(Permission.ProductUpdate),
+  validate({ params: productIdParamSchema }), parseProductImage, uploadProductImage);
+
 
 router.get(
   "/sku/:sku",

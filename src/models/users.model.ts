@@ -17,6 +17,11 @@ const userSchema = new Schema<IUser>(
       required: true,
       select: false,
     },
+    personalEmail: { type: String, trim: true, lowercase: true, default: "" },
+    phone: { type: String, trim: true, maxlength: 30, default: "" },
+    location: { type: String, trim: true, maxlength: 255, default: "" },
+    bio: { type: String, trim: true, maxlength: 1000, default: "" },
+    avatar: { type: String, default: "" },
     firstName: {
       type: String,
       required: true,

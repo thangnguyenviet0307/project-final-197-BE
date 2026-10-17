@@ -1,3 +1,4 @@
+import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
 import { changePassword } from "../services/auth.service.js";
@@ -68,6 +69,12 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
+  updateProfile: asyncHandler(async (req, res) => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) throw createHttpError(401, "Authentication required");
+    const profile = await updateProfile(user, req.body, req.file);
+    sendResponse(res, 200, { message: "Profile updated", data: profile });
+  }),
   me: asyncHandler(async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");

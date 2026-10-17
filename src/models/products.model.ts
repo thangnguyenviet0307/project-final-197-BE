@@ -71,8 +71,17 @@ const productVariantSchema = new Schema(
   },
 );
 
+const productImageSchema = new Schema({
+  public_id: { type: String, required: true },
+  secure_url: { type: String, required: true },
+  width: Number, height: Number, format: String,
+}, { _id: false });
+
 const productSchema = new Schema(
   {
+    images: { type: [productImageSchema], default: [], validate: {
+      validator: (images: unknown[]) => images.length <= 8, message: "A product can have up to 8 images",
+    } },
     product_name: {
       type: String,
       required: true,

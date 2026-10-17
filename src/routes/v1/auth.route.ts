@@ -10,6 +10,9 @@ import {
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
 
+import { parseProfileUpload } from "../../middlewares/profile-upload.middleware.js";
+import { updateProfileSchema } from "../../validations/profile.validation.js";
+
 const router: RouterType = Router();
 const rateLimit = createAuthRateLimit();
 
@@ -28,6 +31,7 @@ router.post(
 router.post("/refresh", rateLimit, validate({ body: refreshSchema }), authController["refresh"]!);
 router.post("/logout", authenticate, authController["logout"]!);
 
+router.patch("/me", authenticate, parseProfileUpload, validate({ body: updateProfileSchema }), authController["updateProfile"]!);
 router.get("/me", authenticate, authController["me"]!);
 router.post("/change-password", authenticate, rateLimit, validate({ body: changePasswordSchema }), authController["changePassword"]!);
 

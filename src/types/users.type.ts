@@ -1,5 +1,11 @@
 import type { IPaginationQuery } from "./common.types.js";
 export interface IUser {
+  personalEmail?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
+  avatar?: string;
+
   email: string;
   password: string;
   firstName: string;

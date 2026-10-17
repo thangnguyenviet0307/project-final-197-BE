@@ -1,4 +1,10 @@
 export interface AuthUser {
+  personalEmail?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
+  avatar?: string;
+
   id: string;
   email: string;
   firstName: string;

@@ -33,7 +33,7 @@ export const UserService = {
     return await newUser.save();
   },
 
-  // --- 2. THÊM HÀM LOGIN NÀY VÀO ---
+  // --- 2.HÀM LOGIN ---
   async loginUser(loginData: { email: string; password: string }) {
     if (!loginData.email || !loginData.password) {
       throw createHttpError(400, "Vui lòng cung cấp đầy đủ email và mật khẩu!");

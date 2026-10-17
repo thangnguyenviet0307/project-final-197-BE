@@ -29,6 +29,6 @@ export const registerSchema = z.object({
       .string({ message: "Mật khẩu phải là một chuỗi ký tự!" })
       .min(1, "Mật khẩu không được để trống!")
       .min(6, "Mật khẩu phải có ít nhất 6 ký tự!"),
-    role: z.enum(["admin", "staff"]).optional(), // Đơn giản hóa z.enum để loại bỏ hoàn toàn lỗi cấu hình errorMap
+    role: z.enum(["admin", "staff"]).optional(),
   }),
 });

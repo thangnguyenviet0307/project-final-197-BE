@@ -1,105 +1,69 @@
-//@baseUrl = https://project-final-197-be.onrender.com/api/v1/users
 @baseUrl = http://localhost:3000/api/v1/users
 
-//KHAI BÁO TOKEN
-@adminToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjE1OTA0NSwiZXhwIjoxNzkyMjQ1NDQ1fQ.dkwYtm0Rl6MGRjf2nL1WC_hiUaU6c4puTrGJ2BSEgws
+// ==========================================
+// KHAI BÁO TOKEN
+// ==========================================
+@adminToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDMwMzRiZGIxZDFlNDM2YWFkMjBmMSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjIxMzg1MCwiZXhwIjoxNzkyMzAwMjUwfQ.1A306FG_RPhouP1pk8IWtVbvv3v98VZmfMzrb8sXNjY
 @staffToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDBhNDljYWU2ZWI3ZjQxYTVjZDEyOCIsInJvbGUiOiJzdGFmZiIsImlhdCI6MTc5MjA1ODcwNCwiZXhwIjoxNzkyMTQ1MTA0fQ.h-xeexYReAlY0nHh-GarjsvDzH0oTOYWVyht5g2VyF8  
-
 @userId = 6ad0a245ae6eb7f41a5cd126
 
-### Tạo một tài khoản Admin mới để test
+# ==========================================
+# 0.ĐĂNG NHẬP LẤY TOKEN
+# ==========================================
+### Đăng nhập tài khoản Admin 
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "superadmin23@gmail.com",
+  "password": "AdminPassword123"
+}
+
+# ==========================================
+# CÁC API QUẢN LÝ USER (Yêu cầu Token & Phân quyền)
+# ==========================================
+
+### 1. Tạo một tài khoản Admin mới để test (Yêu cầu quyền Admin)
 POST {{baseUrl}}
 Content-Type: application/json
 Authorization: {{adminToken}}
 
 {
   "fullName": "Super Admin",
-  "email": "superadmin2@gmail.com",
+  "email": "superadmin23@gmail.com",
   "password": "AdminPassword123",
   "role": "admin"
 }
 
-# ==========================================
-# 0. ĐĂNG NHẬP (Lấy Token)
-# ==========================================
-### Đăng nhập tài khoản Admin
-POST {{baseUrl}}/login
-Content-Type: application/json
-
-{
-  "email": "superadmin@gmail.com",
-  "password": "AdminPassword123"
-}
-# ==========================================
-# CÁC API QUẢN LÝ USER (Yêu cầu Token & Phân quyền)
-# ==========================================
-
-### 1. Lấy danh sách tất cả users (Admin hoặc Staff đều xem được)
+### 2. Lấy danh sách tất cả users (Admin hoặc Staff đều xem được)
 GET {{baseUrl}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-
-### 2. Lấy chi tiết user theo ID (Admin hoặc Staff đều xem được)
-GET {{baseUrl}}/{{userId}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-
-
-### 3. Tạo mới một user (CHỈ ADMIN mới được phép - Nếu dùng @staffToken sẽ bị lỗi 403)
-POST {{baseUrl}}
-Content-Type: application/json
 Authorization: {{adminToken}}
 
-{
-  "fullName": "ronaldo",
-  "email": "ronaldo3@example.com",
-  "password": "SecurePassword123",
-  "role": "staff"
-}
+### 3. Lấy chi tiết user theo ID 
+GET {{baseUrl}}/{{userId}}
+Authorization: {{adminToken}}
 
-
-### 4. Cập nhật thông tin user theo ID (CHỈ ADMIN mới được phép)
+### 4. Cập nhật thông tin user theo ID (CHỈ ADMIN)
 PATCH {{baseUrl}}/{{userId}}
 Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
+Authorization: {{adminToken}}
 
 {
   "fullName": "ronaldo Updated"
 }
 
-
-### 5. Xóa user theo ID (CHỈ ADMIN mới được phép)
+### 5. Xóa user theo ID (CHỈ ADMIN)
 DELETE {{baseUrl}}/{{userId}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w   
+Authorization: {{adminToken}}
 
-============================================================================================================
+
+# ==========================================
 # TEST PHÂN QUYỀN CHO TÀI KHOẢN STAFF
-### Tạo một tài khoản Staff mới để test
-POST {{baseUrl}}
-Content-Type: application/json
+# ==========================================
 
-{
-  "fullName": "Staff Member",
-  "email": "staff2@example.com",
-  "password": "StaffPassword123",
-  "role": "staff"
-}
-
-### Đăng nhập lấy token của Staff 
-POST {{baseUrl}}/login
-Content-Type: application/json
-
-{
-  "email": "staff2@example.com",
-  "password": "StaffPassword123"
-}
-
-###
- @staffToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDBhNDljYWU2ZWI3ZjQxYTVjZDEyOCIsInJvbGUiOiJzdGFmZiIsImlhdCI6MTc5MjA1ODcwNCwiZXhwIjoxNzkyMTQ1MTA0fQ.h-xeexYReAlY0nHh-GarjsvDzH0oTOYWVyht5g2VyF8
-
-
-### 6. Staff thử xem danh sách users 
+### 6. Staff thử xem danh sách users (ĐƯỢC PHÉP - Trả về 200)
 GET {{baseUrl}}
 Authorization: {{staffToken}}
-
 
 ### 7. Staff thử tạo mới user (BỊ CHẶN - Phải trả về lỗi 403 Forbidden)
 POST {{baseUrl}}
@@ -112,7 +76,6 @@ Authorization: {{staffToken}}
   "password": "Password123",
   "role": "admin"
 }
-
 
 ### 8. Staff thử xóa user (BỊ CHẶN - Phải trả về lỗi 403 Forbidden)
 DELETE {{baseUrl}}/{{userId}}

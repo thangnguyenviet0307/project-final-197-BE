@@ -1,3 +1,4 @@
+import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, NextFunction } from "express";
 
 import mongoose from "mongoose";
@@ -42,11 +43,12 @@ export function errorMiddleware(
   err: unknown,
   _req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): void {
   if (err instanceof ZodError) {
-    res.status(400).json({
+    sendResponse(res, 400, {
       success: false,
+      data: null,
       message: "Validation failed",
       errors: err.issues.map((issue) => ({
         field: issue.path.join("."),
@@ -57,10 +59,19 @@ export function errorMiddleware(
     return;
   }
 
+  if (err instanceof mongoose.Error.VersionError) {
+    sendResponse(res, 409, { success: false, message: "Data changed; please retry", data: null });
+    return;
+  }
+  if (err instanceof mongoose.Error.CastError) {
+    sendResponse(res, 400, { success: false, message: "Invalid identifier or value", data: null });
+    return;
+  }
   if (err instanceof ApiError) {
-    res.status(err.statusCode).json({
+    sendResponse(res, err.statusCode, {
       success: false,
-      message: err.message,
+      data: null,
+      message: err.statusCode >= 500 ? "Internal server error" : err.message,
     });
     return;
   }
@@ -71,16 +82,18 @@ export function errorMiddleware(
         ? Object.keys(err.keyPattern)[0]
         : "field";
 
-    res.status(409).json({
+    sendResponse(res, 409, {
       success: false,
+      data: null,
       message: `Duplicate value for ${field}`,
     });
     return;
   }
 
   if (err instanceof mongoose.Error.ValidationError) {
-    res.status(400).json({
+    sendResponse(res, 400, {
       success: false,
+      data: null,
       message: "Database validation failed",
       errors: Object.values(err.errors).map((error) => ({
         field: error.path,
@@ -91,23 +104,25 @@ export function errorMiddleware(
   }
 
   if (hasStatusCode(err)) {
-    res.status(err.statusCode).json({
+    sendResponse(res, err.statusCode, {
       success: false,
-      message: err.message,
+      data: null,
+      message: err.statusCode >= 500 ? "Internal server error" : err.message,
     });
     return;
   }
 
   if (err instanceof Error) {
-    res.status(500).json({
+    sendResponse(res, 500, {
       success: false,
+      data: null,
       status: 500,
-      message: err.message,
+      message: "Internal server error",
     });
     return;
   }
 
-  next(err);
+  sendResponse(res, 500, { message: "Internal server error" });
 }
 
 export const errorHandler = errorMiddleware;

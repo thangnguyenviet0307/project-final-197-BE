@@ -1,29 +1,11 @@
-@baseUrl = http://localhost:5000/api/v1
-@token = 
-
-### ============================================
-### AUTH - Login to get token
-### ============================================
-# @name login
-POST {{baseUrl}}/auth/login
-Content-Type: application/json
-
-{
-  "email": "admin@example.com",
-  "password": "123456"
-}
-
-### Save token from login response
-@token = {{login.response.body.data.accessToken}}
-
-### ============================================
-### CUSTOMERS API
-### ============================================
+# Login in auth.http first; successful customer creation updates shared CUSTOMER_ID.
+@baseUrl = http://127.0.0.1:5001/api/v1
 
 ### 1. Create Customer
 # @name createCustomer
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -42,7 +24,9 @@ Content-Type: application/json
 ### 2. Create Customer 2
 # @name createCustomer2
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-save-id: CUSTOMER_2_ID
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -61,7 +45,9 @@ Content-Type: application/json
 ### 3. Create Customer 3 (for testing)
 # @name createCustomer3
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-save-id: CUSTOMER_3_ID
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -80,27 +66,32 @@ Content-Type: application/json
 ### 4. Get Customers List
 # @name getCustomers
 GET {{baseUrl}}/customers?page=1&limit=10
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### 5. Get Customers with Search
 # @name searchCustomers
-GET {{baseUrl}}/customers?page=1&limit=10&search=nguyen
-Authorization: Bearer {{token}}
+GET {{baseUrl}}/customers?page=1&limit=10&search=tran
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### 6. Get Customers with Active Filter
 # @name getActiveCustomers
 GET {{baseUrl}}/customers?page=1&limit=10&isActive=true
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### 7. Get Customer by ID
 # @name getCustomerById
-GET {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
-Authorization: Bearer {{token}}
+GET {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
-### 8. Update Customer
+### 8. Update Customer - requires CUSTOMER_ID from createCustomer or a selected existing record
 # @name updateCustomer
-PUT {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
-Authorization: Bearer {{token}}
+PUT {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -112,20 +103,22 @@ Content-Type: application/json
   }
 }
 
-### 9. Update Customer - Deactivate
+### 9. Update Customer - Deactivate (run createCustomer2 first or set CUSTOMER_2_ID)
 # @name deactivateCustomer
-PUT {{baseUrl}}/customers/{{createCustomer2.response.body.data._id}}
-Authorization: Bearer {{token}}
+PUT {{baseUrl}}/customers/{{$dotenv CUSTOMER_2_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
   "isActive": false
 }
 
-### 10. Delete Customer
+### 10. Delete Customer (run createCustomer3 first or set CUSTOMER_3_ID; test data only)
 # @name deleteCustomer
-DELETE {{baseUrl}}/customers/{{createCustomer3.response.body.data._id}}
-Authorization: Bearer {{token}}
+DELETE {{baseUrl}}/customers/{{$dotenv CUSTOMER_3_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### ============================================
 ### ERROR CASES FOR TESTING
@@ -134,7 +127,8 @@ Authorization: Bearer {{token}}
 ### Create customer with duplicate email
 # @name duplicateEmail
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -152,7 +146,8 @@ Content-Type: application/json
 ### Create customer with invalid email
 # @name invalidEmail
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -170,7 +165,8 @@ Content-Type: application/json
 ### Create customer with short phone
 # @name shortPhone
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -188,7 +184,8 @@ Content-Type: application/json
 ### Create customer with missing required fields
 # @name missingFields
 POST {{baseUrl}}/customers
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -198,12 +195,14 @@ Content-Type: application/json
 ### Get non-existent customer
 # @name getNonExistentCustomer
 GET {{baseUrl}}/customers/507f1f77bcf86cd799439011
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### Delete non-existent customer
 # @name deleteNonExistentCustomer
 DELETE {{baseUrl}}/customers/507f1f77bcf86cd799439011
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### Unauthorized (no token)
 # @name unauthorized
@@ -211,5 +210,6 @@ GET {{baseUrl}}/customers
 
 ### Forbidden - Staff without customers:delete permission
 # @name forbiddenDelete
-DELETE {{baseUrl}}/customers/{{createCustomer.response.body.data._id}}
-Authorization: Bearer {{staffToken}}
+DELETE {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}

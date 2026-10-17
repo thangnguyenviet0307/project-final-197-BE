@@ -1,17 +1,22 @@
-@baseUrl = http://localhost:5000/api/v1/products
-@productId = 6acb9c9a3319003dfb1ec60b
-@variantId = 6acb9c9a3319003dfb1ec60c
-@productIdToUpdate = ID_HERE
-@productIdToDelete = 6aca4354eda4a5bd7bb9ee36
-@categoryId = 6aca4304eda4a5bd7bb9ee35
-@brandId = 6aca59972970f2f1349bbd5f
+# Select PRODUCT_ID/VARIANT_ID in REST_CLIENT/.env or create a test product first.
+@baseUrl = http://127.0.0.1:5001/api/v1/products
+@productId = __PRODUCT_ID__
+@variantId = __VARIANT_ID__
+@productIdToUpdate = __PRODUCT_ID__
+@productIdToDelete = __PRODUCT_ID__
+@categoryId = __CATEGORY_ID__
+@brandId = __BRAND_ID__
 
 ### Lấy danh sách sản phẩm
 GET {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Tạo sản phẩm mới
 POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -24,7 +29,6 @@ Content-Type: application/json
   "model_year": 2023,
   "slug": "iphone-14-pro",
   "thumbnail": "https://example.com/iphone14pro.jpg",
-  "stock": 50,
   "variants": [
     {
       "sku": "IP14P-128-BLK",
@@ -61,48 +65,41 @@ Content-Type: application/json
 
 ### Lấy sản phẩm theo id
 GET {{baseUrl}}/{{productId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Tìm sản phẩm theo SKU
 GET {{baseUrl}}/sku/IP14P-128-BLK
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Lọc sản phẩm theo color / size
 GET {{baseUrl}}?color=Black&size=128GB
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Lấy variant theo product id và variant id
 GET {{baseUrl}}/{{productId}}/variants/{{variantId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json
 
 ### Cập nhật sản phẩm
 PUT {{baseUrl}}/{{productIdToUpdate}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "product_name": "iPhone 14 Pro Max",
-  "price": 34990000,
-  "discount": 5,
-  "description": "Bản mở rộng iPhone 14 Pro Max",
-  "model_year": 2023,
-  "thumbnail": "https://example.com/iphone14promax.jpg",
-  "stock": 30,
-  "variants": [
-    {
-      "sku": "IP14PM-256-SG",
-      "variant_name": "Silver - 256GB",
-      "color": "Silver",
-      "size": "256GB",
-      "price": 34990000,
-      "stock": 8,
-      "attributes": {
-        "storage": "256GB",
-        "color": "Silver"
-      }
-    }
-  ]
+  "description": "Updated product description",
+  "discount": 5
 }
 
 ### Xoá sản phẩm
 DELETE {{baseUrl}}/{{productIdToDelete}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Accept: application/json

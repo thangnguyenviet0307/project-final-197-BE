@@ -2,6 +2,7 @@ import { z } from "zod";
 import { objectId, paginationSchema } from "./common.validation.js";
 
 export const productVariantSchema = z.object({
+  _id: objectId.optional(),
   sku: z
     .string()
     .trim()
@@ -27,7 +28,7 @@ export const productVariantSchema = z.object({
 
 export const createProductSchema = z.object({
   product_name: z.string().trim().min(3).max(255),
-  price: z.number().min(0).optional().default(0),
+  price: z.number().min(0).optional(),
   discount: z.number().min(0).max(70).optional().default(0),
   category: objectId,
   brand: objectId,
@@ -39,13 +40,18 @@ export const createProductSchema = z.object({
     .max(new Date().getFullYear() + 2),
   slug: z.string().trim().min(3).max(255).optional(),
   thumbnail: z.string().trim().max(255).nullable().optional(),
-  stock: z.number().int().min(0).optional().default(0),
+  stock: z.number().int().min(0).optional(),
   is_active: z.boolean().optional().default(true),
   variants: z.array(productVariantSchema).optional().default([]),
 });
 
 export const updateProductSchema = createProductSchema
   .partial()
+  .extend({
+    discount: z.number().min(0).max(70).optional(),
+    is_active: z.boolean().optional(),
+    variants: z.array(productVariantSchema).optional(),
+  })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required for update",
   });
@@ -60,3 +66,5 @@ export const getProductsQuerySchema = paginationSchema.extend({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+export type GetProductsQuery = z.infer<typeof getProductsQuerySchema>;

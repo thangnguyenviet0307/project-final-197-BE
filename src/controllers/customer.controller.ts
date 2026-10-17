@@ -1,3 +1,5 @@
+import { sendResponse } from "../helpers/response.helper.js";
+import type { GetCustomersQuery } from "../validations/customer.validation.js";
 import type { Request, Response, RequestHandler } from 'express';
 import {
   getCustomers,
@@ -9,29 +11,9 @@ import {
 import { asyncHandler } from '../utils/async-handler.util.js';
 import { ApiError } from '../middlewares/error.middleware.js';
 
-interface GetCustomersQuery {
-  page?: string;
-  limit?: string;
-  search?: string;
-  isActive?: string;
-}
-
 const getCustomersHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const { page, limit, search, isActive } = req.query as GetCustomersQuery;
-
-  const result = await getCustomers({
-    page: page ? parseInt(page, 10) : 1,
-    limit: limit ? parseInt(limit, 10) : 10,
-    search,
-    isActive: isActive !== undefined ? isActive === 'true' : undefined,
-  });
-
-  res.status(200).json({
-    success: true,
-    message: 'Lấy danh sách khách hàng thành công',
-    data: result.data,
-    pagination: result.pagination,
-  });
+  const result = await getCustomers(req.query as unknown as GetCustomersQuery);
+  sendResponse(res, 200, { success: true, message: 'Customers retrieved successfully', ...result });
 });
 
 const getCustomerByIdHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -39,7 +21,7 @@ const getCustomerByIdHandler: RequestHandler = asyncHandler(async (req: Request,
 
   const customer = await getCustomerById(id as string);
 
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Lấy chi tiết khách hàng thành công',
     data: customer,
@@ -49,7 +31,7 @@ const getCustomerByIdHandler: RequestHandler = asyncHandler(async (req: Request,
 const createCustomerHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
   const customer = await createCustomer(req.body);
 
-  res.status(201).json({
+  sendResponse(res, 201, {
     success: true,
     message: 'Tạo khách hàng thành công',
     data: customer,
@@ -62,7 +44,7 @@ const updateCustomerHandler: RequestHandler = asyncHandler(async (req: Request, 
 
   if (!customer) throw new ApiError(404, 'Không tìm thấy khách hàng');
 
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Cập nhật khách hàng thành công',
     data: customer,
@@ -74,7 +56,7 @@ const deleteCustomerHandler: RequestHandler = asyncHandler(async (req: Request, 
 
   await deleteCustomer(id as string);
 
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Xóa khách hàng thành công',
     data: null,

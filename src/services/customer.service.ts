@@ -1,3 +1,5 @@
+import createHttpError from "http-errors";
+import { escapeRegex } from "../utils/search.js";
 import { Customer } from '../models/customer.model.js';
 import type { ICustomer } from '../types/customer.type.js';
 import { buildPagination } from '../utils/pagination.js';
@@ -11,10 +13,10 @@ export async function getCustomers({ page, limit, search, isActive }: GetCustome
   const filter: Record<string, unknown> = {};
   if (search) {
     filter['$or'] = [
-      { firstName: new RegExp(search, 'i') },
-      { lastName: new RegExp(search, 'i') },
-      { email: new RegExp(search, 'i') },
-      { phone: new RegExp(search, 'i') },
+      { firstName: new RegExp(escapeRegex(search), 'i') },
+      { lastName: new RegExp(escapeRegex(search), 'i') },
+      { email: new RegExp(escapeRegex(search), 'i') },
+      { phone: new RegExp(escapeRegex(search), 'i') },
     ];
   }
   if (isActive !== undefined) filter['isActive'] = isActive;
@@ -33,13 +35,13 @@ export async function getCustomers({ page, limit, search, isActive }: GetCustome
 
 export async function getCustomerById(id: string) {
   const customer = await Customer.findById(id).select('-__v');
-  if (!customer) throw new Error('Customer not found');
+  if (!customer) throw createHttpError(404, 'Customer not found');
   return customer;
 }
 
 export async function createCustomer(input: CreateCustomerInput): Promise<ICustomer> {
   const existing = await Customer.findOne({ email: input.email });
-  if (existing) throw new Error('Email already exists');
+  if (existing) throw createHttpError(409, 'Email already exists');
 
   return Customer.create(input);
 }
@@ -47,7 +49,7 @@ export async function createCustomer(input: CreateCustomerInput): Promise<ICusto
 export async function updateCustomer(id: string, input: UpdateCustomerInput): Promise<ICustomer | null> {
   if (input.email) {
     const existing = await Customer.findOne({ email: input.email, _id: { $ne: id } });
-    if (existing) throw new Error('Email already exists');
+    if (existing) throw createHttpError(409, 'Email already exists');
   }
 
   const customer = await Customer.findByIdAndUpdate(id, input, { new: true, runValidators: true }).select('-__v');
@@ -56,6 +58,6 @@ export async function updateCustomer(id: string, input: UpdateCustomerInput): Pr
 
 export async function deleteCustomer(id: string) {
   const customer = await Customer.findByIdAndDelete(id);
-  if (!customer) throw new Error('Customer not found');
+  if (!customer) throw createHttpError(404, 'Customer not found');
   return customer;
 }

@@ -1,12 +1,20 @@
-@baseUrl = http://localhost:5000/api/v1
-@token = 
-@refreshToken = 
+# Start backend: pnpm.cmd dev | Start session proxy: pnpm.cmd rest-client
+# Login once here, then all .http files read tokens from REST_CLIENT/.env.
+@refreshToken = {{$dotenv REFRESH_TOKEN}}
+@email = {{$dotenv LOGIN_EMAIL}}
+@password = {{$dotenv LOGIN_PASSWORD}}
+@staffRefreshToken = {{$dotenv STAFF_REFRESH_TOKEN}}
+@staffEmail = {{$dotenv STAFF_LOGIN_EMAIL}}
+@staffPassword = {{$dotenv STAFF_LOGIN_PASSWORD}}
+@bootstrapSecret = {{$dotenv BOOTSTRAP_SECRET}}
+@baseUrl = http://127.0.0.1:5001/api/v1
 
 ### ============================================
 ### BOOTSTRAP - Tạo admin đầu tiên (chỉ chạy 1 lần)
 ### ============================================
 # @name bootstrap
 POST {{baseUrl}}/auth/bootstrap
+x-bootstrap-secret: {{bootstrapSecret}}
 Content-Type: application/json
 
 {
@@ -18,9 +26,6 @@ Content-Type: application/json
   "active": true
 }
 
-### Save tokens from bootstrap
-@token = {{bootstrap.response.body.data.accessToken}}
-@refreshToken = {{bootstrap.response.body.data.refreshToken}}
 
 ### ============================================
 ### AUTH - Login
@@ -30,13 +35,10 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@example.com",
-  "password": "123456"
+  "email": "{{email}}",
+  "password": "{{password}}"
 }
 
-### Save tokens
-@token = {{login.response.body.data.accessToken}}
-@refreshToken = {{login.response.body.data.refreshToken}}
 
 ### ============================================
 ### AUTH - Refresh Token
@@ -49,16 +51,14 @@ Content-Type: application/json
   "refreshToken": "{{refreshToken}}"
 }
 
-### Update token with new one
-@token = {{refresh.response.body.data.accessToken}}
-@refreshToken = {{refresh.response.body.data.refreshToken}}
 
 ### ============================================
 ### AUTH - Logout
 ### ============================================
 # @name logout
 POST {{baseUrl}}/auth/logout
-Authorization: Bearer {{token}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 ### ============================================
@@ -68,6 +68,7 @@ Content-Type: application/json
 ### Bootstrap when already exists
 # @name bootstrapExists
 POST {{baseUrl}}/auth/bootstrap
+x-bootstrap-secret: {{bootstrapSecret}}
 Content-Type: application/json
 
 {
@@ -127,3 +128,29 @@ Content-Type: application/json
 # @name logoutNoAuth
 POST {{baseUrl}}/auth/logout
 Content-Type: application/json
+
+### Staff login (separate session; keeps the primary session)
+# @name staffLogin
+POST {{baseUrl}}/auth/login
+x-rest-client-session: staff
+Content-Type: application/json
+
+{
+  "email": "{{staffEmail}}",
+  "password": "{{staffPassword}}"
+}
+
+### Staff refresh (updates shared STAFF_* tokens)
+# @name staffRefresh
+POST {{baseUrl}}/auth/refresh
+x-rest-client-session: staff
+Content-Type: application/json
+
+{ "refreshToken": "{{staffRefreshToken}}" }
+
+### Staff logout (clears shared STAFF_* tokens)
+# @name staffLogout
+POST {{baseUrl}}/auth/logout
+x-rest-client-session: staff
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}

@@ -4,21 +4,23 @@ import { OrderStatus, PaymentType } from '../types/order.type.js';
 
 const orderStatusValues = Object.values(OrderStatus).filter((v): v is number => typeof v === 'number');
 const paymentTypeValues = Object.values(PaymentType).filter((v): v is number => typeof v === 'number');
+const orderDateSchema = z.union([z.string().trim().min(1), z.date()]).pipe(z.coerce.date());
 
 // Giá và discount KHÔNG nhận từ client: server lấy từ Product để tránh bị sửa giá
 export const orderItemSchema = z.object({
   productId: objectId,
+  variantId: objectId.optional(),
   quantity: z.number().int().min(1, 'Số lượng phải >= 1'),
 });
 
 export const createOrderSchema = z.object({
   customerId: objectId,
   userId: objectId.optional(), // chỉ Admin được chỉ định; Staff luôn là chính mình
-  requireDate: z.coerce.date().optional(),
-  orderNote: z.string().optional(),
-  street: z.string().min(1).max(255),
-  city: z.string().min(1).max(50),
-  state: z.string().min(1).max(50),
+  requireDate: orderDateSchema.optional(),
+  orderNote: z.string().trim().max(2000).optional(),
+  street: z.string().trim().min(1).max(255),
+  city: z.string().trim().min(1).max(50),
+  state: z.string().trim().min(1).max(50),
   paymentType: z.number().refine((val) => paymentTypeValues.includes(val), {
     message: 'Loại thanh toán không hợp lệ',
   }),
@@ -29,7 +31,7 @@ export const updateOrderStatusSchema = z.object({
   orderStatus: z.number().refine((val) => orderStatusValues.includes(val), {
     message: 'Trạng thái đơn hàng không hợp lệ',
   }),
-  shippingDate: z.coerce.date().optional(),
+  shippingDate: orderDateSchema.optional(),
   userId: objectId.optional(),
 });
 

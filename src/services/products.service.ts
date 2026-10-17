@@ -1,7 +1,13 @@
+import { buildPagination } from "../utils/pagination.js";
+import mongoose from "mongoose";
+import createHttpError from "http-errors";
+import { Order } from "../models/order.model.js";
+import { escapeRegex } from "../utils/search.js";
 import Product from "../models/product.model.js";
 import { buildSlug } from "../helpers/buildSlug.helper.js";
 
 export type ProductVariantInput = {
+  _id?: string;
   sku: string;
   variant_name?: string | null;
   color?: string | null;
@@ -40,6 +46,7 @@ const normalizeVariant = (
   const image = variant.image?.trim() || images[0] || null;
 
   return {
+    ...(variant._id ? { _id: variant._id } : {}),
     sku: String(variant.sku ?? "")
       .trim()
       .toUpperCase(),
@@ -81,11 +88,11 @@ const ensureUniqueVariantSkus = async (
     const { sku } = variant;
 
     if (!sku) {
-      throw new Error("Mỗi biến thể phải có SKU");
+      throw createHttpError(400, "Mỗi biến thể phải có SKU");
     }
 
     if (seen.has(sku)) {
-      throw new Error(`SKU ${sku} bị trùng lặp trong cùng một sản phẩm`);
+      throw createHttpError(409, `SKU ${sku} bị trùng lặp trong cùng một sản phẩm`);
     }
 
     seen.add(sku);
@@ -96,45 +103,30 @@ const ensureUniqueVariantSkus = async (
     });
 
     if (exists) {
-      throw new Error(`SKU ${sku} đã tồn tại trên sản phẩm khác`);
+      throw createHttpError(409, `SKU ${sku} đã tồn tại trên sản phẩm khác`);
     }
   }
 };
 
 const getAllProducts = async (
-  filters: {
-    sku?: string | undefined;
-    color?: string | undefined;
-    size?: string | undefined;
-  } = {},
-): Promise<any[]> => {
-  const query: Record<string, any> = {};
-
-  if (filters.sku) {
-    query["variants.sku"] = String(filters.sku).trim().toUpperCase();
-  }
-
-  if (filters.color) {
-    query["variants.color"] = {
-      $regex: String(filters.color).trim(),
-      $options: "i",
-    };
-  }
-
-  if (filters.size) {
-    query["variants.size"] = {
-      $regex: String(filters.size).trim(),
-      $options: "i",
-    };
-  }
-
-  return Product.find(query)
-    .sort({ createdAt: -1 })
-    .populate("brand category")
-    .lean();
+  filters: { page?: number; limit?: number; sku?: string | undefined;
+    color?: string | undefined; size?: string | undefined } = {},
+) => {
+  const page = filters.page ?? 1;
+  const limit = filters.limit ?? 10;
+  const variants: Record<string, unknown> = {};
+  if (filters.sku) variants["sku"] = filters.sku.trim().toUpperCase();
+  if (filters.color) variants["color"] = { $regex: escapeRegex(filters.color.trim()), $options: "i" };
+  if (filters.size) variants["size"] = { $regex: escapeRegex(filters.size.trim()), $options: "i" };
+  const query = Object.keys(variants).length ? { variants: { $elemMatch: variants } } : {};
+  const [data, total] = await Promise.all([
+    Product.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
+    Product.countDocuments(query),
+  ]);
+  return { data, pagination: buildPagination(page, limit, total) };
 };
 
-const getProductBySku = async (sku: string): Promise<any | null> => {
+const getProductBySku = async (sku: string) => {
   const normalizedSku = String(sku).trim().toUpperCase();
 
   return Product.findOne({ "variants.sku": normalizedSku })
@@ -145,7 +137,7 @@ const getProductBySku = async (sku: string): Promise<any | null> => {
 const getVariantByProductAndVariantId = async (
   productId: string,
   variantId: string,
-): Promise<{ product: any; variant: any } | null> => {
+) => {
   const product = await Product.findById(productId)
     .populate("brand category")
     .lean();
@@ -155,7 +147,7 @@ const getVariantByProductAndVariantId = async (
   }
 
   const variant = product.variants.find(
-    (item: any) => String(item._id) === String(variantId),
+    (item) => String(item._id) === String(variantId),
   );
 
   if (!variant) {
@@ -165,15 +157,15 @@ const getVariantByProductAndVariantId = async (
   return { product, variant };
 };
 
-const getProductById = async (id: string): Promise<any | null> => {
+const getProductById = async (id: string) => {
   return Product.findById(id).populate("brand category").lean();
 };
 
-const createProduct = async (payload: ProductInput): Promise<any> => {
+const createProduct = async (payload: ProductInput) => {
   const name = payload.product_name?.trim();
 
   if (!name) {
-    throw new Error("Tên sản phẩm là bắt buộc");
+    throw createHttpError(400, "Tên sản phẩm là bắt buộc");
   }
 
   const baseSlug = payload.slug?.trim() || buildSlug(name);
@@ -202,13 +194,9 @@ const createProduct = async (payload: ProductInput): Promise<any> => {
         ? Math.min(...variantPriceList)
         : 0;
 
-  const computedStock =
-    payload.stock != null
-      ? Number(payload.stock)
-      : normalizedVariants.reduce(
-          (sum, variant) => sum + Number(variant.stock ?? 0),
-          0,
-        );
+  const computedStock = normalizedVariants.length
+    ? normalizedVariants.reduce((sum, variant) => sum + Number(variant.stock ?? 0), 0)
+    : Number(payload.stock ?? 0);
 
   const thumbnail =
     payload.thumbnail?.trim() ||
@@ -231,7 +219,7 @@ const createProduct = async (payload: ProductInput): Promise<any> => {
 const updateProduct = async (
   id: string,
   payload: Partial<ProductInput>,
-): Promise<any | null> => {
+) => {
   const existing = await Product.findById(id);
 
   if (!existing) return null;
@@ -271,12 +259,10 @@ const updateProduct = async (
       updated.price = Math.min(...variantPriceList);
     }
 
-    if (payload.stock == null && normalizedVariants.length > 0) {
-      updated.stock = normalizedVariants.reduce(
+    updated.stock = normalizedVariants.reduce(
         (sum, variant) => sum + Number(variant.stock ?? 0),
         0,
       );
-    }
 
     if (!payload.thumbnail && normalizedVariants.length > 0) {
       const firstVariantImage = normalizedVariants.find((variant) =>
@@ -288,18 +274,32 @@ const updateProduct = async (
     }
   }
 
-  const product = await Product.findByIdAndUpdate(id, updated, {
-    new: true,
-    runValidators: true,
-  });
-
-  return product ? product.toObject() : null;
+  if (Array.isArray(payload.variants)) {
+    if (payload.variants.length && await Order.exists({ orderStatus: { $in: [1, 2] },
+      orderItems: { $elemMatch: { productId: id, variantId: { $exists: false } } } })) {
+      throw createHttpError(409, "Complete legacy product orders before adding variants");
+    }
+    const retained = new Set(payload.variants.map((variant) => variant._id).filter(Boolean));
+    const removed = existing.variants.filter((variant) => !retained.has(String(variant._id)));
+    if (removed.length && await Order.exists({ orderStatus: { $in: [1, 2] },
+      orderItems: { $elemMatch: { productId: id, variantId: { $in: removed.map((variant) => variant._id) } } } })) {
+      throw createHttpError(409, "Cannot remove variants reserved by open orders");
+    }
+  } else if (existing.variants.length && payload.stock !== undefined) {
+    throw createHttpError(400, "Update stock on individual variants");
+  }
+  existing.set(updated);
+  await existing.save();
+  return existing.toObject();
 };
 
-const deleteProduct = async (id: string): Promise<any | null> => {
-  const product = await Product.findByIdAndDelete(id);
+const deleteProduct = async (id: string) => mongoose.connection.transaction(async (session) => {
+  if (await Order.exists({ "orderItems.productId": id }).session(session)) {
+    throw createHttpError(409, "Cannot delete products referenced by orders");
+  }
+  const product = await Product.findByIdAndDelete(id, { session });
   return product ? product.toObject() : null;
-};
+});
 
 export default {
   getAllProducts,

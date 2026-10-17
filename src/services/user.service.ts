@@ -1,107 +1,43 @@
-import { User, type IUser } from "../models/user.model.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken"; // <-- 1. Import jsonwebtoken
+import argon2 from "argon2";
 import createHttpError from "http-errors";
+import { User } from "../models/user.model.js";
+import { escapeRegex } from "../utils/search.js";
+import { buildPagination } from "../utils/pagination.js";
+import type { CreateUserInput, UpdateUserInput, GetUsersQuery } from "../validations/user.validation.js";
 
 export const UserService = {
-  // Lấy danh sách toàn bộ user (ẩn mật khẩu đi)
-  async getAllUsers() {
-    return await User.find().select("-password");
+  async getAllUsers({ page, limit, search }: GetUsersQuery) {
+    const filter = search ? { $or: ["firstName", "lastName", "email"].map((field) => ({
+      [field]: new RegExp(escapeRegex(search), "i"),
+    })) } : {};
+    const [data, total] = await Promise.all([
+      User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      User.countDocuments(filter),
+    ]);
+    return { data, pagination: buildPagination(page, limit, total) };
   },
-
-  // Lấy chi tiết 1 user theo ID
-  async getUserById(userId: string) {
-    const user = await User.findById(userId).select("-password");
-    if (!user) throw createHttpError(404, "Không tìm thấy người dùng");
+  async getUserById(id: string) {
+    const user = await User.findById(id);
+    if (!user) throw createHttpError(404, "User not found");
     return user;
   },
-
-  // Tạo mới user
-  async createUser(userData: Partial<IUser>) {
-    // Kiểm tra nếu có truyền email thì mới query tìm kiếm
-    if (userData.email) {
-      const existingUser = await User.findOne({ email: userData.email });
-      if (existingUser)
-        throw createHttpError(400, "Email đã tồn tại trong hệ thống");
-    }
-
-    if (userData.password) {
-      const salt = await bcrypt.genSalt(10);
-      userData.password = await bcrypt.hash(userData.password, salt);
-    }
-
-    const newUser = new User(userData);
-    return await newUser.save();
+  async createUser(input: CreateUserInput) {
+    if (await User.exists({ email: input.email })) throw createHttpError(409, "Email already exists");
+    return User.create({ ...input, password: await argon2.hash(input.password) });
   },
-
-  // --- 2. THÊM HÀM LOGIN NÀY VÀO ---
-  async loginUser(loginData: { email: string; password: string }) {
-    if (!loginData.email || !loginData.password) {
-      throw createHttpError(400, "Vui lòng cung cấp đầy đủ email và mật khẩu!");
-    }
-
-    // Tìm user theo email (cần lấy cả trường password vì trong model có thể bị select: false)
-    const user = await User.findOne({ email: loginData.email }).select(
-      "+password",
-    );
-    if (!user) {
-      throw createHttpError(401, "Email hoặc mật khẩu không chính xác!");
-    }
-
-    // So sánh mật khẩu
-    const hashedPassword = user.password as string;
-    const isPasswordValid = await bcrypt.compare(
-      loginData.password,
-      hashedPassword,
-    );
-    if (!isPasswordValid) {
-      throw createHttpError(401, "Email hoặc mật khẩu không chính xác!");
-    }
-
-    // Tạo JWT Token
-    const secretKey = process.env["JWT_SECRET"] || "default_secret_key_123";
-    const token = jwt.sign(
-      {
-        id: user._id.toString(),
-        role: user.role,
-      },
-      secretKey,
-      { expiresIn: "1d" }, // Token có hạn 1 ngày
-    );
-
-    return {
-      message: "Đăng nhập thành công",
-      token,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-      },
+  async updateUser(id: string, input: UpdateUserInput) {
+    const { password, ...fields } = input;
+    const update = {
+      $set: { ...fields, ...(password ? { password: await argon2.hash(password) } : {}),
+        ...(password || fields.active === false ? { refreshToken: null } : {}) },
+      ...(password || fields.active === false ? { $inc: { tokenVersion: 1 } } : {}),
     };
+    const user = await User.findByIdAndUpdate(id, update, { new: true, runValidators: true });
+    if (!user) throw createHttpError(404, "User not found");
+    return user;
   },
-
-  // Cập nhật thông tin user
-  async updateUser(userId: string, updateData: Partial<IUser>) {
-    if (updateData.password) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.password = await bcrypt.hash(updateData.password, salt);
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
-      new: true,
-    }).select("-password");
-    if (!updatedUser)
-      throw createHttpError(404, "Không tìm thấy người dùng để cập nhật");
-    return updatedUser;
-  },
-
-  // Xóa user
-  async deleteUser(userId: string) {
-    const deletedUser = await User.findByIdAndDelete(userId);
-    if (!deletedUser)
-      throw createHttpError(404, "Không tìm thấy người dùng để xóa");
-    return { message: "Xóa người dùng thành công" };
+  async deleteUser(id: string) {
+    const user = await User.findByIdAndDelete(id);
+    if (!user) throw createHttpError(404, "User not found");
   },
 };

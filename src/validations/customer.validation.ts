@@ -14,11 +14,11 @@ export const createCustomerSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-export const updateCustomerSchema = createCustomerSchema.partial();
+export const updateCustomerSchema = createCustomerSchema.omit({ isActive: true }).partial().extend({ isActive: z.boolean().optional() });
 
 export const getCustomersQuerySchema = paginationSchema.extend({
   search: z.string().trim().optional(),
-  isActive: z.coerce.boolean().optional(),
+  isActive: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
 });
 
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;

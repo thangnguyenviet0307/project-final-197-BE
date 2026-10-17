@@ -1,3 +1,4 @@
+import { sendResponse } from "../helpers/response.helper.js";
 import type { NextFunction, Request, Response } from "express";
 import productService from "../services/products.service.js";
 
@@ -7,19 +8,14 @@ const getAllProducts = async (
   next: NextFunction,
 ) => {
   try {
-    const { sku, color, size } = req.query as {
-      sku?: string | undefined;
-      color?: string | undefined;
-      size?: string | undefined;
-    };
+    const filters = req.query as unknown as import("../validations/product.validation.js").GetProductsQuery;
+    const result = await productService.getAllProducts(filters);
 
-    const items = await productService.getAllProducts({ sku, color, size });
-
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Lấy danh sách sản phẩm thành công",
-      data: items,
+      ...result,
     });
   } catch (error) {
     return next(error);
@@ -35,7 +31,7 @@ const getProductBySku = async (
     const sku = req.params["sku"];
 
     if (!sku || Array.isArray(sku)) {
-      return res.status(400).json({
+      return sendResponse(res, 400, {
         success: false,
         statusCode: 400,
         message: "SKU không hợp lệ",
@@ -46,7 +42,7 @@ const getProductBySku = async (
     const product = await productService.getProductBySku(sku);
 
     if (!product) {
-      return res.status(404).json({
+      return sendResponse(res, 404, {
         success: false,
         statusCode: 404,
         message: "Không tìm thấy sản phẩm theo SKU",
@@ -54,7 +50,7 @@ const getProductBySku = async (
       });
     }
 
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Tìm sản phẩm theo SKU thành công",
@@ -80,7 +76,7 @@ const getVariantByProductAndVariantId = async (
       !variantId ||
       Array.isArray(variantId)
     ) {
-      return res.status(400).json({
+      return sendResponse(res, 400, {
         success: false,
         statusCode: 400,
         message: "productId hoặc variantId không hợp lệ",
@@ -94,7 +90,7 @@ const getVariantByProductAndVariantId = async (
     );
 
     if (!result) {
-      return res.status(404).json({
+      return sendResponse(res, 404, {
         success: false,
         statusCode: 404,
         message: "Không tìm thấy biến thể sản phẩm",
@@ -102,7 +98,7 @@ const getVariantByProductAndVariantId = async (
       });
     }
 
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Lấy biến thể sản phẩm thành công",
@@ -122,7 +118,7 @@ const getProductById = async (
     const id = req.params["id"];
 
     if (!id || Array.isArray(id)) {
-      return res.status(400).json({
+      return sendResponse(res, 400, {
         success: false,
         statusCode: 400,
         message: "ID sản phẩm không hợp lệ",
@@ -133,7 +129,7 @@ const getProductById = async (
     const product = await productService.getProductById(id);
 
     if (!product) {
-      return res.status(404).json({
+      return sendResponse(res, 404, {
         success: false,
         statusCode: 404,
         message: "Không tìm thấy sản phẩm",
@@ -141,7 +137,7 @@ const getProductById = async (
       });
     }
 
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Lấy sản phẩm thành công",
@@ -160,7 +156,7 @@ const createProduct = async (
   try {
     const product = await productService.createProduct(req.body);
 
-    return res.status(201).json({
+    return sendResponse(res, 201, {
       success: true,
       statusCode: 201,
       message: "Tạo sản phẩm thành công",
@@ -180,7 +176,7 @@ const updateProduct = async (
     const id = req.params["id"];
 
     if (!id || Array.isArray(id)) {
-      return res.status(400).json({
+      return sendResponse(res, 400, {
         success: false,
         statusCode: 400,
         message: "ID sản phẩm không hợp lệ",
@@ -191,7 +187,7 @@ const updateProduct = async (
     const product = await productService.updateProduct(id, req.body);
 
     if (!product) {
-      return res.status(404).json({
+      return sendResponse(res, 404, {
         success: false,
         statusCode: 404,
         message: "Không tìm thấy sản phẩm để cập nhật",
@@ -199,7 +195,7 @@ const updateProduct = async (
       });
     }
 
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Cập nhật sản phẩm thành công",
@@ -219,7 +215,7 @@ const deleteProduct = async (
     const id = req.params["id"];
 
     if (!id || Array.isArray(id)) {
-      return res.status(400).json({
+      return sendResponse(res, 400, {
         success: false,
         statusCode: 400,
         message: "ID sản phẩm không hợp lệ",
@@ -230,7 +226,7 @@ const deleteProduct = async (
     const product = await productService.deleteProduct(id);
 
     if (!product) {
-      return res.status(404).json({
+      return sendResponse(res, 404, {
         success: false,
         statusCode: 404,
         message: "Không tìm thấy sản phẩm để xoá",
@@ -238,7 +234,7 @@ const deleteProduct = async (
       });
     }
 
-    return res.status(200).json({
+    return sendResponse(res, 200, {
       success: true,
       statusCode: 200,
       message: "Xoá sản phẩm thành công",

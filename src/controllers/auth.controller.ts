@@ -1,3 +1,4 @@
+import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, RequestHandler } from "express";
 import {
   login as loginService,
@@ -12,7 +13,7 @@ const loginHandler: RequestHandler = asyncHandler(
     const { email, password } = req.body;
     const result = await loginService(email, password);
 
-    res.status(200).json({
+    sendResponse(res, 200, {
       success: true,
       message: "Đăng nhập thành công",
       data: result,
@@ -22,9 +23,9 @@ const loginHandler: RequestHandler = asyncHandler(
 
 const bootstrapAdminHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const result = await bootstrapAdminService(req.body);
+    const result = await bootstrapAdminService(req.body, req.get("x-bootstrap-secret"));
 
-    res.status(201).json({
+    sendResponse(res, 201, {
       success: true,
       message: "Tạo admin đầu tiên thành công",
       data: result,
@@ -37,7 +38,7 @@ const logoutHandler: RequestHandler = asyncHandler(
     const user = (req as { user?: { id: string } }).user;
     if (user) await logoutService(user.id);
 
-    res.status(200).json({
+    sendResponse(res, 200, {
       success: true,
       message: "Đăng xuất thành công",
       data: null,
@@ -49,14 +50,12 @@ const refreshHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
     if (!refreshToken) {
-      res
-        .status(400)
-        .json({ success: false, message: "Refresh token là bắt buộc" });
+      sendResponse(res, 400, { success: false, message: "Refresh token là bắt buộc" });
       return;
     }
     const result = await refreshService(refreshToken);
 
-    res.status(200).json({
+    sendResponse(res, 200, {
       success: true,
       message: "Làm mới token thành công",
       data: result,

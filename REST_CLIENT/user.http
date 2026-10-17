@@ -1,118 +1,77 @@
-//@baseUrl = https://project-final-197-be.onrender.com/api/v1/users
-@baseUrl = http://localhost:5000/api/v1/users
+# Start pnpm.cmd rest-client, then send login in auth.http.
+# Primary login must be an admin. Staff intentionally receives 403 for users APIs.
+@baseUrl = http://127.0.0.1:5001/api/v1/users
+@userId = __STAFF_USER_ID__
+@staffEmail = {{$dotenv STAFF_LOGIN_EMAIL}}
+@staffPassword = {{$dotenv STAFF_LOGIN_PASSWORD}}
 
-//KHAI BÁO TOKEN
-@adminToken =eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-@staffToken = Bearer YOUR_STAFF_JWT_TOKEN_HERE
+### List users (admin)
+GET {{baseUrl}}?page=1&limit=10
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
-@userId = 6ad0a245ae6eb7f41a5cd126
-
-### Tạo một tài khoản Admin mới để test
+### Create a staff account (admin) - ID is saved to REST_CLIENT/.env
+# @name createStaff
 POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "fullName": "Thang Admin",
-  "email": "superadmin@gmail.com",
-  "password": "AdminPassword123",
-  "role": "admin"
+  "firstName": "Staff",
+  "lastName": "Member",
+  "email": "{{staffEmail}}",
+  "password": "{{staffPassword}}",
+  "role": "staff",
+  "active": true
 }
 
-# ==========================================
-# 0. ĐĂNG NHẬP (Lấy Token)
-# ==========================================
-### Đăng nhập tài khoản Admin
-POST {{baseUrl}}/login
-Content-Type: application/json
-
-{
-  "email": "superadmin@gmail.com",
-  "password": "AdminPassword123"
-}
-# ==========================================
-# CÁC API QUẢN LÝ USER (Yêu cầu Token & Phân quyền)
-# ==========================================
-
-### 1. Lấy danh sách tất cả users (Admin hoặc Staff đều xem được)
-GET {{baseUrl}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-
-### 2. Lấy chi tiết user theo ID (Admin hoặc Staff đều xem được)
+### Get staff details
 GET {{baseUrl}}/{{userId}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
-
-### 3. Tạo mới một user (CHỈ ADMIN mới được phép - Nếu dùng @staffToken sẽ bị lỗi 403)
-POST {{baseUrl}}
-Content-Type: application/json
-Authorization: {{adminToken}}
-
-{
-  "fullName": "ronaldo",
-  "email": "ronaldo3@example.com",
-  "password": "SecurePassword123",
-  "role": "staff"
-}
-
-
-### 4. Cập nhật thông tin user theo ID (CHỈ ADMIN mới được phép)
-PATCH {{baseUrl}}/{{userId}}
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w
-
-{
-  "fullName": "ronaldo Updated"
-}
-
-
-### 5. Xóa user theo ID (CHỈ ADMIN mới được phép)
-DELETE {{baseUrl}}/{{userId}}
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDA5ZjNkYWU2ZWI3ZjQxYTVjZDEyMyIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MjA1NzY2MCwiZXhwIjoxNzkyMTQ0MDYwfQ.XHYjDqforAn3ZJ5h1GiOHu7UGEQdD0_QBFLuqp6_8-w   
-
-============================================================================================================
-# TEST PHÂN QUYỀN CHO TÀI KHOẢN STAFF
-### Tạo một tài khoản Staff mới để test
-POST {{baseUrl}}
+### Update staff (PUT, not PATCH)
+PUT {{baseUrl}}/{{userId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
-{
-  "fullName": "Staff Member",
-  "email": "staff2@example.com",
-  "password": "StaffPassword123",
-  "role": "staff"
-}
+{ "firstName": "Staff Updated" }
 
-### Đăng nhập lấy token của Staff 
-POST {{baseUrl}}/login
-Content-Type: application/json
+### Search users
+GET {{baseUrl}}?page=1&limit=10&search=Staff
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
-{
-  "email": "staff2@example.com",
-  "password": "StaffPassword123"
-}
-
-###
- @staffToken = Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhZDBhNDljYWU2ZWI3ZjQxYTVjZDEyOCIsInJvbGUiOiJzdGFmZiIsImlhdCI6MTc5MjA1ODcwNCwiZXhwIjoxNzkyMTQ1MTA0fQ.h-xeexYReAlY0nHh-GarjsvDzH0oTOYWVyht5g2VyF8
-
-
-### 6. Staff thử xem danh sách users 
+### Staff cannot list users - first send staffLogin in auth.http (expected 403)
 GET {{baseUrl}}
-Authorization: {{staffToken}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
 
-
-### 7. Staff thử tạo mới user (BỊ CHẶN - Phải trả về lỗi 403 Forbidden)
+### Staff cannot create an admin (expected 403)
 POST {{baseUrl}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
 Content-Type: application/json
-Authorization: {{staffToken}}
 
 {
-  "fullName": "Staff Hacker",
-  "email": "hacker3@example.com",
-  "password": "Password123",
+  "firstName": "Forbidden",
+  "lastName": "Admin",
+  "email": "forbidden@example.com",
+  "password": "SamplePassword123",
   "role": "admin"
 }
 
-
-### 8. Staff thử xóa user (BỊ CHẶN - Phải trả về lỗi 403 Forbidden)
+### Staff cannot delete users (expected 403)
 DELETE {{baseUrl}}/{{userId}}
-Authorization: {{staffToken}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+
+### Missing authentication (expected 401)
+GET {{baseUrl}}
+
+### Delete the test staff account - run last, only for your test account
+DELETE {{baseUrl}}/{{userId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}

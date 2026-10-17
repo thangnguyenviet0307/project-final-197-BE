@@ -4,6 +4,7 @@ import { validate } from "../../middlewares/validate.middleware.js";
 import {
   loginSchema,
   bootstrapSchema,
+  refreshSchema,
 } from "../../validations/auth.validation.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 
@@ -19,7 +20,7 @@ router.post(
   validate({ body: loginSchema }),
   authController["login"]!,
 );
-router.post("/refresh", authController["refresh"]!);
+router.post("/refresh", validate({ body: refreshSchema }), authController["refresh"]!);
 router.post("/logout", authenticate, authController["logout"]!);
 
 export default router;

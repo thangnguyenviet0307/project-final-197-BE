@@ -7,6 +7,7 @@ export interface IUser extends Document {
   lastName: string;
   role: "admin" | "staff";
   active: boolean;
+  tokenVersion: number;
   refreshToken?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -47,9 +48,11 @@ const userSchema = new Schema<IUser>(
       default: true,
       required: true,
     },
+    tokenVersion: { type: Number, default: 0, select: false },
     refreshToken: {
       type: String,
       default: null,
+      select: false,
     },
   },
   {
@@ -58,10 +61,18 @@ const userSchema = new Schema<IUser>(
   },
 );
 
-(userSchema.methods as Record<string, unknown>)["toJSON"] = function () {
-  const userObject = (this as any).toObject();
-  delete (userObject as Record<string, any>)["password"];
-  return userObject;
-};
-
+userSchema.set("toJSON", { transform: (_doc, ret) => {
+  const output = ret as unknown as Record<string, unknown>;
+  delete output["password"];
+  delete output["refreshToken"];
+  delete output["tokenVersion"];
+  return output;
+} });
+userSchema.set("toObject", { transform: (_doc, ret) => {
+  const output = ret as unknown as Record<string, unknown>;
+  delete output["password"];
+  delete output["refreshToken"];
+  delete output["tokenVersion"];
+  return output;
+} });
 export const User = model<IUser>("User", userSchema);

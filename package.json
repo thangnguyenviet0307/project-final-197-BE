@@ -7,7 +7,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "tsc && node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "tsc && node --test tests/orders.integration.mjs",
+    "rest-client": "node --watch --watch-preserve-output scripts/rest-client-proxy.mjs"
   },
   "keywords": [],
   "author": "",

@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import { timingSafeEqual } from "node:crypto";
+import { SystemLock } from "../models/system-lock.model.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
 import { User } from "../models/user.model.js";
@@ -5,18 +8,21 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-} from "../middlewares/auth.middleware.js";
+  hashToken,
+} from "../utils/token.js";
 import type { AuthUser } from "../types/auth.type.js";
 import type { CreateUserInput } from "../validations/user.validation.js";
+import { verifyPassword } from "../utils/password.js";
 
 export async function login(email: string, password: string) {
-  const user = await User.findOne({ email }).select("+password");
-  if (!user || !user.active) {
+  const user = await User.findOne({ email }).select("+password +tokenVersion");
+  // Missing active belongs to legacy accounts; explicit false/null remains disabled.
+  if (!user || (user.active !== undefined && user.active !== true)) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
   }
 
-  const valid = await argon2.verify(user.password, password);
-  if (!valid) {
+  const verification = await verifyPassword(user.password, password);
+  if (!verification.valid) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
   }
 
@@ -26,14 +32,27 @@ export async function login(email: string, password: string) {
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
-    active: user.active,
+    active: true,
+    tokenVersion: user.tokenVersion ?? 0,
   };
 
   const accessToken = generateAccessToken(authUser);
   const refreshToken = generateRefreshToken(authUser);
+  const upgradedPassword = verification.needsUpgrade ? await argon2.hash(password) : undefined;
 
-  user.refreshToken = refreshToken;
-  await user.save();
+  const updated = await User.findOneAndUpdate(
+    { _id: user._id, password: user.password,
+      $and: [
+        { $or: [{ active: true }, { active: { $exists: false } }] },
+        { $or: [{ tokenVersion: user.tokenVersion ?? 0 }, { tokenVersion: { $exists: false } }] },
+      ] },
+    { $set: {
+      refreshToken: hashToken(refreshToken), tokenVersion: user.tokenVersion ?? 0, active: true,
+      ...(upgradedPassword ? { password: upgradedPassword } : {}),
+    } },
+    { runValidators: true },
+  );
+  if (!updated) throw createHttpError(401, "Account changed; please sign in again");
 
   return {
     user: {
@@ -48,57 +67,35 @@ export async function login(email: string, password: string) {
   };
 }
 
-export async function bootstrapAdmin(input: CreateUserInput) {
-  const userCount = await User.countDocuments();
-  if (userCount > 0) {
-    throw createHttpError(
-      403,
-      "Đã có người dùng trong hệ thống, không thể bootstrap",
-    );
-  }
-
-  const hashedPassword = await argon2.hash(input.password);
-  const user = await User.create({
-    ...input,
-    password: hashedPassword,
-    role: "admin",
+export async function bootstrapAdmin(input: Omit<CreateUserInput, "role">, suppliedSecret?: string) {
+  const configured = process.env["BOOTSTRAP_SECRET"];
+  if (!configured || !suppliedSecret || !timingSafeEqual(
+    Buffer.from(hashToken(configured)), Buffer.from(hashToken(suppliedSecret)),
+  )) throw createHttpError(403, "Bootstrap is disabled or secret is invalid");
+  const password = await argon2.hash(input.password);
+  return mongoose.connection.transaction(async (session) => {
+    if (await User.countDocuments().session(session)) throw createHttpError(403, "System already initialized");
+    await SystemLock.create([{ _id: "admin-bootstrap" }], { session });
+    const user = new User({ ...input, password, role: "admin", active: true, tokenVersion: 0 });
+    const authUser: AuthUser = { id: String(user._id), email: user.email,
+      firstName: user.firstName, lastName: user.lastName, role: user.role, active: true, tokenVersion: 0 };
+    const accessToken = generateAccessToken(authUser);
+    const refreshToken = generateRefreshToken(authUser);
+    user.refreshToken = hashToken(refreshToken);
+    await user.save({ session });
+    return { user: { id: authUser.id, email: user.email, firstName: user.firstName,
+      lastName: user.lastName, role: user.role }, accessToken, refreshToken };
   });
-
-  const authUser: AuthUser = {
-    id: user._id.toString(),
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    role: user.role,
-    active: user.active,
-  };
-
-  const accessToken = generateAccessToken(authUser);
-  const refreshToken = generateRefreshToken(authUser);
-  user.refreshToken = refreshToken;
-  await user.save();
-
-  return {
-    user: {
-      id: authUser.id,
-      email: authUser.email,
-      firstName: authUser.firstName,
-      lastName: authUser.lastName,
-      role: authUser.role,
-    },
-    accessToken,
-    refreshToken,
-  };
 }
 
 export async function logout(userId: string) {
-  await User.findByIdAndUpdate(userId, { refreshToken: null });
+  await User.findByIdAndUpdate(userId, { $set: { refreshToken: null }, $inc: { tokenVersion: 1 } });
 }
 
 export async function refresh(refreshToken: string) {
   const decoded = verifyRefreshToken(refreshToken);
-  const user = await User.findById(decoded.userId).select("+refreshToken");
-  if (!user || !user.active || user.refreshToken !== refreshToken) {
+  const user = await User.findById(decoded.userId).select("+refreshToken +tokenVersion");
+  if (!user || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
     throw createHttpError(401, "Refresh token không hợp lệ");
   }
 
@@ -109,12 +106,16 @@ export async function refresh(refreshToken: string) {
     lastName: user.lastName,
     role: user.role,
     active: user.active,
+    tokenVersion: user.tokenVersion ?? 0,
   };
 
   const newAccessToken = generateAccessToken(authUser);
   const newRefreshToken = generateRefreshToken(authUser);
-  user.refreshToken = newRefreshToken;
-  await user.save();
+  const rotated = await User.findOneAndUpdate(
+    { _id: user._id, refreshToken: hashToken(refreshToken), tokenVersion: decoded.version, active: true },
+    { $set: { refreshToken: hashToken(newRefreshToken) } },
+  );
+  if (!rotated) throw createHttpError(401, "Refresh token already used");
 
   return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }

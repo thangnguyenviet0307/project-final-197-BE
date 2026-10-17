@@ -30,9 +30,9 @@ export const validate = (
       }
 
       if (schemas.query) {
-        req.query = (await schemas.query.parseAsync(
-          req.query,
-        )) as typeof req.query;
+        const query: unknown = await schemas.query.parseAsync(req.query);
+        // Express 5 exposes query as a getter; shadow it only on this request.
+        Object.defineProperty(req, "query", { value: query, writable: true, configurable: true });
       }
 
       if (schemas.params) {

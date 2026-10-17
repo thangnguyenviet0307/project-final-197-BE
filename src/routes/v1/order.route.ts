@@ -1,4 +1,5 @@
 import { Router, type Router as RouterType } from 'express';
+import createHttpError from 'http-errors';
 import { orderController } from '../../controllers/order.controller.js';
 import { authenticate, requirePermission } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
@@ -29,5 +30,21 @@ router.delete(
   validate({ params: idParamSchema }),
   orderController['deleteOrder']!,
 );
+
+// A wrong method on a known endpoint should not look like a missing order.
+router.all('/', (_req, res, next) => {
+  res.setHeader('Allow', 'GET, POST');
+  next(createHttpError(405, 'Use GET or POST /api/v1/orders'));
+});
+router.all('/:id/status', (_req, res, next) => {
+  res.setHeader('Allow', 'PATCH');
+  next(createHttpError(405, 'Use PATCH /api/v1/orders/:id/status'));
+});
+router.all('/:id', (req, res, next) => {
+  res.setHeader('Allow', 'GET, DELETE');
+  next(createHttpError(405, req.method === 'POST'
+    ? 'Create an order with POST /api/v1/orders, without an ID or /create suffix'
+    : 'Use GET or DELETE /api/v1/orders/:id; update status with PATCH /api/v1/orders/:id/status'));
+});
 
 export default router;

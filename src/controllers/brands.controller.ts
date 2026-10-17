@@ -1,3 +1,4 @@
+import { sendResponse } from "../helpers/response.helper.js";
 import type {
   Request,
   Response,
@@ -22,7 +23,7 @@ export class BrandController {
     try {
       const brands = await BrandService.getAll();
 
-      res.status(200).json({
+      sendResponse(res, 200, {
         success: true,
         message: 'Get brands successfully',
         data: brands,
@@ -46,7 +47,7 @@ export class BrandController {
         throw new ApiError(404, 'Brand not found');
       }
 
-      res.status(200).json({
+      sendResponse(res, 200, {
         success: true,
         message: 'Get brand successfully',
         data: brand,
@@ -66,7 +67,7 @@ export class BrandController {
       const data = req.body as BrandInput;
       const brand = await BrandService.create(data);
 
-      res.status(201).json({
+      sendResponse(res, 201, {
         success: true,
         message: 'Brand created successfully',
         data: brand,
@@ -92,7 +93,7 @@ export class BrandController {
         throw new ApiError(404, 'Brand not found');
       }
 
-      res.status(200).json({
+      sendResponse(res, 200, {
         success: true,
         message: 'Brand updated successfully',
         data: brand,
@@ -116,7 +117,7 @@ export class BrandController {
         throw new ApiError(404, 'Brand not found');
       }
 
-      res.status(200).json({
+      sendResponse(res, 200, {
         success: true,
         message: 'Brand deleted successfully',
         data: brand,

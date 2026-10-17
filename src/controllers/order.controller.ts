@@ -1,4 +1,5 @@
-import type { Request, Response, RequestHandler } from 'express';
+import { sendResponse } from "../helpers/response.helper.js";
+import type { Response, RequestHandler } from 'express';
 import {
   getOrders,
   getOrderById,
@@ -6,34 +7,15 @@ import {
   updateOrderStatus,
   deleteOrder,
 } from '../services/order.services.js';
-import type { AuthUser } from '../types/auth.type.js';
+import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
+import type { GetOrdersQuery, UpdateOrderStatusInput } from '../validations/order.validation.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
-
-interface AuthenticatedRequest extends Request {
-  user?: AuthUser;
-}
-
-interface GetOrdersQuery {
-  page?: string;
-  limit?: string;
-  orderStatus?: string;
-  customerId?: string;
-  userId?: string;
-}
 
 const getOrdersHandler: RequestHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const actor = req.user!;
-  const { page, limit, orderStatus, customerId, userId } = req.query as GetOrdersQuery;
+  const result = await getOrders(actor, req.query as unknown as GetOrdersQuery);
 
-  const result = await getOrders(actor, {
-    page: page ? parseInt(page, 10) : 1,
-    limit: limit ? parseInt(limit, 10) : 10,
-    orderStatus: orderStatus ? parseInt(orderStatus, 10) : undefined,
-    customerId,
-    userId,
-  });
-
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Lấy danh sách đơn hàng thành công',
     data: result.data,
@@ -47,7 +29,7 @@ const getOrderByIdHandler: RequestHandler = asyncHandler(async (req: Authenticat
 
   const order = await getOrderById(actor, id as string);
 
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Lấy chi tiết đơn hàng thành công',
     data: order,
@@ -58,7 +40,7 @@ const createOrderHandler: RequestHandler = asyncHandler(async (req: Authenticate
   const actor = req.user!;
   const order = await createOrder(actor, req.body);
 
-  res.status(201).json({
+  sendResponse(res, 201, {
     success: true,
     message: 'Tạo đơn hàng thành công',
     data: order,
@@ -68,15 +50,9 @@ const createOrderHandler: RequestHandler = asyncHandler(async (req: Authenticate
 const updateOrderStatusHandler: RequestHandler = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const actor = req.user!;
   const { id } = req.params;
-  const { orderStatus, shippingDate, userId } = req.body;
+  const order = await updateOrderStatus(actor, id as string, req.body as UpdateOrderStatusInput);
 
-  const order = await updateOrderStatus(actor, id as string, {
-    orderStatus,
-    shippingDate: shippingDate ? new Date(shippingDate) : undefined,
-    userId,
-  });
-
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Cập nhật trạng thái đơn hàng thành công',
     data: order,
@@ -88,7 +64,7 @@ const deleteOrderHandler: RequestHandler = asyncHandler(async (req: Authenticate
 
   await deleteOrder(id as string);
 
-  res.status(200).json({
+  sendResponse(res, 200, {
     success: true,
     message: 'Xóa đơn hàng thành công',
     data: null,

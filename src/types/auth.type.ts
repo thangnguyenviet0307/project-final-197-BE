@@ -5,6 +5,7 @@ export interface AuthUser {
   lastName: string;
   role: string;
   active: boolean;
+  tokenVersion?: number;
 }
 
 export interface JwtPayload {

@@ -90,3 +90,20 @@ export async function refresh(refreshToken: string) {
 
   return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }
+
+
+export async function changePassword(userId: string, input: { currentPassword: string; newPassword: string }) {
+  const user = await User.findById(userId).select("+password +tokenVersion");
+  if (!user || !user.active) throw createHttpError(401, "Session is no longer valid");
+  const verification = await verifyPassword(user.password, input.currentPassword);
+  if (!verification.valid) throw createHttpError(400, "Current password is incorrect");
+  const revocation = sessionRevocationUpdate();
+  const updated = await User.findOneAndUpdate(
+    { _id: user._id, password: user.password, active: true,
+      $or: [{ tokenVersion: user.tokenVersion ?? 0 }, { tokenVersion: { $exists: false } }] },
+    { $set: { ...revocation.$set, password: await argon2.hash(input.newPassword), mustChangePassword: false },
+      $inc: revocation.$inc },
+    { runValidators: true },
+  );
+  if (!updated) throw createHttpError(409, "Account changed; please sign in again");
+}

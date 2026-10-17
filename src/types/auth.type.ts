@@ -5,6 +5,7 @@ export interface AuthUser {
   lastName: string;
   role: string;
   active: boolean;
+  mustChangePassword?: boolean;
   tokenVersion?: number;
 }
 

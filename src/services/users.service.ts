@@ -38,14 +38,14 @@ export const UserService = {
   },
   async createUser(input: CreateUserInput) {
     if (await User.exists({ email: input.email })) throw createHttpError(409, "Email already exists");
-    return User.create({ ...input, password: await argon2.hash(input.password) });
+    return User.create({ ...input, mustChangePassword: true, password: await argon2.hash(input.password) });
   },
   async updateUser(id: string, input: UpdateUserInput) {
     const { password, ...fields } = input;
     const shouldRevokeSessions = Boolean(password || fields.active === false || fields.role);
     const revocation = shouldRevokeSessions ? sessionRevocationUpdate() : undefined;
     const update = {
-      $set: { ...fields, ...(password ? { password: await argon2.hash(password) } : {}),
+      $set: { ...fields, ...(password ? { password: await argon2.hash(password), mustChangePassword: true } : {}),
         ...revocation?.$set },
       ...(revocation ? { $inc: revocation.$inc } : {}),
     };

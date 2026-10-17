@@ -7,6 +7,7 @@ export interface IUser {
   role: 'admin' | 'staff';
   active: boolean;
   tokenVersion: number;
+  mustChangePassword?: boolean;
   refreshToken?: string | null;
   createdAt: Date;
   updatedAt: Date;

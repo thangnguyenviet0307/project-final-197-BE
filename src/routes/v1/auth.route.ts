@@ -2,6 +2,7 @@ import { Router, type Router as RouterType } from "express";
 import { authController } from "../../controllers/auth.controller.js";
 import { validate } from "../../middlewares/validate.middleware.js";
 import {
+  changePasswordSchema,
   loginSchema,
   bootstrapSchema,
   refreshSchema,
@@ -26,5 +27,8 @@ router.post(
 );
 router.post("/refresh", rateLimit, validate({ body: refreshSchema }), authController["refresh"]!);
 router.post("/logout", authenticate, authController["logout"]!);
+
+router.get("/me", authenticate, authController["me"]!);
+router.post("/change-password", authenticate, rateLimit, validate({ body: changePasswordSchema }), authController["changePassword"]!);
 
 export default router;

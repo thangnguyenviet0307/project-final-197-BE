@@ -1,3 +1,7 @@
+import { toPublicUser } from "../utils/user-mapper.js";
+import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
+import { changePassword } from "../services/auth.service.js";
+import createHttpError from "http-errors";
 import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, RequestHandler } from "express";
 import {
@@ -64,6 +68,17 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
+  me: asyncHandler(async (req, res) => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) throw createHttpError(401, "Authentication required");
+    sendResponse(res, 200, { data: toPublicUser(user) });
+  }),
+  changePassword: asyncHandler(async (req, res) => {
+    const user = (req as AuthenticatedRequest).user;
+    if (!user) throw createHttpError(401, "Authentication required");
+    await changePassword(user.id, req.body);
+    sendResponse(res, 200, { message: "Password changed. Please sign in again.", data: null });
+  }),
   login: loginHandler,
   bootstrapAdmin: bootstrapAdminHandler,
   logout: logoutHandler,

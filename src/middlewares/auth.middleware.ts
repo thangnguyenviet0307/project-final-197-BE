@@ -16,6 +16,11 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     if (!user || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
       throw createHttpError(401, "Phiên đăng nhập không còn hợp lệ");
     }
+    if (user.mustChangePassword && ![
+      "/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/change-password",
+    ].includes(req.originalUrl.split("?")[0] ?? "")) {
+      throw createHttpError(403, "Password change required before accessing this resource");
+    }
     (req as AuthenticatedRequest).user = toAuthUser(user);
     next();
   } catch (error) { next(error); }

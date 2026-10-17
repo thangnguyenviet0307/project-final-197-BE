@@ -38,6 +38,7 @@ const userSchema = new Schema<IUser>(
       default: true,
       required: true,
     },
+    mustChangePassword: { type: Boolean, default: false },
     tokenVersion: { type: Number, default: 0, select: false },
     refreshToken: {
       type: String,

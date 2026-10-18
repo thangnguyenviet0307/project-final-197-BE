@@ -15,7 +15,7 @@ import { updateBrandSchema } from "../dist/validations/brands.validation.js";
 import { updateCategoriesSchema } from "../dist/validations/categories.validation.js";
 import { getOrdersQuerySchema, updateOrderStatusSchema } from "../dist/validations/orders.validation.js";
 import jwt from "jsonwebtoken";
-import { escapeRegex } from "../dist/utils/search.js";
+import { accentInsensitiveRegex, escapeRegex } from "../dist/utils/search.js";
 import { User } from "../dist/models/users.model.js";
 import { UserService } from "../dist/services/users.service.js";
 import { login } from "../dist/services/auth.service.js";
@@ -153,6 +153,47 @@ test("search treats regex syntax literally", () => {
   const regex = new RegExp(escapeRegex(value));
   assert.ok(regex.test(value));
   assert.ok(!regex.test("anything else"));
+});
+
+test("user search matches Vietnamese names with or without diacritics", () => {
+  const regex = accentInsensitiveRegex("tha");
+  assert.ok(regex.test("Thái Huy"));
+  assert.ok(regex.test("Thắng"));
+  assert.ok(regex.test("tha@example.com"));
+  assert.ok(!regex.test("Linh"));
+  assert.ok(accentInsensitiveRegex("d").test("Đạt"));
+});
+
+test("user search matches each email or full-name term and preserves pagination", async (t) => {
+  let filter;
+  const query = {
+    sort: (value) => { assert.deepEqual(value, { createdAt: -1 }); return query; },
+    skip: (value) => { assert.equal(value, 5); return query; },
+    limit: async (value) => { assert.equal(value, 5); return []; },
+  };
+  t.mock.method(User, "find", (value) => { filter = value; return query; });
+  t.mock.method(User, "countDocuments", async (value) => {
+    assert.deepEqual(value, filter);
+    return 0;
+  });
+
+  const result = await UserService.getAllUsers({ page: 2, limit: 5, search: "Ada Lovelace" });
+
+  assert.equal(filter.$and.length, 2);
+  for (const [index, term] of ["Ada", "Lovelace"].entries()) {
+    const matchingTerm = filter.$and[index];
+    assert.ok(matchingTerm);
+    assert.deepEqual(matchingTerm.$or.map((condition) => Object.keys(condition)[0]), [
+      "firstName",
+      "lastName",
+      "email",
+    ]);
+    assert.ok(matchingTerm.$or.every((condition) => {
+      const regex = condition[Object.keys(condition)[0]];
+      return regex.flags.includes("i") && regex.test(term);
+    }));
+  }
+  assert.deepEqual(result.pagination, { page: 2, limit: 5, total: 0, totalPages: 0 });
 });
 
 test("partial updates never insert create defaults or reset unrelated fields", () => {

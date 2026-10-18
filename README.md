@@ -16,6 +16,7 @@ Initialize with `POST /api/v1/auth/bootstrap`, a flat JSON body containing `emai
 ## API changes and compatibility
 
 - JSON responses share `success`, `statusCode`, `message`, `data`; errors can include `errors`, lists can include `pagination`. The existing user `meta` field remains as a compatibility alias.
+- The accounts/users list supports case- and diacritic-insensitive search via `GET /api/v1/users?search=<term>&page=1&limit=10`. Search email, first or last name, or multiple terms from a full name; results remain paginated.
 - Product lists now honor `page` and `limit` (default 1 and 10); clients needing all products must paginate.
 - Auth/user request bodies are flat JSON objects. Unknown fields are stripped. Password whitespace is preserved.
 - Order items accept `{ productId, variantId?, quantity }`. A product with variants **requires** `variantId`; a simple product still accepts just `productId`. Price/SKU are read from the selected variant and snapshotted; client-supplied prices are ignored.

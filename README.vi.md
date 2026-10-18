@@ -98,6 +98,7 @@ Các interface/type được khai báo tường minh trong `src/types`, gồm ki
 Lưu ý phân biệt dữ liệu trước và sau validation: chẳng hạn `ProductInput` cho phép bỏ qua `discount`, `is_active`, `variants`, còn `CreateProductInput` yêu cầu những trường này vì Zod đã điền giá trị mặc định. Việc kiểm tra schema và ràng buộc trong Mongoose vẫn được giữ riêng theo vai trò của từng lớp.
 
 - Response JSON dùng các trường `success`, `statusCode`, `message`, `data`. Lỗi validation có thể có `errors`; danh sách có thể có `pagination`. Trường `meta` cũ của user được giữ để tương thích.
+- Danh sách accounts/users hỗ trợ tìm kiếm không phân biệt hoa thường hoặc dấu tiếng Việt qua `GET /api/v1/users?search=<từ khóa>&page=1&limit=10`. Có thể tìm theo email, tên, họ hoặc nhập nhiều từ trong tên đầy đủ; kết quả vẫn được phân trang.
 - Danh sách sản phẩm dùng `page`, `limit`, mặc định lần lượt là `1`, `10`. Muốn lấy toàn bộ phải duyệt các trang.
 - Body auth/user là JSON phẳng. Các trường không thuộc schema được loại bỏ; khoảng trắng trong mật khẩu được giữ nguyên.
 - Refresh token được lưu dưới dạng hash SHA-256 và thay mới bằng thao tác cập nhật có điều kiện. Response user không trả mật khẩu, refresh token hay phiên bản session.

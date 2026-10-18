@@ -2,7 +2,7 @@ import { OPEN_ORDER_STATUSES } from "../types/orders.type.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
 import { User } from "../models/users.model.js";
-import { escapeRegex } from "../utils/search.js";
+import { accentInsensitiveRegex } from "../utils/search.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { CreateUserInput, UpdateUserInput, GetUsersQuery } from "../types/users.type.js";
 import type { ClientSession } from "mongoose";
@@ -22,9 +22,16 @@ async function protectLastAdmin(id: string, session: ClientSession) {
 
 export const UserService = {
   async getAllUsers({ page, limit, search }: GetUsersQuery) {
-    const filter = search ? { $or: ["firstName", "lastName", "email"].map((field) => ({
-      [field]: new RegExp(escapeRegex(search), "i"),
-    })) } : {};
+    const searchTerms = search?.trim().split(/\s+/).filter(Boolean) ?? [];
+    const filter = searchTerms.length
+      ? {
+          $and: searchTerms.map((term) => ({
+            $or: ["firstName", "lastName", "email"].map((field) => ({
+              [field]: accentInsensitiveRegex(term),
+            })),
+          })),
+        }
+      : {};
     const [data, total] = await Promise.all([
       User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
       User.countDocuments(filter),

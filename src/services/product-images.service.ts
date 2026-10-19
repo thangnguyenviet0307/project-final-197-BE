@@ -51,3 +51,24 @@ export async function addProductImage(id: string, file?: Express.Multer.File) {
     throw error;
   }
 }
+
+export async function removeProductImage(id: string, publicId: string) {
+  const product = await Product.findById(id);
+  if (!product) throw createHttpError(404, 'Product not found');
+  const image = product.images.find(item => item.public_id === publicId);
+  if (!image) throw createHttpError(404, 'Gallery image not found');
+  if (product.variants.some(variant => variant.image === image.secure_url || variant.images.includes(image.secure_url))) {
+    throw createHttpError(409, 'Remove this image from variants before deleting it from the gallery');
+  }
+  const storage = configureCloudinary();
+  product.images.splice(product.images.indexOf(image), 1);
+  if (product.thumbnail === image.secure_url) product.thumbnail = product.images[0]?.secure_url ?? null;
+  await product.save();
+  let cleanupPending = false;
+  try {
+    const result: { result?: string } = await storage.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+    cleanupPending = result.result !== 'ok' && result.result !== 'not found';
+  } catch { cleanupPending = true; }
+  if (cleanupPending) console.error('Gallery image unlinked but storage cleanup failed');
+  return { product: product.toObject(), cleanupPending };
+}

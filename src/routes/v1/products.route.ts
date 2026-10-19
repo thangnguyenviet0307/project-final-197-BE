@@ -16,11 +16,14 @@ import {
 } from "../../validations/products.validation.js";
 
 import { parseProductImage } from "../../middlewares/product-image.middleware.js";
-import { uploadProductImage } from "../../controllers/product-images.controller.js";
+import { uploadProductImage, deleteProductImage } from "../../controllers/product-images.controller.js";
 
 const router: ExpressRouter = Router();
 
 router.use(authenticate);
+router.get('/statistics', requirePermission(Permission.ProductView), productsController.getStatistics);
+router.delete('/:id/images/:publicId', requirePermission(Permission.ProductUpdate),
+  validate({ params: z.object({ id: objectId, publicId: z.string().trim().min(1).max(255) }) }), deleteProductImage);
 
 router.post("/:id/images", requirePermission(Permission.ProductUpdate),
   validate({ params: productIdParamSchema }), parseProductImage, uploadProductImage);

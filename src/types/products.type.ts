@@ -39,6 +39,14 @@ export interface CreateProductInput extends ProductInput {
 }
 export interface UpdateProductInput extends OptionalUpdate<ProductInput> {}
 export interface GetProductsQuery extends IPaginationQuery {
+  stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' | undefined;
+  search?: string | undefined;
+  category?: string | undefined;
+  brand?: string | undefined;
+  minPrice?: number | undefined;
+  maxPrice?: number | undefined;
+  sortBy?: 'product_name' | 'price' | 'createdAt' | undefined;
+  sortOrder?: 'asc' | 'desc' | undefined;
   sku?: string | undefined;
   color?: string | undefined;
   size?: string | undefined;

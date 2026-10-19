@@ -62,7 +62,16 @@ export const updateProductSchema = createProductSchema
 export const productIdParamSchema = idParamSchema;
 
 export const getProductsQuerySchema = paginationSchema.extend({
+  stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock']).optional(),
+  search: z.string().trim().max(255).optional(),
+  category: objectId.optional(),
+  brand: objectId.optional(),
+  minPrice: z.coerce.number().finite().min(0).optional(),
+  maxPrice: z.coerce.number().finite().min(0).optional(),
+  sortBy: z.enum(['product_name', 'price', 'createdAt']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
   sku: z.string().trim().min(1).optional(),
   color: z.string().trim().optional(),
   size: z.string().trim().optional(),
-}) satisfies z.ZodType<GetProductsQuery>;
+}).refine(value => value.minPrice === undefined || value.maxPrice === undefined || value.minPrice <= value.maxPrice,
+  { path: ['maxPrice'], message: 'Maximum price must be greater than or equal to minimum price' }) satisfies z.ZodType<GetProductsQuery>;

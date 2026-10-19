@@ -19,6 +19,10 @@ const getAllProducts: RequestHandler = asyncHandler(async (
   });
 });
 
+const getStatistics: RequestHandler = asyncHandler(async (_req, res) => {
+  return sendResponse(res, 200, { data: await productService.getStatistics() });
+});
+
 const getProductBySku: RequestHandler = asyncHandler(async (
   req: Request,
   res: Response,
@@ -122,9 +126,10 @@ const deleteProduct: RequestHandler = asyncHandler(async (
 });
 
 const productsController: Record<
-  "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
+  "getStatistics" | "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
   "getProductById" | "createProduct" | "updateProduct" | "deleteProduct", RequestHandler
 > = {
+  getStatistics,
   getAllProducts,
   getProductBySku,
   getVariantByProductAndVariantId,

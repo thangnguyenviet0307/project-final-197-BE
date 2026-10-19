@@ -3,7 +3,7 @@ import { sumVariantStock } from "../utils/inventory.js";
 import { buildPagination } from "../utils/pagination.js";
 import createHttpError from "http-errors";
 import { Order } from "../models/orders.model.js";
-import { escapeRegex } from "../utils/search.js";
+import { buildProductQuery, buildProductSort } from "../utils/product-query.js";
 import Product from "../models/products.model.js";
 import { buildSlug } from "../helpers/buildSlug.helper.js";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
@@ -96,16 +96,21 @@ const getAllProducts = async (
 ) => {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 10;
-  const variants: Record<string, unknown> = {};
-  if (filters.sku) variants["sku"] = filters.sku.trim().toUpperCase();
-  if (filters.color) variants["color"] = { $regex: escapeRegex(filters.color.trim()), $options: "i" };
-  if (filters.size) variants["size"] = { $regex: escapeRegex(filters.size.trim()), $options: "i" };
-  const query = Object.keys(variants).length ? { variants: { $elemMatch: variants } } : {};
+  const query = buildProductQuery(filters);
   const [data, total] = await Promise.all([
-    Product.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
+    Product.find(query).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
     Product.countDocuments(query),
   ]);
   return { data, pagination: buildPagination(page, limit, total) };
+};
+
+const getStatistics = async () => {
+  const rows = await Product.aggregate<{ total: number; active: number; outOfStock: number; stockUnits: number }>([
+    { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: ['$is_active', 1, 0] } },
+      outOfStock: { $sum: { $cond: [{ $eq: ['$stock', 0] }, 1, 0] } }, stockUnits: { $sum: '$stock' } } },
+    { $project: { _id: 0 } },
+  ]);
+  return rows[0] ?? { total: 0, active: 0, outOfStock: 0, stockUnits: 0 };
 };
 
 const getProductBySku = async (sku: string) => {
@@ -240,7 +245,7 @@ const updateProduct = async (
 
     updated.stock = normalizedVariants.length ? sumVariantStock(normalizedVariants) : payload.stock ?? existing.stock;
 
-    if (!payload.thumbnail && normalizedVariants.length > 0) {
+    if (payload.thumbnail === undefined && !existing.thumbnail && normalizedVariants.length > 0) {
       const firstVariantImage = normalizedVariants.find((variant) =>
         Boolean(variant.image),
       )?.image;
@@ -279,6 +284,7 @@ const deleteProduct = async (id: string) => withRelationsTransaction(async (sess
 
 export default {
   getAllProducts,
+  getStatistics,
   getProductBySku,
   getVariantByProductAndVariantId,
   getProductById,

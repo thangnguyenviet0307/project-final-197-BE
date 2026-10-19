@@ -38,10 +38,8 @@ const rolePermissions: Record<Role, Permission[]> = {
     Permission.UserDelete,
   ],
   staff: [
-    // Orders - chỉ xem đơn của mình và đơn chưa phân công, tạo đơn, cập nhật trạng thái
+    // Orders - read only; own and unassigned orders
     Permission.OrderView,
-    Permission.OrderCreate,
-    Permission.OrderUpdateStatus,
     // Products - chỉ xem
     Permission.ProductView,
     // Categories - chỉ xem

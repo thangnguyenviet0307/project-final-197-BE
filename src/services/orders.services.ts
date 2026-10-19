@@ -123,8 +123,9 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
       } else product.stock -= item.quantity;
       await product.save({ session });
       orderItems.push({ productId: product._id, quantity: item.quantity,
-        price: variant?.price ?? product.price, discount: product.discount,
-        ...(variant ? { variantId: variant._id, sku: variant.sku } : {}) });
+        price: variant?.price ?? product.price, discount: product.discount, productName: product.product_name,
+        ...(variant ? { variantId: variant._id, sku: variant.sku, variantName: variant.variant_name,
+          selectedOptions: { ...variant.attributes, ...(variant.color ? { color: variant.color } : {}), ...(variant.size ? { size: variant.size } : {}) } } : {}) });
     }
     calculateOrderTotal(orderItems);
     const order = new Order({ ...input, orderCode: generateOrderCode(), customerId: new Types.ObjectId(input.customerId),

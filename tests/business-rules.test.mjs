@@ -40,18 +40,18 @@ test('variant updates preserve omitted stock and metadata; unknown or duplicate 
   t.mock.method(Order, 'exists', async () => null);
   t.mock.method(product, 'save', async (options) => { assert.equal(options.session, session); return product; });
   const variantId = String(product.variants[0]._id);
-  const parsed = updateProductSchema.parse({ variants: [{ _id: variantId, sku: 'NEW-SKU', price: 12 }] });
+  const parsed = updateProductSchema.parse({ expectedVersion: 0, variants: [{ _id: variantId, sku: 'NEW-SKU', price: 12 }] });
   await productService.updateProduct(String(product._id), parsed);
   assert.equal(product.stock, 5);
   assert.equal(product.variants[0].stock, 5);
   assert.equal(product.variants[0].color, 'black');
   assert.deepEqual([...product.variants[0].images], ['image.jpg']);
   assert.deepEqual(product.variants[0].attributes, { material: 'cotton' });
-  await assert.rejects(productService.updateProduct(String(product._id), { variants: [{ _id: String(id()), sku: 'BAD-SKU', price: 1 }] }), { status: 400 });
-  await assert.rejects(productService.updateProduct(String(product._id), { variants: [
+  await assert.rejects(productService.updateProduct(String(product._id), { expectedVersion: 0, variants: [{ _id: String(id()), sku: 'BAD-SKU', price: 1 }] }), { status: 400 });
+  await assert.rejects(productService.updateProduct(String(product._id), { expectedVersion: 0, variants: [
     { _id: variantId, sku: 'SKU-A', price: 1 }, { _id: variantId, sku: 'SKU-B', price: 2 },
   ] }), { status: 400 });
-  await productService.updateProduct(String(product._id), { variants: [], stock: 8 });
+  await productService.updateProduct(String(product._id), { expectedVersion: 0, variants: [], stock: 8 });
   assert.equal(product.stock, 8);
 });
 
@@ -166,4 +166,23 @@ test('authentication rate limit returns 429 and Retry-After before calling the h
   assert.equal(blocked.status, 429);
   assert.ok(Number(blocked.headers.get('retry-after')) > 0);
   assert.equal(called, 2);
+});
+
+
+test('inventory writes require the version read by the client and reject stale stock', async (t) => {
+  const product = new Product({ stock: 9, __v: 2, variants: [{ sku: 'STOCK-1', price: 10, stock: 9 }] });
+  t.mock.method(Product, 'findById', () => query(product));
+  const save = t.mock.method(product, 'save', async () => product);
+  const variants = [{ _id: String(product.variants[0]._id), sku: 'STOCK-1', price: 10, stock: 10 }];
+  assert.equal(updateProductSchema.safeParse({ variants }).success, false);
+  assert.equal(updateProductSchema.safeParse({ expectedVersion: 2 }).success, false);
+  await assert.rejects(productService.updateProduct(String(product._id), { variants }), { status: 400 });
+  await assert.rejects(productService.updateProduct(String(product._id), { expectedVersion: 1, variants }), { status: 409 });
+  assert.equal(product.stock, 9);
+  assert.equal(save.mock.callCount(), 0);
+  t.mock.method(Product, 'exists', async () => null);
+  t.mock.method(Order, 'exists', async () => null);
+  await productService.updateProduct(String(product._id), { expectedVersion: 2, variants });
+  assert.equal(product.stock, 10);
+  assert.equal(save.mock.callCount(), 1);
 });

@@ -19,6 +19,9 @@ export interface IOrderItem {
   productId: Types.ObjectId;
   variantId?: Types.ObjectId;
   sku?: string;
+  productName?: string;
+  variantName?: string | null;
+  selectedOptions?: Record<string, string | number | boolean | null>;
   quantity: number;
   price: number; // giá tại thời điểm đặt hàng
   discount: number; // % giảm giá tại thời điểm đặt hàng, 0 - 70

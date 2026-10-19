@@ -5,6 +5,7 @@ import { z } from "zod";
 import { objectId } from "./common.validation.js";
 
 export const createCategoriesSchema = z.object({
+  icon: z.union([z.string().trim().url().regex(/^https?:\/\//i).max(255), z.literal("")]).optional(),
   name: z
     .string("Category name must be a string")
     .trim()

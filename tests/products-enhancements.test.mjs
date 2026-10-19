@@ -115,14 +115,14 @@ test('variant stock updates retain an existing thumbnail and clear compare-at pr
   t.mock.method(Order, 'exists', async () => null);
   t.mock.method(product, 'save', async () => product);
   const variantId = String(product.variants[0]._id);
-  const update = updateProductSchema.parse({ variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4, compare_at_price: null }] });
+  const update = updateProductSchema.parse({ expectedVersion: 0, variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4, compare_at_price: null }] });
   await productService.updateProduct(String(product._id), update);
   assert.equal(product.thumbnail, 'https://images.test/custom.png');
   assert.equal(product.stock, 4);
   assert.equal(product.variants[0].compare_at_price, null);
   product.thumbnail = null;
-  await productService.updateProduct(String(product._id), { variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4 }] });
+  await productService.updateProduct(String(product._id), { expectedVersion: 0, variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4 }] });
   assert.equal(product.thumbnail, 'https://images.test/variant.png');
-  await productService.updateProduct(String(product._id), { thumbnail: null, variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4 }] });
+  await productService.updateProduct(String(product._id), { expectedVersion: 0, thumbnail: null, variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4 }] });
   assert.equal(product.thumbnail, null);
 });

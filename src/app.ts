@@ -7,6 +7,7 @@ import express, {
 
 import createError from "http-errors";
 import cors from "cors";
+import { frontendOrigins } from "./utils/auth-cookie.js";
 import path from "node:path";
 
 import brandRoutes from "./routes/v1/brands.route.js";
@@ -20,7 +21,7 @@ import { errorMiddleware } from "./middlewares/error.middleware.js";
 
 const app: Express = express();
 
-app.use(cors());
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || frontendOrigins().includes(origin)), credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.resolve(process.cwd(), "public")));

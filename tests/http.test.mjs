@@ -167,7 +167,7 @@ test("user search matches Vietnamese names with or without diacritics", () => {
 test("user search matches each email or full-name term and preserves pagination", async (t) => {
   let filter;
   const query = {
-    sort: (value) => { assert.deepEqual(value, { createdAt: -1 }); return query; },
+    sort: (value) => { assert.deepEqual(value, { createdAt: -1, _id: -1 }); return query; },
     skip: (value) => { assert.equal(value, 5); return query; },
     limit: async (value) => { assert.equal(value, 5); return []; },
   };
@@ -247,4 +247,47 @@ test("unexpected errors never disclose their internal message", async () => {
     assert.equal(body.message, "Internal server error");
     assert.equal(body.data, null);
   } finally { listener.closeAllConnections(); await new Promise((resolve) => listener.close(resolve)); }
+});
+
+
+test('user filters are applied before pagination and username sort uses a public projection', async t => {
+ const { getUsersQuerySchema } = await import('../dist/validations/users.validation.js');
+ const input=getUsersQuerySchema.parse({page:'2',limit:'10',role:'staff',active:'false',sortBy:'username',sortOrder:'desc'});
+ assert.equal(input.active,false);assert.equal(getUsersQuerySchema.safeParse({active:'invalid'}).success,false);
+ let pipeline,countFilter;
+ t.mock.method(User,'aggregate',async value=>{pipeline=value;return [];});
+ t.mock.method(User,'countDocuments',async filter=>{countFilter=filter;return 25;});
+ const result=await UserService.getAllUsers(input);
+ assert.deepEqual(pipeline[0].$match,{role:'staff',active:false});assert.deepEqual(countFilter,pipeline[0].$match);
+ assert.deepEqual(pipeline[2].$sort,{sortUsername:-1,_id:-1});assert.equal(pipeline[3].$skip,10);
+ assert.equal(pipeline.at(-1).$project.password,undefined);assert.equal(pipeline.at(-1).$project.refreshToken,undefined);
+ assert.equal(result.pagination.total,25);
+});
+
+
+test("actual auth routes issue and rotate HttpOnly browser cookies without returning refresh credentials", async t => {
+  const user = new User({ email: "cookie@example.com", firstName: "Cookie", lastName: "User", role: "staff", active: true,
+    password: await argon2.hash("CookiePassword123"), tokenVersion: 0 });
+  t.mock.method(User, "findOne", () => ({ select: async () => user }));
+  t.mock.method(User, "findById", () => ({ select: async () => user }));
+  t.mock.method(User, "findOneAndUpdate", async (_filter, update) => { user.refreshToken = update.$set.refreshToken; return user; });
+  t.mock.method(User, "findByIdAndUpdate", async () => user);
+  const headers = { Origin: "http://localhost:5173", "X-Auth-Transport": "cookie" };
+  const signedIn = await post("/api/v1/auth/login", { email: user.email, password: "CookiePassword123" }, headers);
+  assert.equal(signedIn.status, 200);
+  assert.equal(signedIn.headers.get("access-control-allow-origin"), headers.Origin);
+  assert.equal(signedIn.headers.get("access-control-allow-credentials"), "true");
+  assert.equal((await signedIn.json()).data.refreshToken, undefined);
+  const originalCookie = signedIn.headers.get("set-cookie").split(";")[0];
+  assert.match(signedIn.headers.get("set-cookie"), /HttpOnly/);
+  const rotated = await post("/api/v1/auth/refresh", {}, { ...headers, Cookie: originalCookie });
+  assert.equal(rotated.status, 200);
+  const tokens = (await rotated.json()).data;
+  assert.ok(tokens.accessToken); assert.equal(tokens.refreshToken, undefined);
+  const newCookie = rotated.headers.get("set-cookie").split(";")[0];
+  assert.notEqual(newCookie, originalCookie);
+  assert.equal((await post("/api/v1/auth/refresh", {}, { ...headers, Cookie: originalCookie })).status, 401);
+  const signedOut = await post("/api/v1/auth/logout", {}, { Authorization: `Bearer ${tokens.accessToken}` });
+  assert.equal(signedOut.status, 200);
+  assert.match(signedOut.headers.get("set-cookie"), /Expires=Thu, 01 Jan 1970/);
 });

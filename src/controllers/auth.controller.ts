@@ -1,3 +1,4 @@
+import { authResponse, clearRefreshCookie } from "../utils/auth-cookie.js";
 import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
@@ -21,7 +22,7 @@ const loginHandler: RequestHandler = asyncHandler(
     sendResponse(res, 200, {
       success: true,
       message: "Đăng nhập thành công",
-      data: result,
+      data: authResponse(req, res, result),
     });
   },
 );
@@ -33,7 +34,7 @@ const bootstrapAdminHandler: RequestHandler = asyncHandler(
     sendResponse(res, 201, {
       success: true,
       message: "Tạo admin đầu tiên thành công",
-      data: result,
+      data: authResponse(req, res, result),
     });
   },
 );
@@ -42,6 +43,7 @@ const logoutHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const user = (req as { user?: { id: string } }).user;
     if (user) await logoutService(user.id);
+    clearRefreshCookie(res);
 
     sendResponse(res, 200, {
       success: true,
@@ -63,7 +65,7 @@ const refreshHandler: RequestHandler = asyncHandler(
     sendResponse(res, 200, {
       success: true,
       message: "Làm mới token thành công",
-      data: result,
+      data: authResponse(req, res, result),
     });
   },
 );
@@ -84,6 +86,7 @@ export const authController: Record<string, RequestHandler> = {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");
     await changePassword(user.id, req.body);
+    clearRefreshCookie(res);
     sendResponse(res, 200, { message: "Password changed. Please sign in again.", data: null });
   }),
   login: loginHandler,

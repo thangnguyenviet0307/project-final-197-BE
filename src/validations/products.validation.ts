@@ -54,8 +54,12 @@ export const updateProductSchema = createProductSchema
     discount: discountSchema.optional(),
     is_active: z.boolean().optional(),
     variants: z.array(productVariantSchema).optional(),
+    expectedVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   })
-  .refine(hasUpdateFields, {
+  .refine(value => (value.variants === undefined && value.stock === undefined) || value.expectedVersion !== undefined, {
+    path: ["expectedVersion"], message: "Read the product version before updating inventory or variants",
+  })
+  .refine(({ expectedVersion, ...fields }) => hasUpdateFields(fields), {
     message: UPDATE_REQUIRED_MESSAGE,
   }) satisfies z.ZodType<UpdateProductInput>;
 

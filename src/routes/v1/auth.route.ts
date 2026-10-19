@@ -13,7 +13,10 @@ import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middlewar
 import { parseProfileUpload } from "../../middlewares/profile-upload.middleware.js";
 import { updateProfileSchema } from "../../validations/profile.validation.js";
 
+import { cookieAuthTransport } from "../../utils/auth-cookie.js";
+
 const router: RouterType = Router();
+router.use(cookieAuthTransport);
 const rateLimit = createAuthRateLimit();
 
 router.post(

@@ -10,6 +10,8 @@ import {
   getOrdersQuerySchema,
   updateOrderStatusSchema,
   assignOrderSchema,
+  startOrderSchema,
+  updateOrderDatesSchema,
 } from '../../validations/orders.validation.js';
 
 const router: RouterType = Router();
@@ -33,6 +35,12 @@ router.delete(
 );
 router.patch('/:id/assignee', requirePermission(Permission.OrderAssign),
   validate({ params: idParamSchema, body: assignOrderSchema }), orderController['assignOrder']!);
+
+router.patch('/:id/start', requirePermission(Permission.OrderStart),
+  validate({ params: idParamSchema, body: startOrderSchema }), orderController['startOrder']!);
+
+router.patch('/:id/dates', requirePermission(Permission.OrderUpdateDates),
+  validate({ params: idParamSchema, body: updateOrderDatesSchema }), orderController['updateOrderDates']!);
 
 // A wrong method on a known endpoint should not look like a missing order.
 router.all('/', (_req, res, next) => {

@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
 import type { IOrder, IOrderItem } from '../types/orders.type.js';
 import { OrderStatus, PaymentType } from '../types/orders.type.js';
+import { generateOrderCode } from '../utils/order-code.js';
 import { calculateOrderTotal } from '../utils/order-total.js';
 
 // order_items: sub schema dạng embedding, mỗi item có _id riêng thay cho item_id
@@ -15,12 +16,14 @@ const orderItemSchema = new Schema<IOrderItem>({
 
 const orderSchema = new Schema<IOrder>(
   {
+    orderCode: { type: String, immutable: true, match: /^ORD-[A-HJ-NP-Z2-9]{6}$/ },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer', required: true },
     customerSnapshot: { type: new Schema({ firstName: String, lastName: String, email: String, phone: String }, { _id: false }) },
     orderStatus: { type: Number, required: true, default: OrderStatus.Pending,
       enum: [OrderStatus.Pending, OrderStatus.Processing, OrderStatus.Rejected, OrderStatus.Completed] },
     orderDate: { type: Date, required: true, default: Date.now },
     requireDate: { type: Date },
+    plannedShippingDate: { type: Date },
     shippingDate: { type: Date },
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
     orderNote: { type: String, trim: true },
@@ -43,6 +46,10 @@ const orderSchema = new Schema<IOrder>(
 orderSchema.index({ customerId: 1, orderDate: -1 });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ userId: 1 });
+orderSchema.index({ orderCode: 1 }, { unique: true, partialFilterExpression: { orderCode: { $type: 'string' } } });
+orderSchema.pre('validate', function () {
+  if (this.isNew && !this.orderCode) this.orderCode = generateOrderCode();
+});
 
 // Tổng tiền đơn hàng = Σ quantity * price * (1 - discount / 100)
 orderSchema.virtual('totalAmount').get(function (this: IOrder) {

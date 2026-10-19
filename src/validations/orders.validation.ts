@@ -37,9 +37,19 @@ export const updateOrderStatusSchema = z.object({
   userId: objectId.optional(),
 }) satisfies z.ZodType<UpdateOrderStatusInput>;
 
+export const startOrderSchema = z.object({ userId: objectId.optional() }).strict();
 export const getOrdersQuerySchema = paginationSchema.extend({
+  search: z.string().trim().max(100).optional(),
+  dateFrom: z.string().datetime({ offset: true }).pipe(z.coerce.date()).optional(),
+  dateTo: z.string().datetime({ offset: true }).pipe(z.coerce.date()).optional(),
   orderStatus: z.coerce.number().pipe(orderStatusSchema).optional(),
   customerId: objectId.optional(),
   userId: objectId.optional(),
-}) satisfies z.ZodType<GetOrdersQuery>;
+}).refine(value => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo, { message: 'Start date must not exceed end date', path: ['dateTo'] }) satisfies z.ZodType<GetOrdersQuery>;
 export const assignOrderSchema = z.object({ userId: objectId }) satisfies z.ZodType<AssignOrderInput>;
+
+export const updateOrderDatesSchema = z.object({
+  requireDate: z.string().datetime({ offset: true }).pipe(z.coerce.date()).nullable().optional(),
+  plannedShippingDate: z.string().datetime({ offset: true }).pipe(z.coerce.date()).nullable().optional(),
+  shippingDate: z.string().datetime({ offset: true }).pipe(z.coerce.date()).optional(),
+}).strict().refine(value => Object.keys(value).length > 0, { message: 'Select at least one date field' });

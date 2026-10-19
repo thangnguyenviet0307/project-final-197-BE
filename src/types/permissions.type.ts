@@ -1,6 +1,8 @@
 export enum Permission {
   // Order permissions
   OrderView = 'orders:view',
+  OrderStart = 'orders:start',
+  OrderUpdateDates = 'orders:update-dates',
   OrderViewAll = 'orders:view-all',
   OrderCreate = 'orders:create',
   OrderUpdateStatus = 'orders:update-status',

@@ -17,13 +17,13 @@ import { createOrder, updateOrderStatus } from "../dist/services/orders.services
 // Deliberately do not import dotenv: never fall back to the application's database.
 const uri = process.env.MONGODB_TEST_URI;
 if (!uri) throw new Error("Set MONGODB_TEST_URI to a dedicated replica-set test deployment");
-const dbName = `codex_test_${randomUUID().replaceAll("-", "")}`;
+const dbName = `codex_test_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
 const actor = { id: String(new mongoose.Types.ObjectId()), role: "admin" };
 const fixtures = { products: [], orders: [], customers: [], users: [], categories: [] };
 let customer;
 let brand;
 let category;
-before(async () => {
+before(async () => { try {
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 5000 });
   assert.equal(mongoose.connection.name, dbName);
   await Promise.all([Product.init(), Order.init(), Customer.init(), BrandModel.init(), Categories.init(), SystemLock.init(), User.init()]);
@@ -33,6 +33,7 @@ before(async () => {
     email: "fixture@example.com", phone: "0123456789",
     address: { street: "Test street", city: "Test city", state: "Test state" } });
   fixtures.customers.push(customer._id);
+  } catch (error) { console.error('Integration setup failed:', error.message); await mongoose.disconnect(); throw error; }
 });
 after(async () => {
   if (mongoose.connection.readyState === 1) {
@@ -147,4 +148,25 @@ test('concurrent category deletion and product creation cannot leave a dangling 
   assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
   const stored = await Product.findOne({ slug: 'race-product' });
   if (stored) assert.ok(await Categories.exists({ _id: stored.category }));
+});
+
+test('order codes, phone search and staff scheduling work on MongoDB', async () => {
+  const { startOrder, getOrders, updateOrderDates } = await import('../dist/services/orders.services.js');
+  const staff = await UserService.createUser({ email: 'schedule-staff@example.com', password: 'FixturePassword123', firstName: 'Schedule', lastName: 'Staff', role: 'staff', active: true });
+  fixtures.users.push(staff._id);
+  const staffActor = { id: String(staff._id), role: 'staff' };
+  const entry = await product(2);
+  const placed = await order([item(entry)]);
+  assert.match(placed.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
+  assert.equal((await getOrders(actor, { page: 1, limit: 10, search: placed.orderCode })).pagination.total, 1);
+  assert.ok((await getOrders(actor, { page: 1, limit: 10, search: '0123456789' })).data.some(value => String(value._id) === String(placed._id)));
+  await assert.rejects(updateOrderDates(staffActor, String(placed._id), { requireDate: new Date(Date.now() + 86400000) }), { status: 404 });
+  await startOrder(staffActor, String(placed._id));
+  const plannedShippingDate = new Date(Date.now() + 86400000);
+  const updated = await updateOrderDates(staffActor, String(placed._id), { plannedShippingDate });
+  assert.equal(updated.orderStatus, 2);
+  assert.equal(updated.plannedShippingDate.toISOString(), plannedShippingDate.toISOString());
+  assert.equal(updated.totalAmount, placed.totalAmount);
+  const duplicate = new Order({ ...placed.toObject(), _id: new mongoose.Types.ObjectId() });
+  await assert.rejects(duplicate.save(), error => error.code === 11000);
 });

@@ -25,6 +25,8 @@ export interface IOrderItem {
 }
 
 export interface IOrder {
+  plannedShippingDate?: Date;
+  orderCode?: string;
   customerId: Types.ObjectId;
   customerSnapshot?: { firstName: string; lastName: string; email: string; phone: string };
   orderStatus: OrderStatus;
@@ -62,6 +64,9 @@ export interface UpdateOrderStatusInput {
   userId?: string | undefined;
 }
 export interface GetOrdersQuery extends IPaginationQuery {
+  search?: string | undefined;
+  dateFrom?: Date | undefined;
+  dateTo?: Date | undefined;
   orderStatus?: number | undefined;
   customerId?: string | undefined;
   userId?: string | undefined;

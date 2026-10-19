@@ -53,6 +53,7 @@ test("order reserves only the selected variant, merges duplicates and snapshots 
     { productId: String(product._id), variantId, quantity: 1 },
     { productId: String(product._id), variantId, quantity: 2 },
   ]));
+  assert.match(order.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
   assert.equal(order.orderItems.length, 1);
   assert.equal(order.orderItems[0].price, 25);
   assert.equal(order.orderItems[0].sku, "SKU-A");
@@ -202,4 +203,21 @@ test("deleting a missing order returns 404; a non-rejected order returns 409", a
   await assert.rejects(deleteOrder(String(id())), { status: 404 });
   exists = true;
   await assert.rejects(deleteOrder(String(id())), { status: 409 });
+});
+
+test('order code collisions retry the entire transaction and allocate a new code', async t => {
+  transactionHarness(t);
+  const product = new Product({ product_name: 'Case', price: 100, discount: 0, stock: 10 });
+  t.mock.method(Product, 'findById', () => ({ session: async () => new Product(product.toObject()) }));
+  t.mock.method(Product.prototype, 'save', async function () { return this; });
+  const attempts = [];
+  t.mock.method(Order.prototype, 'save', async function () {
+    attempts.push(this.orderCode);
+    if (attempts.length === 1) throw Object.assign(new Error('duplicate orderCode'), { code: 11000, keyPattern: { orderCode: 1 } });
+    return this;
+  });
+  const result = await createOrder(actor, input([{ productId: String(product._id), quantity: 1 }]));
+  assert.equal(attempts.length, 2);
+  assert.match(result.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
+  assert.equal(result.orderItems[0].quantity, 1);
 });

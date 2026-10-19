@@ -2,6 +2,8 @@ import { sendResponse } from "../helpers/response.helper.js";
 import type { Response, RequestHandler } from 'express';
 import {
   getOrders,
+  startOrder,
+  updateOrderDates,
   getOrderById,
   createOrder,
   updateOrderStatus,
@@ -76,6 +78,14 @@ export const orderController: Record<string, RequestHandler> = {
   assignOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await assignOrder(req.user!, req.params['id'] as string, req.body.userId);
     sendResponse(res, 200, { success: true, message: 'Order reassigned', data: order });
+  }),
+  startOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await startOrder(req.user!, req.params['id'] as string, req.body.userId);
+    sendResponse(res, 200, { data: order, message: 'Order started' });
+  }),
+  updateOrderDates: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    const order = await updateOrderDates(req.user!, req.params['id'] as string, req.body);
+    sendResponse(res, 200, { data: order, message: 'Order dates updated' });
   }),
   getOrders: getOrdersHandler,
   getOrderById: getOrderByIdHandler,

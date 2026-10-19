@@ -6,6 +6,8 @@ const rolePermissions: Record<Role, Permission[]> = {
   admin: [
     // Orders
     Permission.OrderView,
+    Permission.OrderStart,
+    Permission.OrderUpdateDates,
     Permission.OrderViewAll,
     Permission.OrderCreate,
     Permission.OrderUpdateStatus,
@@ -38,8 +40,10 @@ const rolePermissions: Record<Role, Permission[]> = {
     Permission.UserDelete,
   ],
   staff: [
-    // Orders - read only; own and unassigned orders
+    // Orders - view own/unassigned orders and start eligible pending orders
     Permission.OrderView,
+    Permission.OrderStart,
+    Permission.OrderUpdateDates,
     // Products - chỉ xem
     Permission.ProductView,
     // Categories - chỉ xem

@@ -18,12 +18,14 @@ export type ICategoriesDocument = ICategories & BaseDocument;
 export interface CreateCategoriesInput {
   name: string;
   description?: string | undefined;
+  icon?: string | undefined;
   parent?: string | null | undefined;
   isActive?: boolean | undefined;
 }
 export interface UpdateCategoriesInput {
   name?: string | undefined;
   description?: string | undefined;
+  icon?: string | undefined;
   parent?: string | null | undefined;
   isActive?: boolean | undefined;
 }

@@ -55,7 +55,7 @@ export async function updateCustomer(id: string, input: UpdateCustomerInput): Pr
       if (existing) throw createHttpError(409, 'Email already exists');
     }
 
-    const customer = await Customer.findByIdAndUpdate(id, input, { new: true, runValidators: true, session }).select('-__v');
+    const customer = await Customer.findByIdAndUpdate(id, input, { returnDocument: 'after', runValidators: true, session }).select('-__v');
     return customer;
   });
 }

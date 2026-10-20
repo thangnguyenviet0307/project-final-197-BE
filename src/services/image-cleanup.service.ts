@@ -16,7 +16,7 @@ export async function processImageCleanupBatch() {
     const now = new Date();
     const leaseToken = randomUUID();
     const job = await ImageCleanupJob.findOneAndUpdate({ runAt: { $lte: now }, leaseUntil: { $lte: now } },
-      { $set: { leaseToken, leaseUntil: new Date(now.getTime() + 5 * 60_000) } }, { new: true });
+      { $set: { leaseToken, leaseUntil: new Date(now.getTime() + 5 * 60_000) } }, { returnDocument: 'after' });
     if (!job) return;
     const claim = { _id: job._id, leaseToken };
     try {

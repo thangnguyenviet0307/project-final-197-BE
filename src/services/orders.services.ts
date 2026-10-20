@@ -164,7 +164,7 @@ export async function updateOrderStatus(actor: AuthUser, id: string, input: Upda
     else if (input.orderStatus === OrderStatus.Completed && !order.shippingDate) fields.shippingDate = new Date();
     const updated = await Order.findOneAndUpdate(
       { _id: id, ...orderScope(actor), orderStatus: order.orderStatus }, { $set: fields },
-      { new: true, session, runValidators: true });
+      { returnDocument: 'after', session, runValidators: true });
     if (!updated) throw createHttpError(409, "Order changed; please retry");
     if (input.orderStatus === OrderStatus.Rejected) await restoreStock(order.orderItems, session);
     return updated;
@@ -204,7 +204,7 @@ export async function startOrder(actor: AuthUser, id: string, requested?: string
       ...(!canAssign(actor) ? { userId: { $in: [new Types.ObjectId(actor.id), null] } } : {}) };
     const order = await Order.findOneAndUpdate(filter,
       { $set: { userId: new Types.ObjectId(userId), orderStatus: OrderStatus.Processing } },
-      { new: true, session, runValidators: true });
+      { returnDocument: 'after', session, runValidators: true });
     if (!order) throw createHttpError(409, 'Order is no longer pending or is assigned to another handler. Refresh and try again.');
     return order;
   });

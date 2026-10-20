@@ -36,7 +36,7 @@ test("staff can update their own profile without changing credentials or revokin
     assert.equal(filter.active, true);
     assert.deepEqual(update.$set, input);
     assert.equal(update.$inc, undefined);
-    assert.equal(options.new, true);
+    assert.equal(options.returnDocument, "after");
     assert.equal(options.runValidators, true);
     return new User({ ...user.toObject(), ...input });
   });

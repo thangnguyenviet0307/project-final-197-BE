@@ -68,7 +68,7 @@ export const UserService = {
     };
     const saveUser = async (session?: ClientSession) => {
       const user = await User.findByIdAndUpdate(id, update, {
-        new: true, runValidators: true, ...(session ? { session } : {}),
+        returnDocument: 'after', runValidators: true, ...(session ? { session } : {}),
       });
       if (!user) throw createHttpError(404, "User not found");
       return user;

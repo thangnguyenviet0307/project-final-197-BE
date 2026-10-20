@@ -102,6 +102,14 @@ test("query validation errors, protected endpoints and 404 share a JSON envelope
   }
 });
 
+test("category image URLs accept HTTP(S) links and allow clearing an image", () => {
+  assert.deepEqual(updateCategoriesSchema.parse({ icon: "https://example.com/headphones.jpg" }), {
+    icon: "https://example.com/headphones.jpg",
+  });
+  assert.deepEqual(updateCategoriesSchema.parse({ icon: "" }), { icon: "" });
+  assert.throws(() => updateCategoriesSchema.parse({ icon: "javascript:alert(1)" }));
+});
+
 test("revoked access tokens cannot access protected data", async (t) => {
   const actor = { id: "507f1f77bcf86cd799439011", tokenVersion: 0 };
   const token = generateAccessToken(actor);

@@ -1,3 +1,4 @@
+import { updateInventory } from "../services/products.service.js";
 import { assertFound } from "../utils/assert-found.js";
 import type { RequestHandler } from "express";
 import { asyncHandler } from "../utils/async-handler.util.js";
@@ -126,9 +127,13 @@ const deleteProduct: RequestHandler = asyncHandler(async (
 });
 
 const productsController: Record<
-  "getStatistics" | "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
+  "updateInventory" | "getStatistics" | "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
   "getProductById" | "createProduct" | "updateProduct" | "deleteProduct", RequestHandler
 > = {
+  updateInventory: asyncHandler(async (req, res) => {
+    const product = await updateInventory(req.params['id'] as string, req.body);
+    sendResponse(res, 200, { success: true, data: product });
+  }),
   getStatistics,
   getAllProducts,
   getProductBySku,

@@ -282,6 +282,29 @@ const updateProduct = async (
   return existing.toObject();
 });
 
+export const updateInventory = async (id: string, input: { expectedVersion: number; stock?: number | undefined; variants?: { _id: string; stock: number }[] | undefined }) => withRelationsTransaction(async session => {
+  const product = await Product.findById(id).session(session);
+  if (!product) throw createHttpError(404, "Product not found");
+  if ((product.__v ?? 0) !== input.expectedVersion) throw createHttpError(409, "Product changed. Reload before updating stock.");
+  if (product.variants.length) {
+    if (!input.variants || input.stock !== undefined) throw createHttpError(400, "Update stock on individual variants");
+    const seen = new Set<string>();
+    for (const item of input.variants) {
+      if (seen.has(item._id)) throw createHttpError(400, "Duplicate variant ID");
+      seen.add(item._id);
+      const variant = product.variants.id(item._id);
+      if (!variant) throw createHttpError(400, "Variant ID does not belong to this product");
+      variant.stock = item.stock;
+    }
+    product.stock = sumVariantStock(product.variants);
+  } else {
+    if (input.stock === undefined || input.variants !== undefined) throw createHttpError(400, "Provide product stock");
+    product.stock = input.stock;
+  }
+  await product.save({ session });
+  return product.toObject();
+});
+
 const deleteProduct = async (id: string) => withRelationsTransaction(async (session) => {
   if (await Order.exists({ "orderItems.productId": id }).session(session)) {
     throw createHttpError(409, "Cannot delete products referenced by orders");

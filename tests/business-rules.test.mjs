@@ -122,6 +122,7 @@ test('order reassignment preserves status, uses the transaction and blocks staff
   t.mock.method(User, 'exists', () => query({ _id: id() }));
   t.mock.method(order, 'save', async (options) => { assert.equal(options.session, session); return order; });
   const assignee = String(id());
+  t.mock.method(Order, "countDocuments", () => ({ session: async () => 0 }));
   await assignOrder(actor, String(order._id), assignee);
   assert.equal(String(order.userId), assignee);
   assert.equal(order.orderStatus, 2);

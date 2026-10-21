@@ -6,7 +6,7 @@ export const hasUpdateFields = (data: object): boolean => Object.keys(data).leng
 export const UPDATE_REQUIRED_MESSAGE = "At least one field is required for update";
 
 export function createEmailSchema(message?: string) {
-  return z.string().trim().email(message).toLowerCase();
+  return z.string().trim().check(z.email(message)).toLowerCase();
 }
 
 export const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ObjectId không hợp lệ');

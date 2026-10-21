@@ -31,12 +31,12 @@ test('new model documents get a fixed code on validation; legacy hydration does 
   assert.equal(Order.hydrate({ _id: actor.id }).orderCode, undefined);
   assert.ok(Order.schema.indexes().some(([keys, options]) => keys.orderCode === 1 && options.unique && options.partialFilterExpression));
 });
-test('search is bounded and order codes are matched literally without bypassing staff scope', async t => {
+test('search is bounded and order codes are matched literally while allowing staff to read all history', async t => {
   assert.equal(getOrdersQuerySchema.safeParse({ search: 'x'.repeat(101) }).success, false);
   const read = capture(t);
   await getOrders(actor, { page: 1, limit: 10, search: 'ord-a.*' });
   const filter = read();
-  assert.ok(filter.$and[0].userId);
+  assert.deepEqual(filter.$and[0], {});
   const regex = filter.$and[1].$or[0].orderCode;
   assert.equal(regex.test('ORD-A.*'), true);
   assert.equal(regex.test('ORD-ABCDEF'), false);

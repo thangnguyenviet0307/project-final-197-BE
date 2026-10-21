@@ -29,6 +29,7 @@ const orderSchema = new Schema<IOrder>(
     plannedShippingDate: { type: Date },
     shippingDate: { type: Date },
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
+    cancellationReason: { type: String, trim: true, maxlength: 1000 },
     orderNote: { type: String, trim: true },
     street: { type: String, required: true, trim: true },
     city: { type: String, required: true, trim: true },

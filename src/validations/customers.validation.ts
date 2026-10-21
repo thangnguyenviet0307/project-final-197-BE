@@ -15,7 +15,7 @@ export const createCustomerSchema = z.object({
 }) satisfies z.ZodType<CreateCustomerInput>;
 
 export const updateCustomerSchema = createCustomerSchema.omit({ isActive: true }).partial().extend({ isActive: z.boolean().optional() })
-  .refine(hasUpdateFields, { message: UPDATE_REQUIRED_MESSAGE }) satisfies z.ZodType<UpdateCustomerInput>;
+  .refine(hasUpdateFields, { error: UPDATE_REQUIRED_MESSAGE }) satisfies z.ZodType<UpdateCustomerInput>;
 
 export const getCustomersQuerySchema = paginationSchema.extend({
   search: z.string().trim().optional(),

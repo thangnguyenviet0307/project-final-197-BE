@@ -1,3 +1,4 @@
+import { updateInventorySchema } from "../../validations/products.validation.js";
 import { objectId } from "../../validations/common.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
@@ -21,6 +22,8 @@ import { uploadProductImage, deleteProductImage } from "../../controllers/produc
 const router: ExpressRouter = Router();
 
 router.use(authenticate);
+router.patch('/:id/inventory', requirePermission(Permission.ProductInventory),
+  validate({ params: productIdParamSchema, body: updateInventorySchema }), productsController.updateInventory);
 router.get('/statistics', requirePermission(Permission.ProductView), productsController.getStatistics);
 router.delete('/:id/images/:publicId', requirePermission(Permission.ProductUpdate),
   validate({ params: z.object({ id: objectId, publicId: z.string().trim().min(1).max(255) }) }), deleteProductImage);

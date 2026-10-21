@@ -38,6 +38,7 @@ export interface IOrder {
   shippingDate?: Date;
   userId?: Types.ObjectId; // User (Admin/Staff) đang phụ trách đơn
   orderNote?: string;
+  cancellationReason?: string;
   street: string;
   city: string;
   state: string;
@@ -62,6 +63,7 @@ export interface CreateOrderInput {
   orderItems: OrderItemInput[];
 }
 export interface UpdateOrderStatusInput {
+  cancellationReason?: string | undefined;
   orderStatus: number;
   shippingDate?: Date | undefined;
   userId?: string | undefined;

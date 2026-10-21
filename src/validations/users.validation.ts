@@ -17,7 +17,7 @@ export const updateUserSchema = createUserSchema.omit({ role: true, active: true
   active: z.boolean().optional(),
 }).refine(
   hasUpdateFields,
-  { message: UPDATE_REQUIRED_MESSAGE },
+  { error: UPDATE_REQUIRED_MESSAGE },
 ) satisfies z.ZodType<UpdateUserInput>;
 export const getUsersQuerySchema = paginationSchema.extend({
   role: userRoleSchema.optional(),

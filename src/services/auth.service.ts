@@ -14,6 +14,20 @@ import type { CreateUserInput } from "../types/users.type.js";
 import { verifyPassword } from "../utils/password.js";
 import { sessionRevocationUpdate } from "../utils/session.js";
 
+import type { RegisterCustomerInput } from "../types/auth.type.js";
+
+export async function registerCustomer(input: RegisterCustomerInput) {
+  if (await User.exists({ email: input.email })) {
+    throw createHttpError(409, "Email already exists");
+  }
+  const user = await User.create({
+    email: input.email, firstName: input.firstName, lastName: input.lastName,
+    password: await argon2.hash(input.password), role: "customer",
+    active: true, mustChangePassword: false, tokenVersion: 0, refreshToken: null,
+  });
+  return toPublicUser(toAuthUser(user));
+}
+
 export async function login(email: string, password: string) {
   const user = await User.findOne({ email }).select("+password +tokenVersion");
   // Missing active belongs to legacy accounts; explicit false/null remains disabled.

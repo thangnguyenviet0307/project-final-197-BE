@@ -1,3 +1,4 @@
+import { browserTokenResponse, clearRefreshCookie } from "../middlewares/browser-auth.middleware.js";
 import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
@@ -6,6 +7,7 @@ import createHttpError from "http-errors";
 import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, RequestHandler } from "express";
 import {
+  registerCustomer,
   login as loginService,
   logout as logoutService,
   refresh as refreshService,
@@ -21,7 +23,7 @@ const loginHandler: RequestHandler = asyncHandler(
     sendResponse(res, 200, {
       success: true,
       message: "Đăng nhập thành công",
-      data: result,
+      data: browserTokenResponse(req, res, result),
     });
   },
 );
@@ -42,6 +44,7 @@ const logoutHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const user = (req as { user?: { id: string } }).user;
     if (user) await logoutService(user.id);
+    clearRefreshCookie(res);
 
     sendResponse(res, 200, {
       success: true,
@@ -58,7 +61,7 @@ const refreshHandler: RequestHandler = asyncHandler(
       sendResponse(res, 400, { success: false, message: "Refresh token là bắt buộc" });
       return;
     }
-    const result = await refreshService(refreshToken);
+    const result = browserTokenResponse(req, res, await refreshService(refreshToken));
 
     sendResponse(res, 200, {
       success: true,
@@ -69,6 +72,10 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
+  register: asyncHandler(async (req, res) => {
+    const user = await registerCustomer(req.body);
+    sendResponse(res, 201, { message: "Account created. Please sign in.", data: user });
+  }),
   updateProfile: asyncHandler(async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");
@@ -84,6 +91,7 @@ export const authController: Record<string, RequestHandler> = {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");
     await changePassword(user.id, req.body);
+    clearRefreshCookie(res);
     sendResponse(res, 200, { message: "Password changed. Please sign in again.", data: null });
   }),
   login: loginHandler,

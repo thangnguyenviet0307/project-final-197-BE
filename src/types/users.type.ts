@@ -10,7 +10,7 @@ export interface IUser {
   password: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'staff' | 'customer';
   active: boolean;
   tokenVersion: number;
   mustChangePassword?: boolean;

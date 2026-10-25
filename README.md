@@ -55,3 +55,15 @@ Real replica-set integration tests are provided separately: set `MONGODB_TEST_UR
 - Startup rejects standalone MongoDB. Production startup disables automatic index creation; provision schema indexes explicitly during deployment. Shutdown closes HTTP connections and disconnects MongoDB. Build scripts stop on failures.
 
 The GitHub Actions workflow runs typecheck, unit/HTTP tests, build, and real integration tests against an isolated local MongoDB replica set. The integration suite covers rollback, overselling, exactly-once stock restoration, concurrent admin changes, category cycles, and category-delete/product-create races. A workflow added to the repository has not necessarily run yet; inspect CI results after pushing.
+
+## Customer registration
+
+POST /api/v1/auth/register accepts email, password (6–1024 characters), firstName and lastName (1–50 trimmed characters). Extra fields, including role, are rejected. Email is trimmed and lowercased. Duplicate emails return 409; invalid input returns 400. Registration uses the existing authentication rate limiter.
+
+The endpoint creates an active User with role customer and an Argon2-hashed password. It returns 201 with the public user and no session tokens. The client should then open customer sign-in and use POST /api/v1/auth/login. Customer accounts have no management permissions. No existing records are migrated. Customer contact/address records remain separate and are not created by registration.
+
+### Browser sessions
+
+Frontend origins are configured through FRONTEND_ORIGINS (comma-separated exact origins); local defaults are http://localhost:5173 and http://127.0.0.1:5173. Production must configure this list explicitly. Credentialed CORS is enabled only for allowed origins.
+
+Browser login/refresh send X-Auth-Transport: cookie and a trusted Origin. Refresh tokens use an HttpOnly, SameSite=Strict cookie scoped to /api/v1/auth (Secure in production), and are omitted from JSON. Refresh reads the cookie; logout/password changes expire it. Keep frontend and API on the same site. REST clients without the header retain the existing JSON token contract.

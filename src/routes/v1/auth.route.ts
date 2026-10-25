@@ -4,9 +4,11 @@ import { validate } from "../../middlewares/validate.middleware.js";
 import {
   changePasswordSchema,
   loginSchema,
+  registerCustomerSchema,
   bootstrapSchema,
   refreshSchema,
 } from "../../validations/auth.validation.js";
+import { browserAuth } from "../../middlewares/browser-auth.middleware.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
 
@@ -15,6 +17,7 @@ import { updateProfileSchema } from "../../validations/profile.validation.js";
 
 const router: RouterType = Router();
 const rateLimit = createAuthRateLimit();
+router.use(browserAuth);
 
 router.post(
   "/bootstrap",
@@ -22,6 +25,8 @@ router.post(
   validate({ body: bootstrapSchema }),
   authController["bootstrapAdmin"]!,
 );
+router.post("/register", rateLimit, validate({ body: registerCustomerSchema }), authController["register"]!);
+
 router.post(
   "/login",
   rateLimit,

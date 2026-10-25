@@ -1,109 +1,72 @@
-import type {
-  Request,
-  Response,
-  NextFunction,
-} from "express";
+import { sendResponse } from "../helpers/response.helper.js";
+import type { GetCustomersQuery } from "../types/customers.type.js";
+import type { Request, Response, RequestHandler } from 'express';
+import {
+  getCustomers,
+  getCustomerById,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+} from '../services/customers.service.js';
+import { asyncHandler } from '../utils/async-handler.util.js';
+import { ApiError } from '../middlewares/error.middleware.js';
 
-import { CustomerService } from "../services/customers.service.js";
+const getCustomersHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = await getCustomers(req.query as unknown as GetCustomersQuery);
+  sendResponse(res, 200, { success: true, message: 'Customers retrieved successfully', ...result });
+});
 
-export class CustomerController {
-  static async getAll(
-    _req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const customers = await CustomerService.getAll();
+const getCustomerByIdHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-      res.status(200).json({
-        success: true,
-        message: "Get customers successfully",
-        data: customers,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  const customer = await getCustomerById(id as string);
 
-  static async getById(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params["id"]);
+  sendResponse(res, 200, {
+    success: true,
+    message: 'Lấy chi tiết khách hàng thành công',
+    data: customer,
+  });
+});
 
-      const customer =
-        await CustomerService.getById(id);
+const createCustomerHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const customer = await createCustomer(req.body);
 
-      res.status(200).json({
-        success: true,
-        message: "Get customer successfully",
-        data: customer,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  sendResponse(res, 201, {
+    success: true,
+    message: 'Tạo khách hàng thành công',
+    data: customer,
+  });
+});
 
-  static async create(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const customer =
-        await CustomerService.create(req.body);
+const updateCustomerHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const customer = await updateCustomer(id as string, req.body);
 
-      res.status(201).json({
-        success: true,
-        message: "Create customer successfully",
-        data: customer,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  if (!customer) throw new ApiError(404, 'Không tìm thấy khách hàng');
 
-  static async update(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params["id"]);
+  sendResponse(res, 200, {
+    success: true,
+    message: 'Cập nhật khách hàng thành công',
+    data: customer,
+  });
+});
 
-      const customer =
-        await CustomerService.update(id, req.body);
+const deleteCustomerHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-      res.status(200).json({
-        success: true,
-        message: "Update customer successfully",
-        data: customer,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  await deleteCustomer(id as string);
 
-  static async delete(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) {
-    try {
-      const id = String(req.params["id"]);
+  sendResponse(res, 200, {
+    success: true,
+    message: 'Xóa khách hàng thành công',
+    data: null,
+  });
+});
 
-      const result =
-        await CustomerService.delete(id);
-
-      res.status(200).json({
-        success: true,
-        message: "Delete customer successfully",
-        data: result,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-}
+export const customerController: Record<string, RequestHandler> = {
+  getCustomers: getCustomersHandler,
+  getCustomerById: getCustomerByIdHandler,
+  createCustomer: createCustomerHandler,
+  updateCustomer: updateCustomerHandler,
+  deleteCustomer: deleteCustomerHandler,
+};

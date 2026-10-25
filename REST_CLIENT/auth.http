@@ -1,0 +1,156 @@
+# Start backend: pnpm.cmd dev | Start session proxy: pnpm.cmd rest-client
+# Login once here, then all .http files read tokens from REST_CLIENT/.env.
+@refreshToken = {{$dotenv REFRESH_TOKEN}}
+@email = {{$dotenv LOGIN_EMAIL}}
+@password = {{$dotenv LOGIN_PASSWORD}}
+@staffRefreshToken = {{$dotenv STAFF_REFRESH_TOKEN}}
+@staffEmail = {{$dotenv STAFF_LOGIN_EMAIL}}
+@staffPassword = {{$dotenv STAFF_LOGIN_PASSWORD}}
+@bootstrapSecret = {{$dotenv BOOTSTRAP_SECRET}}
+@baseUrl = http://127.0.0.1:5001/api/v1
+
+### ============================================
+### BOOTSTRAP - Tạo admin đầu tiên (chỉ chạy 1 lần)
+### ============================================
+# @name bootstrap
+POST {{baseUrl}}/auth/bootstrap
+x-bootstrap-secret: {{bootstrapSecret}}
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "123456",
+  "firstName": "Admin",
+  "lastName": "System",
+  "role": "admin",
+  "active": true
+}
+
+
+### ============================================
+### AUTH - Login
+### ============================================
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+
+### ============================================
+### AUTH - Refresh Token
+### ============================================
+# @name refresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+
+### ============================================
+### AUTH - Logout
+### ============================================
+# @name logout
+POST {{baseUrl}}/auth/logout
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+### ============================================
+### ERROR CASES
+### ============================================
+
+### Bootstrap when already exists
+# @name bootstrapExists
+POST {{baseUrl}}/auth/bootstrap
+x-bootstrap-secret: {{bootstrapSecret}}
+Content-Type: application/json
+
+{
+  "email": "admin2@example.com",
+  "password": "12345678",
+  "firstName": "Admin2",
+  "lastName": "Test",
+  "role": "admin"
+}
+
+### Login with wrong password
+# @name wrongPassword
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "wrongpassword"
+}
+
+### Login with non-existent email
+# @name nonExistentEmail
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "noone@example.com",
+  "password": "123456"
+}
+
+### Login with missing fields
+# @name missingFields
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Refresh with invalid token
+# @name invalidRefresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "invalid-token-here"
+}
+
+### Refresh without token
+# @name noRefresh
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{}
+
+### Logout without auth
+# @name logoutNoAuth
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json
+
+### Staff login (separate session; keeps the primary session)
+# @name staffLogin
+POST {{baseUrl}}/auth/login
+x-rest-client-session: staff
+Content-Type: application/json
+
+{
+  "email": "{{staffEmail}}",
+  "password": "{{staffPassword}}"
+}
+
+### Staff refresh (updates shared STAFF_* tokens)
+# @name staffRefresh
+POST {{baseUrl}}/auth/refresh
+x-rest-client-session: staff
+Content-Type: application/json
+
+{ "refreshToken": "{{staffRefreshToken}}" }
+
+### Staff logout (clears shared STAFF_* tokens)
+# @name staffLogout
+POST {{baseUrl}}/auth/logout
+x-rest-client-session: staff
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}

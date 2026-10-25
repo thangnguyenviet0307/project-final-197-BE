@@ -1,21 +1,77 @@
+import { objectId } from "../../validations/common.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
+import { z } from "zod";
 import productsController from "../../controllers/products.controller.js";
 import {
-  validateCreateProduct,
-  validateUpdateProduct,
-} from "../../validations/product.validation.js";
+  authenticate,
+  requirePermission,
+} from "../../middlewares/auth.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { Permission } from "../../types/permissions.type.js";
+import {
+  createProductSchema,
+  getProductsQuerySchema,
+  productIdParamSchema,
+  updateProductSchema,
+} from "../../validations/products.validation.js";
+
+import { parseProductImage } from "../../middlewares/product-image.middleware.js";
+import { uploadProductImage } from "../../controllers/product-images.controller.js";
 
 const router: ExpressRouter = Router();
 
-router.get("/sku/:sku", productsController.getProductBySku);
+router.use(authenticate);
+
+router.post("/:id/images", requirePermission(Permission.ProductUpdate),
+  validate({ params: productIdParamSchema }), parseProductImage, uploadProductImage);
+
+
+router.get(
+  "/sku/:sku",
+  requirePermission(Permission.ProductView),
+  validate({ params: z.object({ sku: z.string().trim().min(1) }) }),
+  productsController.getProductBySku,
+);
 router.get(
   "/:productId/variants/:variantId",
+  requirePermission(Permission.ProductView),
+  validate({
+    params: z.object({
+      productId: objectId,
+      variantId: objectId,
+    }),
+  }),
   productsController.getVariantByProductAndVariantId,
 );
-router.get("/", productsController.getAllProducts);
-router.post("/", validateCreateProduct, productsController.createProduct);
-router.get("/:id", productsController.getProductById);
-router.put("/:id", validateUpdateProduct, productsController.updateProduct);
-router.delete("/:id", productsController.deleteProduct);
+router.get(
+  "/",
+  requirePermission(Permission.ProductView),
+  validate({ query: getProductsQuerySchema }),
+  productsController.getAllProducts,
+);
+router.post(
+  "/",
+  requirePermission(Permission.ProductCreate),
+  validate({ body: createProductSchema }),
+  productsController.createProduct,
+);
+router.get(
+  "/:id",
+  requirePermission(Permission.ProductView),
+  validate({ params: productIdParamSchema }),
+  productsController.getProductById,
+);
+router.put(
+  "/:id",
+  requirePermission(Permission.ProductUpdate),
+  validate({ params: productIdParamSchema, body: updateProductSchema }),
+  productsController.updateProduct,
+);
+router.delete(
+  "/:id",
+  requirePermission(Permission.ProductDelete),
+  validate({ params: productIdParamSchema }),
+  productsController.deleteProduct,
+);
 
 export default router;

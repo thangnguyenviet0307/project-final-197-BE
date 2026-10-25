@@ -1,62 +1,215 @@
-@baseUrl = http://localhost:3000/api/v1/customers
+# Login in auth.http first; successful customer creation updates shared CUSTOMER_ID.
+@baseUrl = http://127.0.0.1:5001/api/v1
 
-@customerId = 6acf63b20244042072ffbd54
-
-### 1. GET ALL CUSTOMERS
-GET {{baseUrl}}
-
-### 2. CREATE CUSTOMER
-POST {{baseUrl}}
+### 1. Create Customer
+# @name createCustomer
+POST {{baseUrl}}/customers
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "first_name": "Nguyen",
-  "last_name": "Hoang",
+  "firstName": "Nguyen Van",
+  "lastName": "An",
+  "email": "nguyenvanan@example.com",
+  "phone": "0901234567",
+  "address": {
+    "street": "123 Nguyen Trai",
+    "city": "Da Nang",
+    "state": "Da Nang"
+  },
+  "isActive": true
+}
+
+### 2. Create Customer 2
+# @name createCustomer2
+POST {{baseUrl}}/customers
+x-rest-client-save-id: CUSTOMER_2_ID
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Le Thi",
+  "lastName": "Binh",
+  "email": "lethibinh@example.com",
   "phone": "0912345678",
-  "email": "hoang197@example.com",
-  "birthday": "2003-05-15",
-  "street": "123 Nguyen Trai",
-  "city": "Ho Chi Minh",
-  "state": "Vietnam",
-  "password": "Password123"
+  "address": {
+    "street": "456 Le Duan",
+    "city": "Ha Noi",
+    "state": "Ha Noi"
+  },
+  "isActive": true
 }
 
-### 3. GET CUSTOMER BY ID
-GET {{baseUrl}}/{{customerId}}
-
-### 4. UPDATE CUSTOMER
-PUT {{baseUrl}}/{{customerId}}
+### 3. Create Customer 3 (for testing)
+# @name createCustomer3
+POST {{baseUrl}}/customers
+x-rest-client-save-id: CUSTOMER_3_ID
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "first_name": "Tran",
-  "last_name": "Hoang",
+  "firstName": "Tran Van",
+  "lastName": "Cuong",
+  "email": "trancuong@example.com",
   "phone": "0987654321",
-  "city": "Da Nang"
+  "address": {
+    "street": "789 Hoang Hoa Tham",
+    "city": "Ho Chi Minh",
+    "state": "Ho Chi Minh"
+  },
+  "isActive": true
 }
 
-### 5. DELETE CUSTOMER
-DELETE {{baseUrl}}/{{customerId}}
+### 4. Get Customers List
+# @name getCustomers
+GET {{baseUrl}}/customers?page=1&limit=10
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
-### 6. TEST VALIDATION - EMPTY NAME
-POST {{baseUrl}}
+### 5. Get Customers with Search
+# @name searchCustomers
+GET {{baseUrl}}/customers?page=1&limit=10&search=tran
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### 6. Get Customers with Active Filter
+# @name getActiveCustomers
+GET {{baseUrl}}/customers?page=1&limit=10&isActive=true
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### 7. Get Customer by ID
+# @name getCustomerById
+GET {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### 8. Update Customer - requires CUSTOMER_ID from createCustomer or a selected existing record
+# @name updateCustomer
+PUT {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "first_name": "",
-  "last_name": "Hoang",
-  "phone": "0911111111",
-  "email": "test197@example.com",
-  "street": "123 ABC",
-  "city": "Hanoi",
-  "state": "Vietnam"
+  "phone": "0909998888",
+  "address": {
+    "street": "999 Hung Vuong",
+    "city": "Da Nang",
+    "state": "Da Nang"
+  }
 }
 
-### 7. TEST INVALID ID
-GET {{baseUrl}}/123
-
-### 8. TEST EMPTY UPDATE
-PUT {{baseUrl}}/{{customerId}}
+### 9. Update Customer - Deactivate (run createCustomer2 first or set CUSTOMER_2_ID)
+# @name deactivateCustomer
+PUT {{baseUrl}}/customers/{{$dotenv CUSTOMER_2_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
-{}
+{
+  "isActive": false
+}
+
+### 10. Delete Customer (run createCustomer3 first or set CUSTOMER_3_ID; test data only)
+# @name deleteCustomer
+DELETE {{baseUrl}}/customers/{{$dotenv CUSTOMER_3_ID}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### ============================================
+### ERROR CASES FOR TESTING
+### ============================================
+
+### Create customer with duplicate email
+# @name duplicateEmail
+POST {{baseUrl}}/customers
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "nguyenvanan@example.com",
+  "phone": "0999999999",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with invalid email
+# @name invalidEmail
+POST {{baseUrl}}/customers
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "not-an-email",
+  "phone": "0999999999",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with short phone
+# @name shortPhone
+POST {{baseUrl}}/customers
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Test",
+  "lastName": "Test",
+  "email": "test123@example.com",
+  "phone": "123",
+  "address": {
+    "street": "123 Test",
+    "city": "Test",
+    "state": "Test"
+  }
+}
+
+### Create customer with missing required fields
+# @name missingFields
+POST {{baseUrl}}/customers
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "email": "missing@example.com"
+}
+
+### Get non-existent customer
+# @name getNonExistentCustomer
+GET {{baseUrl}}/customers/507f1f77bcf86cd799439011
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Delete non-existent customer
+# @name deleteNonExistentCustomer
+DELETE {{baseUrl}}/customers/507f1f77bcf86cd799439011
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Unauthorized (no token)
+# @name unauthorized
+GET {{baseUrl}}/customers
+
+### Forbidden - Staff without customers:delete permission
+# @name forbiddenDelete
+DELETE {{baseUrl}}/customers/{{$dotenv CUSTOMER_ID}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}

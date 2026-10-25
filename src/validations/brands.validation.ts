@@ -1,8 +1,13 @@
+import { hasUpdateFields, UPDATE_REQUIRED_MESSAGE } from "./common.validation.js";
+import type { BrandInput, UpdateBrandInput } from "../types/brands.js";
+export type { BrandInput, UpdateBrandInput } from "../types/brands.js";
 
 import { z } from "zod";
 
 // Schema tạo thương hiệu
 export const createBrandSchema = z.object({
+  logoUrl: z.string().trim().url().max(255).optional(),
+  isActive: z.boolean().optional(),
   name: z
     .string()
     .trim()
@@ -13,21 +18,16 @@ export const createBrandSchema = z.object({
     .string()
     .trim()
     .optional(),
-});
+}) satisfies z.ZodType<BrandInput>;
 
 // Schema cập nhật thương hiệu
 export const updateBrandSchema = createBrandSchema
   .partial()
   .refine(
-    (data) => Object.keys(data).length > 0,
+    hasUpdateFields,
     {
-      message: "At least one field is required for update",
+      message: UPDATE_REQUIRED_MESSAGE,
     }
-  );
+  ) satisfies z.ZodType<UpdateBrandInput>;
 
 // TypeScript Types
-export type BrandInput = z.infer<typeof createBrandSchema>;
-
-export type UpdateBrandInput = z.infer<
-  typeof updateBrandSchema
->;

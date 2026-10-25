@@ -1,68 +1,41 @@
+import type { Request, RequestHandler } from "express";
+import type { ZodType } from "zod";
 
-import type {
-  Request,
-  Response,
-  NextFunction,
-  RequestHandler,
-} from "express";
+export interface ValidationSchema {
+  body?: ZodType;
+  query?: ZodType;
+  params?: ZodType;
+}
 
-import {
-  type ZodType,
-  type ZodTypeAny,
-  ZodError,
-} from "zod";
+const isValidationSchema = (value: ZodType | ValidationSchema): value is ValidationSchema =>
+  typeof value === "object" && value !== null && ("body" in value || "query" in value || "params" in value);
 
-// ======================================
-// Brands API - Validation Middleware
-// ======================================
+function assignValidatedData(req: Request, parsed: object): void {
+  if ("body" in parsed) req.body = parsed.body;
+  if ("query" in parsed) {
+    // Express 5 exposes query as a getter; shadow it only on this request.
+    Object.defineProperty(req, "query", { value: parsed.query, writable: true, configurable: true });
+  }
+  if ("params" in parsed) req.params = parsed.params as typeof req.params;
+}
 
-export const validate = (schema: ZodType): RequestHandler => {
-  return (req, _res, next) => {
-    const result = schema.safeParse(req.body);
-
-    if (!result.success) {
-      next(result.error);
-      return;
-    }
-
-    req.body = result.data;
+export const validate = (schema: ZodType | ValidationSchema): RequestHandler => async (req, _res, next) => {
+  try {
+    const schemas = isValidationSchema(schema) ? schema : { body: schema };
+    const parsed: { body?: unknown; query?: unknown; params?: unknown } = {};
+    if (schemas.body) parsed.body = await schemas.body.parseAsync(req.body);
+    if (schemas.query) parsed.query = await schemas.query.parseAsync(req.query);
+    if (schemas.params) parsed.params = await schemas.params.parseAsync(req.params);
+    assignValidatedData(req, parsed);
     next();
-  };
+  } catch (error) { next(error); }
 };
 
-// ======================================
-// Validation Middleware của team
-// Giữ nguyên logic hiện tại
-// ======================================
-
-export const validateData = (schema: ZodTypeAny) => {
-  return async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> => {
-    try {
-      await schema.parseAsync({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      });
-
-      next();
-    } catch (error) {
-      if (error instanceof ZodError) {
-        res.status(400).json({
-          success: false,
-          message: "Validation failed",
-          errors: error.issues.map((err) => ({
-            field: err.path.join("."),
-            message: err.message,
-          })),
-        });
-        return;
-      }
-
-      next(error);
-    }
-  };
+// Compatibility for schemas wrapping body/query/params in one object.
+export const validateData = (schema: ZodType): RequestHandler => async (req, _res, next) => {
+  try {
+    const parsed: unknown = await schema.parseAsync({ body: req.body, query: req.query, params: req.params });
+    if (typeof parsed === "object" && parsed !== null) assignValidatedData(req, parsed);
+    next();
+  } catch (error) { next(error); }
 };

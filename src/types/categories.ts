@@ -7,9 +7,23 @@ export interface ICategories {
   description?: string;
   image?: string;
   icon?: string;
-  parent?: Types.ObjectId;
+  parent?: Types.ObjectId | null;
   isActive?: boolean;
   isDeleted?: boolean;
   deletedAt?: Date | null;
 }
 export type ICategoriesDocument = ICategories & BaseDocument;
+
+// API parent IDs are strings; the stored model uses Types.ObjectId.
+export interface CreateCategoriesInput {
+  name: string;
+  description?: string | undefined;
+  parent?: string | null | undefined;
+  isActive?: boolean | undefined;
+}
+export interface UpdateCategoriesInput {
+  name?: string | undefined;
+  description?: string | undefined;
+  parent?: string | null | undefined;
+  isActive?: boolean | undefined;
+}

@@ -1,0 +1,105 @@
+# Select PRODUCT_ID/VARIANT_ID in REST_CLIENT/.env or create a test product first.
+@baseUrl = http://127.0.0.1:5001/api/v1/products
+@productId = {{$dotenv PRODUCT_ID}}
+@variantId = {{$dotenv VARIANT_ID}}
+@categoryId = {{$dotenv CATEGORY_ID}}
+@brandId = {{$dotenv BRAND_ID}}
+@primarySku = IP15P-512-BLK
+@secondarySku = IP15P-2T-BLK
+
+### Lấy danh sách sản phẩm
+GET {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Tạo sản phẩm mới
+POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "product_name": "iPhone 15 Pro",
+  "price": 29990000,
+  "discount": 10,
+  "category": "{{categoryId}}",
+  "brand": "{{brandId}}",
+  "description": "Điện thoại cao cấp",
+  "model_year": 2023,
+  "slug": "iphone-15-pro",
+  "thumbnail": "https://example.com/iphone15pro.jpg",
+  "variants": [
+    {
+      "sku": "{{primarySku}}",
+      "variant_name": "Black - 512GB",
+      "color": "Black",
+      "size": "512GB",
+      "price": 29990000,
+      "stock": 20,
+      "image": "https://example.com/iphone15pro-black.jpg",
+      "images": [
+        "https://example.com/iphone15pro-black.jpg",
+        "https://example.com/iphone15pro-black-2.jpg"
+      ],
+      "attributes": {
+        "storage": "512GB",
+        "color": "Black"
+      }
+    },
+    {
+      "sku": "{{secondarySku}}",
+      "variant_name": "Black - 2TB",
+      "color": "Black",
+      "size": "2TB",
+      "price": 33990000,
+      "stock": 12,
+      "image": "https://example.com/iphone15pro-black-256.jpg",
+      "attributes": {
+        "storage": "2TB",
+        "color": "Black"
+      }
+    }
+  ]
+}
+
+### Lấy sản phẩm theo id
+GET {{baseUrl}}/{{productId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Tìm sản phẩm theo SKU
+GET {{baseUrl}}/sku/{{primarySku}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Lọc sản phẩm theo color / size
+GET {{baseUrl}}?color=Black&size=512GB
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Lấy variant theo product id và variant id
+GET {{baseUrl}}/{{productId}}/variants/{{variantId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Cập nhật sản phẩm
+PUT {{baseUrl}}/{{productId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "description": "Updated product description",
+  "discount": 5
+}
+
+### Xoá sản phẩm
+DELETE {{baseUrl}}/{{productId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json

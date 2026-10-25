@@ -1,77 +1,27 @@
-
-import { Schema, model } from "mongoose";
-import type { ICustomer } from "../types/customers.js";
+import { Schema, model } from 'mongoose';
+import type { ICustomer } from '../types/customers.type.js';
 
 const customerSchema = new Schema<ICustomer>(
   {
-    first_name: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 50,
+    firstName: { type: String, required: true, trim: true, maxlength: 50 },
+    lastName: { type: String, required: true, trim: true, maxlength: 50 },
+    email: { type: String, required: true, trim: true, lowercase: true, unique: true },
+    phone: { type: String, required: true, trim: true },
+    address: {
+      street: { type: String, required: true, trim: true },
+      city: { type: String, required: true, trim: true },
+      state: { type: String, required: true, trim: true },
     },
-
-    last_name: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 50,
-    },
-
-    phone: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 50,
-      unique: true,
-    },
-
-    email: {
-      type: String,
-      required: true,
-      trim: true,
-      lowercase: true,
-      maxlength: 150,
-      unique: true,
-    },
-
-    birthday: {
-      type: Date,
-      default: null,
-    },
-
-    street: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 255,
-    },
-
-    city: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 50,
-    },
-
-    state: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 50,
-    },
-
-    password: {
-      type: String,
-      default: null,
-      select: false,
-    },
+    isActive: { type: Boolean, default: true },
   },
   {
     timestamps: true,
-    collection: "customers",
-  }
+    versionKey: false,
+    collection: 'customers',
+  },
 );
 
-export const CustomerModel =
-  model<ICustomer>("Customer", customerSchema);
+customerSchema.index({ phone: 1 });
+customerSchema.index({ isActive: 1 });
+
+export const Customer = model<ICustomer>('Customer', customerSchema);

@@ -1,38 +1,51 @@
-import { Router } from 'express';
-import type { Router as RouterType } from 'express';
+import { Router } from "express";
+import type { Router as RouterType } from "express";
 
-import { BrandController } from '../../controllers/brands.controller.js';
-
-import { validate } from '../../middlewares/validate.middleware.js';
-
+import { BrandController } from "../../controllers/brands.controller.js";
+import {
+  authenticate,
+  requirePermission,
+} from "../../middlewares/auth.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { Permission } from "../../types/permissions.type.js";
+import { idParamSchema } from "../../validations/common.validation.js";
 import {
   createBrandSchema,
   updateBrandSchema,
-} from '../../validations/brands.validation.js';
+} from "../../validations/brands.validation.js";
 
 const router: RouterType = Router();
 
-// GET: Lấy danh sách thương hiệu
-router.get('/', BrandController.getAll);
+router.use(authenticate);
 
-// GET: Lấy thương hiệu theo ID
-router.get('/:id', BrandController.getById);
-
-// POST: Tạo thương hiệu (validate bằng Zod)
+router.get(
+  "/",
+  requirePermission(Permission.BrandView),
+  BrandController.getAll,
+);
+router.get(
+  "/:id",
+  requirePermission(Permission.BrandView),
+  validate({ params: idParamSchema }),
+  BrandController.getById,
+);
 router.post(
-  '/',
-  validate(createBrandSchema),
-  BrandController.create
+  "/",
+  requirePermission(Permission.BrandCreate),
+  validate({ body: createBrandSchema }),
+  BrandController.create,
 );
-
-// PUT: Cập nhật thương hiệu (validate bằng Zod)
 router.put(
-  '/:id',
-  validate(updateBrandSchema),
-  BrandController.update
+  "/:id",
+  requirePermission(Permission.BrandUpdate),
+  validate({ params: idParamSchema, body: updateBrandSchema }),
+  BrandController.update,
 );
-
-// DELETE: Xóa thương hiệu
-router.delete('/:id', BrandController.delete);
+router.delete(
+  "/:id",
+  requirePermission(Permission.BrandDelete),
+  validate({ params: idParamSchema }),
+  BrandController.delete,
+);
 
 export default router;

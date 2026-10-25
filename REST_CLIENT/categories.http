@@ -1,25 +1,34 @@
-@baseUrl = https://project-final-197-be.onrender.com/api/v1/categories
-@categoryDetailsId = 6ac780788607a66d15735f1e
-@categoryId = 6ac48655544a1dab86293391
-@parentCategoryId = 6aca42f4eda4a5bd7bb9ee34
+# Detail/update/delete: choose CATEGORY_ID in REST_CLIENT/.env; missing IDs return 400.
+@baseUrl = http://127.0.0.1:5001/api/v1/categories
+@categoryDetailsId = {{$dotenv CATEGORY_ID}}
+@categoryId = {{$dotenv CATEGORY_ID}}
+@parentCategoryId = {{$dotenv PARENT_CATEGORY_ID}}
 
 ### 1. Lấy danh sách tất cả categories
 GET {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### 2. Lấy chi tiết categories theo ID (Thay thế ID thực tế vào đây)
 GET {{baseUrl}}/{{categoryDetailsId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 
 ### 3. Tạo mới một categories
 POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
-  "name": "Tai nghe",
+  "name": "Tai nghe 2",
   "description": "Các sản phẩm tai nghe chất lượng"
 }
 
 ### 4. Tạo danh mục con (Có truyền parent ID)
 POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -30,6 +39,8 @@ Content-Type: application/json
 
 ### 5. Cập nhật categories theo ID
 PUT {{baseUrl}}/{{categoryId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
 Content-Type: application/json
 
 {
@@ -39,3 +50,5 @@ Content-Type: application/json
 
 ### 6. Xóa categories theo ID
 DELETE {{baseUrl}}/{{categoryId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}

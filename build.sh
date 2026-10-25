@@ -1,4 +1,6 @@
+#!/usr/bin/env sh
+set -eu
 echo "BUILD START"
-pnpm
+pnpm install --frozen-lockfile
 pnpm build
 echo "BUILD END"

@@ -1,43 +1,62 @@
-
-import type {
-  Request,
-  Response,
-  NextFunction,
-} from "express";
+import { sendResponse } from "../helpers/response.helper.js";
+import type { Request, Response, NextFunction } from "express";
 
 import mongoose from "mongoose";
 import { ZodError } from "zod";
 
-// ===================================
-// Brands API - ApiError
-// ===================================
 export class ApiError extends Error {
   constructor(
     public statusCode: number,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-// ===================================
-// Brands API - Error Middleware
-// ===================================
+const hasDuplicateKeyError = (
+  err: unknown,
+): err is {
+  code: number;
+  keyPattern?: Record<string, unknown>;
+} => {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    err.code === 11000
+  );
+};
+
+const hasStatusCode = (
+  err: unknown,
+): err is { statusCode: number; message: string } => {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "statusCode" in err &&
+    typeof err.statusCode === "number"
+  );
+};
+
 export function errorMiddleware(
   err: unknown,
   _req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction,
 ): void {
-
-  // 1. Lỗi dữ liệu đầu vào từ Zod
+  if (res.headersSent) { _next(err); return; }
+  if (err instanceof SyntaxError && hasStatusCode(err) && err.statusCode === 400) {
+    sendResponse(res, 400, { success: false, message: "Invalid JSON request body", data: null });
+    return;
+  }
   if (err instanceof ZodError) {
-    res.status(400).json({
+    sendResponse(res, 400, {
       success: false,
+      data: null,
       message: "Validation failed",
       errors: err.issues.map((issue) => ({
-        path: issue.path,
+        field: issue.path.join("."),
         message: issue.message,
         code: issue.code,
       })),
@@ -45,62 +64,62 @@ export function errorMiddleware(
     return;
   }
 
-  // 2. Lỗi nghiệp vụ
-  if (err instanceof ApiError) {
-    res.status(err.statusCode).json({
+  if (err instanceof mongoose.Error.VersionError) {
+    sendResponse(res, 409, { success: false, message: "Data changed; please retry", data: null });
+    return;
+  }
+  if (err instanceof mongoose.Error.CastError) {
+    sendResponse(res, 400, { success: false, message: "Invalid identifier or value", data: null });
+    return;
+  }
+  if (hasDuplicateKeyError(err)) {
+    const field =
+      err.keyPattern && Object.keys(err.keyPattern).length > 0
+        ? Object.keys(err.keyPattern)[0]
+        : "field";
+
+    sendResponse(res, 409, {
       success: false,
-      message: err.message,
+      data: null,
+      message: `Duplicate value for ${field}`,
     });
     return;
   }
 
-  // 3. Lỗi trùng dữ liệu MongoDB
-  if (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    err.code === 11000
-  ) {
-    res.status(409).json({
-      success: false,
-      message: "Brand already exists",
-    });
-    return;
-  }
-
-  // 4. Lỗi Mongoose Validation
   if (err instanceof mongoose.Error.ValidationError) {
-    res.status(400).json({
+    sendResponse(res, 400, {
       success: false,
+      data: null,
       message: "Database validation failed",
       errors: Object.values(err.errors).map((error) => ({
+        field: error.path,
         message: error.message,
       })),
     });
     return;
   }
 
-  // 5. Chuyển lỗi chưa nhận diện cho handler chung
-  next(err);
+  if (hasStatusCode(err)) {
+    sendResponse(res, err.statusCode, {
+      success: false,
+      data: null,
+      message: err.statusCode >= 500 ? "Internal server error" : err.message,
+    });
+    return;
+  }
+
+  if (err instanceof Error) {
+    console.error("Unhandled API error", { name: err.name });
+    sendResponse(res, 500, {
+      success: false,
+      data: null,
+      status: 500,
+      message: "Internal server error",
+    });
+    return;
+  }
+
+  sendResponse(res, 500, { message: "Internal server error" });
 }
 
-// ===================================
-// Global Error Handler của team
-// Giữ nguyên logic hiện tại
-// ===================================
-export const errorHandler = (
-  err: any,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
-): void => {
-  const statusCode = err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-
-  res.status(statusCode).json({
-    success: false,
-    status: statusCode,
-    message: message,
-    stack: process.env['NODE_ENV'] === "development" ? err.stack : undefined,
-  });
-};
+export const errorHandler = errorMiddleware;

@@ -1,3 +1,4 @@
+import { sumVariantStock } from "../utils/inventory.js";
 import mongoose, { Schema } from "mongoose";
 
 const productVariantSchema = new Schema(
@@ -70,8 +71,17 @@ const productVariantSchema = new Schema(
   },
 );
 
+const productImageSchema = new Schema({
+  public_id: { type: String, required: true },
+  secure_url: { type: String, required: true },
+  width: Number, height: Number, format: String,
+}, { _id: false });
+
 const productSchema = new Schema(
   {
+    images: { type: [productImageSchema], default: [], validate: {
+      validator: (images: unknown[]) => images.length <= 8, message: "A product can have up to 8 images",
+    } },
     product_name: {
       type: String,
       required: true,
@@ -141,9 +151,25 @@ const productSchema = new Schema(
   {
     timestamps: true,
     collection: "products",
+    optimisticConcurrency: true,
   },
 );
 
+productSchema.pre("validate", function () {
+  if (!Number.isSafeInteger(this.stock)) this.invalidate("stock", "Stock must be a safe integer");
+  const ids = new Set<string>();
+  const skus = new Set<string>();
+  for (const variant of this.variants) {
+    if (ids.has(String(variant._id))) this.invalidate("variants", "Duplicate variant ID");
+    if (skus.has(variant.sku)) this.invalidate("variants", "Duplicate variant SKU");
+    ids.add(String(variant._id));
+    skus.add(variant.sku);
+    if (!Number.isSafeInteger(variant.stock)) this.invalidate("variants", "Variant stock must be a safe integer");
+  }
+  if (this.variants.length && this.stock !== sumVariantStock(this.variants)) {
+    this.invalidate("stock", "Stock must equal the sum of variant stocks");
+  }
+});
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 
 const Product = mongoose.model("Product", productSchema);

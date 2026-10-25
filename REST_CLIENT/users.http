@@ -1,0 +1,77 @@
+# Start pnpm.cmd rest-client, then send login in auth.http.
+# Primary login must be an admin. Staff intentionally receives 403 for users APIs.
+@baseUrl = http://127.0.0.1:5001/api/v1/users
+@userId = {{$dotenv STAFF_USER_ID}}
+@staffEmail = {{$dotenv STAFF_LOGIN_EMAIL}}
+@staffPassword = {{$dotenv STAFF_LOGIN_PASSWORD}}
+
+### List users (admin)
+GET {{baseUrl}}?page=1&limit=10
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Create a staff account (admin) - ID is saved to REST_CLIENT/.env
+# @name createStaff
+POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Staff",
+  "lastName": "Member",
+  "email": "{{staffEmail}}",
+  "password": "{{staffPassword}}",
+  "role": "staff",
+  "active": true
+}
+
+### Get staff details
+GET {{baseUrl}}/{{userId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Update staff (PUT, not PATCH)
+PUT {{baseUrl}}/{{userId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "firstName": "Staff Updated" }
+
+### Search users
+GET {{baseUrl}}?page=1&limit=10&search=Staff
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Staff cannot list users - first send staffLogin in auth.http (expected 403)
+GET {{baseUrl}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+
+### Staff cannot create an admin (expected 403)
+POST {{baseUrl}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "firstName": "Forbidden",
+  "lastName": "Admin",
+  "email": "forbidden@example.com",
+  "password": "SamplePassword123",
+  "role": "admin"
+}
+
+### Staff cannot delete users (expected 403)
+DELETE {{baseUrl}}/{{userId}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+
+### Missing authentication (expected 401)
+GET {{baseUrl}}
+
+### Delete the test staff account - run last, only for your test account
+DELETE {{baseUrl}}/{{userId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}

@@ -1,81 +1,71 @@
-import { Categories } from "../models/categories.model.js";
-import type { ICategories } from "../types/categories.js"; 
-import { buildSlug } from "../helpers/slug.helpers.js";
 import createHttpError from "http-errors";
+import type { ClientSession } from "mongoose";
+import { Categories } from "../models/categories.model.js";
+import Product from "../models/products.model.js";
+import type { ICategories } from "../types/categories.js";
+import type { CreateCategoriesInput, UpdateCategoriesInput } from "../types/categories.js";
+import { buildSlug } from "../helpers/buildSlug.helper.js";
+import { withRelationsTransaction } from "../utils/relations-transaction.js";
+
+async function validateParent(parent: string | null | undefined, session: ClientSession, id?: string) {
+  const visited = new Set(id ? [id.toLowerCase()] : []);
+  let current = parent?.toString().toLowerCase();
+  while (current) {
+    if (visited.has(current)) throw createHttpError(409, "Category hierarchy cannot contain a cycle");
+    visited.add(current);
+    const ancestor = await Categories.findOne({ _id: current, isDeleted: { $ne: true } }).session(session);
+    if (!ancestor) throw createHttpError(404, "Parent category not found");
+    current = ancestor.parent?.toString().toLowerCase();
+  }
+}
+
 export class CategoriesService {
-  // 1. Create a new category
-  public static async createCategory(data: Partial<ICategories>): Promise<ICategories> {
-    const slug = buildSlug (data.name!);
-
-    const categoriesName = data.name as string;
-    const existingCategories = await Categories.findOne({ 
-      $or: [{ name: categoriesName }, { slug }] 
-    } as any);
-
-    if (existingCategories) {
-      throw createHttpError(409, "Categories with this name or slug already exists");
-    }
-
-    const categories = new Categories({
-      ...data,
-      slug,
-    });
-
-    return await categories.save();
-  }
-
-  // 2. Get all categories
-  public static async getAllCategories(): Promise<ICategories[]> {
-    return await Categories.find().populate({ path: "parent", model: Categories, select: "name slug" }).sort({ createdAt: -1 });
-  }
-
-  // 3. Get category by ID
-  public static async getCategoryById(id: string): Promise<ICategories> {
-    const categories = await Categories.findById(id).populate({ path: "parent", model: Categories, select: "name slug" });
-    if (!categories) {
-      throw createHttpError(404, "Categories not found");
-    }
-    return categories;
-  }
-
-  // 4. Update a category
-  public static async updateCategory(id: string, data: Partial<ICategories>): Promise<ICategories> {
-    const categories = await Categories.findById(id);
-    if (!categories) {
-      throw createHttpError(404, "Categories not found");
-    }
-
-    if (data.name && data.name !== categories.name) {
-      data.slug = buildSlug(data.name);
-      
-      const categoriesName = data.name as string;
-      const categoriesSlug = data.slug as string;
-
-      const existingCategories = await Categories.findOne({ 
-        _id: { $ne: id }, 
-        $or: [{ name: categoriesName }, { slug: categoriesSlug }] 
-      } as any);
-
-      if (existingCategories) {
-        throw createHttpError(409, "Categories name or slug already exists");
+  public static async createCategory(data: CreateCategoriesInput): Promise<ICategories> {
+    return withRelationsTransaction(async (session) => {
+      await validateParent(data.parent, session);
+      const slug = buildSlug(data.name);
+      if (await Categories.exists({ $or: [{ name: data.name }, { slug }] }).session(session)) {
+        throw createHttpError(409, "Category name or slug already exists");
       }
-    }
-
-    Object.assign(categories, data);
-    return await categories.save();
+      return new Categories({ ...data, slug }).save({ session });
+    });
   }
 
-  // 5. Delete a category
-  public static async deleteCategory(id: string): Promise<void> {
-    const categories = await Categories.findById(id);
-    if (!categories) {
-      throw createHttpError(404, "Categories not found");
-    }
+  public static async getAllCategories(): Promise<ICategories[]> {
+    return Categories.find({ isDeleted: { $ne: true } })
+      .populate({ path: "parent", model: Categories, select: "name slug" }).sort({ createdAt: -1 });
+  }
 
-    await Categories.updateMany(
-      { parent: id }, 
-      { $set: { parent: null } } 
-    );
-    await Categories.findByIdAndDelete(id);
+  public static async getCategoryById(id: string): Promise<ICategories> {
+    const category = await Categories.findOne({ _id: id, isDeleted: { $ne: true } })
+      .populate({ path: "parent", model: Categories, select: "name slug" });
+    if (!category) throw createHttpError(404, "Categories not found");
+    return category;
+  }
+
+  public static async updateCategory(id: string, data: UpdateCategoriesInput): Promise<ICategories> {
+    return withRelationsTransaction(async (session) => {
+      const category = await Categories.findOne({ _id: id, isDeleted: { $ne: true } }).session(session);
+      if (!category) throw createHttpError(404, "Categories not found");
+      await validateParent(data.parent, session, id);
+      const slug = data.name ? buildSlug(data.name) : category.slug;
+      if (data.name && await Categories.exists({ _id: { $ne: id }, $or: [{ name: data.name }, { slug }] }).session(session)) {
+        throw createHttpError(409, "Category name or slug already exists");
+      }
+      category.set({ ...data, slug });
+      return category.save({ session });
+    });
+  }
+
+  public static async deleteCategory(id: string): Promise<void> {
+    return withRelationsTransaction(async (session) => {
+      const category = await Categories.findById(id).session(session);
+      if (!category) throw createHttpError(404, "Categories not found");
+      if (await Product.exists({ category: id }).session(session)) {
+        throw createHttpError(409, "Cannot delete a category referenced by products");
+      }
+      await Categories.updateMany({ parent: id }, { $set: { parent: null } }, { session });
+      await Categories.findByIdAndDelete(id, { session });
+    });
   }
 }

@@ -1,141 +1,70 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
-
-import { CustomerModel } from "../models/customers.model.js";
-import { ApiError } from "../middlewares/error.middleware.js";
-
+import createHttpError from "http-errors";
+import { escapeRegex } from "../utils/search.js";
+import { Customer } from '../models/customers.model.js';
+import { Order } from '../models/orders.model.js';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
+import type { ICustomer } from '../types/customers.type.js';
+import { buildPagination } from '../utils/pagination.js';
 import type {
   CreateCustomerInput,
+  GetCustomersQuery,
   UpdateCustomerInput,
-} from "../validations/customers.validation.js";
+} from '../types/customers.type.js';
 
-const checkId = (id: string) => {
-  if (!mongoose.isValidObjectId(id)) {
-    throw new ApiError(400, "Invalid customer ID");
+export async function getCustomers({ page, limit, search, isActive }: GetCustomersQuery) {
+  const filter: Record<string, unknown> = {};
+  if (search) {
+    filter['$or'] = [
+      { firstName: new RegExp(escapeRegex(search), 'i') },
+      { lastName: new RegExp(escapeRegex(search), 'i') },
+      { email: new RegExp(escapeRegex(search), 'i') },
+      { phone: new RegExp(escapeRegex(search), 'i') },
+    ];
   }
-};
+  if (isActive !== undefined) filter['isActive'] = isActive;
 
-export class CustomerService {
-  static async getAll() {
-    return CustomerModel.find()
-      .select("-password")
-      .sort({ createdAt: -1 });
-  }
+  const [data, total] = await Promise.all([
+    Customer.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .select('-__v'),
+    Customer.countDocuments(filter),
+  ]);
 
-  static async getById(id: string) {
-    checkId(id);
-
-    const customer = await CustomerModel.findById(id)
-      .select("-password");
-
-    if (!customer) {
-      throw new ApiError(404, "Customer not found");
-    }
-
-    return customer;
-  }
-
-  static async create(data: CreateCustomerInput) {
-  const exists = await CustomerModel.findOne({
-    $or: [
-      { email: data.email.toLowerCase() },
-      { phone: data.phone },
-    ],
-  });
-
-  if (exists) {
-    throw new ApiError(
-      409,
-      "Customer email or phone already exists"
-    );
-  }
-
-  const { password, birthday, ...customerData } = data;
-
-  const hashedPassword = password
-    ? await bcrypt.hash(password, 10)
-    : null;
-
-  const customer = new CustomerModel({
-    ...customerData,
-    ...(birthday !== undefined ? { birthday } : {}),
-    password: hashedPassword,
-  });
-
-  await customer.save();
-
-  const result = customer.toObject();
-  delete result.password;
-
-  return result;
+  return { data, pagination: buildPagination(page, limit, total) };
 }
 
-  static async update(
-    id: string,
-    data: UpdateCustomerInput
-  ) {
-    checkId(id);
+export async function getCustomerById(id: string) {
+  const customer = await Customer.findById(id).select('-__v');
+  if (!customer) throw createHttpError(404, 'Customer not found');
+  return customer;
+}
 
-    const customer = await CustomerModel.findById(id);
+export async function createCustomer(input: CreateCustomerInput): Promise<ICustomer> {
+  const existing = await Customer.findOne({ email: input.email });
+  if (existing) throw createHttpError(409, 'Email already exists');
 
-    if (!customer) {
-      throw new ApiError(404, "Customer not found");
+  return Customer.create(input);
+}
+
+export async function updateCustomer(id: string, input: UpdateCustomerInput): Promise<ICustomer | null> {
+  return withRelationsTransaction(async (session) => {
+    if (input.email) {
+      const existing = await Customer.findOne({ email: input.email, _id: { $ne: id } });
+      if (existing) throw createHttpError(409, 'Email already exists');
     }
 
-    if (data.email || data.phone) {
-      const conditions = [];
+    const customer = await Customer.findByIdAndUpdate(id, input, { new: true, runValidators: true, session }).select('-__v');
+    return customer;
+  });
+}
 
-      if (data.email) {
-        conditions.push({
-          email: data.email.toLowerCase(),
-        });
-      }
-
-      if (data.phone) {
-        conditions.push({ phone: data.phone });
-      }
-
-      const exists = await CustomerModel.findOne({
-        _id: { $ne: id },
-        $or: conditions,
-      });
-
-      if (exists) {
-        throw new ApiError(
-          409,
-          "Customer email or phone already exists"
-        );
-      }
-    }
-
-    const { password, ...updateData } = data;
-
-    Object.assign(customer, updateData);
-
-    if (password !== undefined) {
-      customer.password = password
-        ? await bcrypt.hash(password, 10)
-        : null;
-    }
-
-    await customer.save();
-
-    const result = customer.toObject();
-    delete result.password;
-
-    return result;
-  }
-
-  static async delete(id: string) {
-    checkId(id);
-
-    const customer =
-      await CustomerModel.findByIdAndDelete(id);
-
-    if (!customer) {
-      throw new ApiError(404, "Customer not found");
-    }
-
-    return { _id: customer._id };
-  }
+export async function deleteCustomer(id: string) {
+  return withRelationsTransaction(async (session) => {
+    if (await Order.exists({ customerId: id }).session(session)) throw createHttpError(409, 'Cannot delete a customer referenced by orders');
+    const customer = await Customer.findByIdAndDelete(id, { session });
+    if (!customer) throw createHttpError(404, 'Customer not found');
+    return customer;
+  });
 }

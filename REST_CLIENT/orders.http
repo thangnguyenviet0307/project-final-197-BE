@@ -1,0 +1,142 @@
+# Create endpoint: POST http://127.0.0.1:5001/api/v1/orders (no /create suffix).
+# Prerequisites: login -> select or create brand/category/product/customer in the other files.
+# IDs and sessions are shared automatically through REST_CLIENT/.env.
+# IMPORTANT: completion and cancellation below are ALTERNATIVE workflows, not one sequence.
+# A Rejected (3) or Completed (4) order is final. Do not reuse it for another status test.
+# ORDER_ID is refreshed after each successful create; create a NEW order for each workflow.
+@baseUrl = http://127.0.0.1:5001/api/v1/orders
+@customerId = {{$dotenv CUSTOMER_ID}}
+@productId = {{$dotenv PRODUCT_ID}}
+@variantId = {{$dotenv VARIANT_ID}}
+@userId = {{$dotenv USER_ID}}
+@orderId = {{$dotenv ORDER_ID}}
+
+### Route check only (expected 400 validation error; does NOT create an order)
+# @name checkOrderEndpoint
+POST http://127.0.0.1:5001/api/v1/orders
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{}
+
+### Create an order for the selected variant (Pending = 1)
+# @name createOrder
+POST http://127.0.0.1:5001/api/v1/orders
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "userId": "{{userId}}",
+  "orderNote": "REST Client test order",
+  "street": "123 Test Street",
+  "city": "Da Nang",
+  "state": "Da Nang",
+  "paymentType": 1,
+  "orderItems": [
+    { "productId": "{{productId}}", "variantId": "{{variantId}}", "quantity": 2 }
+  ]
+}
+
+### List orders
+GET {{baseUrl}}?page=1&limit=10
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Filter pending orders for the customer
+GET {{baseUrl}}?page=1&limit=10&orderStatus=1&customerId={{customerId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Get order details
+# @name inspectOrderStatus
+GET {{baseUrl}}/{{orderId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### FLOW A - Step 1: Pending -> Processing (2). Check current orderStatus is 1 first.
+PATCH {{baseUrl}}/{{orderId}}/status
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "orderStatus": 2, "userId": "{{userId}}" }
+
+### Reassign an open order (admin only; status is preserved)
+PATCH {{baseUrl}}/{{orderId}}/assignee
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "userId": "{{$dotenv STAFF_USER_ID}}" }
+
+### FLOW A - Step 2: Processing -> Completed (4). STOP this workflow here.
+PATCH {{baseUrl}}/{{orderId}}/status
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "orderStatus": 4 }
+
+### FLOW B - Alternative: create a NEW order and select its ID, then Pending/Processing -> Rejected (3)
+PATCH {{baseUrl}}/{{orderId}}/status
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "orderStatus": 3 }
+
+### FLOW B - After rejection only: delete the rejected test order
+DELETE {{baseUrl}}/{{orderId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+
+### Invalid transition: run immediately after creating a fresh Pending order (expected 409)
+PATCH {{baseUrl}}/{{orderId}}/status
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{ "orderStatus": 4 }
+
+### Insufficient variant stock (expected 409)
+POST http://127.0.0.1:5001/api/v1/orders
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "street": "123 Test Street",
+  "city": "Da Nang",
+  "state": "Da Nang",
+  "paymentType": 1,
+  "orderItems": [
+    { "productId": "{{productId}}", "variantId": "{{variantId}}", "quantity": 999999 }
+  ]
+}
+
+### Invalid product ID (expected 400)
+POST http://127.0.0.1:5001/api/v1/orders
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "customerId": "{{customerId}}",
+  "street": "123 Test Street",
+  "city": "Da Nang",
+  "state": "Da Nang",
+  "paymentType": 1,
+  "orderItems": [{ "productId": "invalid-id", "quantity": 1 }]
+}
+
+### Missing authentication (expected 401)
+GET {{baseUrl}}
+
+### Staff cannot delete orders - send staffLogin in auth.http first (expected 403)
+DELETE {{baseUrl}}/{{orderId}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}

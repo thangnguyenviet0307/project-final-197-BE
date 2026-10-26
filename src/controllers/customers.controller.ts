@@ -3,6 +3,7 @@ import type { GetCustomersQuery } from "../types/customers.type.js";
 import type { Request, Response, RequestHandler } from 'express';
 import {
   getCustomers,
+  getCustomerAccounts,
   getCustomerById,
   createCustomer,
   updateCustomer,
@@ -65,6 +66,10 @@ const deleteCustomerHandler: RequestHandler = asyncHandler(async (req: Request, 
 
 export const customerController: Record<string, RequestHandler> = {
   getCustomers: getCustomersHandler,
+  getAccounts: asyncHandler(async (req, res) => {
+    const result = await getCustomerAccounts(req.query as unknown as GetCustomersQuery);
+    sendResponse(res, 200, { message: "Customer accounts retrieved successfully", ...result });
+  }),
   getCustomerById: getCustomerByIdHandler,
   createCustomer: createCustomerHandler,
   updateCustomer: updateCustomerHandler,

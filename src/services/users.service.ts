@@ -23,7 +23,7 @@ async function protectLastAdmin(id: string, session: ClientSession) {
 export const UserService = {
   async getAllUsers({ page, limit, search }: GetUsersQuery) {
     const searchTerms = search?.trim().split(/\s+/).filter(Boolean) ?? [];
-    const filter = searchTerms.length
+    const filter = { role: { $in: ["admin", "staff"] as const }, ...(searchTerms.length
       ? {
           $and: searchTerms.map((term) => ({
             $or: ["firstName", "lastName", "email"].map((field) => ({
@@ -31,7 +31,7 @@ export const UserService = {
             })),
           })),
         }
-      : {};
+      : {}) };
     const [data, total] = await Promise.all([
       User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
       User.countDocuments(filter),

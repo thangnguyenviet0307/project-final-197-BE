@@ -11,6 +11,26 @@ import type {
   UpdateCustomerInput,
 } from '../types/customers.type.js';
 
+import { User } from '../models/users.model.js';
+
+export async function getCustomerAccounts({ page, limit, search, isActive }: GetCustomersQuery) {
+  const filter: Record<string, unknown> = { role: "customer" };
+  if (search) {
+    const pattern = new RegExp(escapeRegex(search), "i");
+    filter["$or"] = ["firstName", "lastName", "email"].map(field => ({ [field]: pattern }));
+  }
+  if (isActive !== undefined) filter["active"] = isActive;
+  const [accounts, total] = await Promise.all([
+    User.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit)
+      .select("_id firstName lastName email active createdAt").lean(),
+    User.countDocuments(filter),
+  ]);
+  // Explicit response fields keep authentication secrets outside this management endpoint.
+  const data = accounts.map(account => ({ _id: account._id, firstName: account.firstName,
+    lastName: account.lastName, email: account.email, active: account.active, createdAt: account.createdAt }));
+  return { data, pagination: buildPagination(page, limit, total) };
+}
+
 export async function getCustomers({ page, limit, search, isActive }: GetCustomersQuery) {
   const filter: Record<string, unknown> = {};
   if (search) {

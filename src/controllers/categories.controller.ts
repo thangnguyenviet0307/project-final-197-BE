@@ -4,6 +4,11 @@ import { CategoriesService } from "../services/categories.service.js";
 import { asyncHandler } from "../utils/async-handler.util.js";
 
 export class CategoriesController {
+  public static getPublicCategories: RequestHandler = asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    const categories = await CategoriesService.getPublicCategories();
+    sendResponse(res, 200, { success: true, data: categories, count: categories.length });
+  });
+
   // 1. Create categories
   public static createCategories: RequestHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const categories = await CategoriesService.createCategory(req.body);

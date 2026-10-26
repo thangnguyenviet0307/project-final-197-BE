@@ -14,6 +14,8 @@ import {
 
 const router: IRouter = Router();
 
+router.get("/public", CategoriesController.getPublicCategories);
+
 router.use(authenticate);
 
 router

@@ -12,6 +12,7 @@ import path from "node:path";
 
 import brandRoutes from "./routes/v1/brands.route.js";
 import productRoutes from "./routes/v1/products.route.js";
+import storefrontRoutes from "./routes/v1/storefront.route.js";
 import categoriesRouter from "./routes/v1/categories.route.js";
 import orderRoutes from "./routes/v1/orders.route.js";
 import customerRoutes from "./routes/v1/customers.route.js";
@@ -32,6 +33,7 @@ app.get("/", (_req: Request, res: Response) => {
 
 app.use("/api/v1/brands", brandRoutes);
 app.use("/api/v1/products", productRoutes);
+app.use("/api/v1/storefront", storefrontRoutes);
 app.use("/api/v1/categories", categoriesRouter);
 app.use("/api/v1/orders", orderRoutes);
 app.use("/api/v1/customers", customerRoutes);

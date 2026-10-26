@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "seed": "tsx src/seeds/run.ts",
+    "seed:check": "tsx src/seeds/run.ts --dry-run",
+    "seed:clean-names": "tsx src/seeds/clean-names.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",

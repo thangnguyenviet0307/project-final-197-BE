@@ -1,3 +1,4 @@
+import { updateOrderNoteSchema } from "../../validations/orders.validation.js";
 import { Router, type Router as RouterType } from 'express';
 import createHttpError from 'http-errors';
 import { orderController } from '../../controllers/orders.controller.js';
@@ -18,7 +19,9 @@ const router: RouterType = Router();
 
 router.use(authenticate); // phạm vi dữ liệu theo quyền (orders:view-all) được xử lý trong service
 
-router.get('/', requirePermission(Permission.OrderView), validate({ query: getOrdersQuerySchema }), orderController['getOrders']!);
+router.get('/personal-sales', requirePermission(Permission.OrderView), orderController['getPersonalSales']!);
+router.patch('/:id/note', requirePermission(Permission.OrderNote), validate({ params: idParamSchema, body: updateOrderNoteSchema }), orderController['updateOrderNote']!);
+router.get('/',  requirePermission(Permission.OrderView), validate({ query: getOrdersQuerySchema }), orderController['getOrders']!);
 router.get('/:id', requirePermission(Permission.OrderView), validate({ params: idParamSchema }), orderController['getOrderById']!);
 router.post('/', requirePermission(Permission.OrderCreate), validate({ body: createOrderSchema }), orderController['createOrder']!);
 router.patch(

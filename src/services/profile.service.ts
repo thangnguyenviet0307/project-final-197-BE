@@ -21,7 +21,7 @@ export async function updateProfile(actor: AuthUser, input: UpdateProfileInput, 
       $or: [{ tokenVersion: actor.tokenVersion ?? 0 }, { tokenVersion: { $exists: false } }] },
     { $set: { firstName, lastName, personalEmail, phone, location, bio,
       ...(avatar !== undefined ? { avatar } : {}) } },
-    { new: true, runValidators: true },
+    { returnDocument: 'after', runValidators: true },
   );
   if (!user) throw createHttpError(401, "Session is no longer valid");
   return toPublicUser(toAuthUser(user));

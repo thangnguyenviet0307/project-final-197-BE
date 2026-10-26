@@ -170,3 +170,30 @@ test('order codes, phone search and staff scheduling work on MongoDB', async () 
   const duplicate = new Order({ ...placed.toObject(), _id: new mongoose.Types.ObjectId() });
   await assert.rejects(duplicate.save(), error => error.code === 11000);
 });
+
+test("stale editor cannot overwrite stock reserved after its preflight read", async () => {
+  const entry = await product(5);
+  const staleVersion = entry.__v ?? 0;
+  const staleVariants = entry.variants.map(variant => ({ ...variant.toObject(), _id: String(variant._id) }));
+  await order([item(entry, 1)]);
+  await assert.rejects(productService.updateProduct(String(entry._id), { expectedVersion: staleVersion, variants: staleVariants }), { status: 409 });
+  const stored = await Product.findById(entry._id);
+  assert.equal(stored.stock, 4);
+  assert.equal(stored.variants[0].stock, 4);
+});
+
+test("purchase snapshots survive product and variant metadata changes", async () => {
+  const entry = await product(5);
+  entry.variants[0].variant_name = "Purchased variant";
+  entry.variants[0].attributes = { material: "Original" };
+  await entry.save();
+  const placed = await order([item(entry)]);
+  const latest = await Product.findById(entry._id);
+  await productService.updateProduct(String(entry._id), { expectedVersion: latest.__v,
+    product_name: "Renamed after purchase", variants: latest.variants.map(variant => ({ ...variant.toObject(), _id: String(variant._id), variant_name: "Renamed variant", attributes: { material: "Changed" } })) });
+  const stored = await Order.findById(placed._id);
+  assert.equal(stored.orderItems[0].productName, "Integration fixture");
+  assert.equal(stored.orderItems[0].variantName, "Purchased variant");
+  assert.equal(stored.orderItems[0].selectedOptions.material, "Original");
+  assert.equal(stored.orderItems[0].price, 25);
+});

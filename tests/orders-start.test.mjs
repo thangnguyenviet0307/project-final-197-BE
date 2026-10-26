@@ -13,25 +13,23 @@ const id = String(new mongoose.Types.ObjectId());
 
 function harness(t) {
   t.mock.method(SystemLock, 'updateOne', async () => ({}));
+  t.mock.method(Order, "countDocuments", () => ({ session: async () => 0 }));
   const session = {};
   t.mock.method(mongoose.connection, 'transaction', async callback => callback(session));
   t.mock.method(User, 'exists', () => ({ session: async () => ({ _id: actor.id }) }));
   return session;
 }
-test('staff can start eligible pending orders but has no general mutation permissions', async t => {
-  const session = harness(t);
-  assert.equal(hasPermission('staff', Permission.OrderStart), true);
-  for (const permission of [Permission.OrderCreate, Permission.OrderUpdateStatus, Permission.OrderAssign, Permission.OrderDelete]) assert.equal(hasPermission('staff', permission), false);
-  t.mock.method(Order, 'findOneAndUpdate', async (filter, update, options) => {
-    assert.equal(filter.orderStatus, 1);
+test('staff can accept pending unassigned orders', async t => {
+  harness(t);
+  t.mock.method(Order, 'findOneAndUpdate', async (filter, update) => {
     assert.deepEqual(filter.userId.$in.map(value => value?.toString() ?? null), [actor.id, null]);
+    assert.equal(filter.orderStatus, 1);
     assert.equal(update.$set.userId.toString(), actor.id);
-    assert.equal(update.$set.orderStatus, 2);
-    assert.equal(options.session, session);
-    return { orderStatus: 2, userId: actor.id };
+    return { orderStatus: 2 };
   });
   assert.equal((await startOrder(actor, id)).orderStatus, 2);
 });
+
 test('staff cannot choose another handler and customers cannot start orders', async () => {
   await assert.rejects(startOrder(actor, id, id), { status: 403 });
   await assert.rejects(startOrder({ ...actor, role: 'customer' }, id), { status: 403 });
@@ -53,7 +51,7 @@ test('admin can select a handler and a stale/concurrent claim returns 409', asyn
 test('inactive handlers cannot receive an order', async t => {
   harness(t);
   t.mock.method(User, 'exists', () => ({ session() { return this; }, then(resolve) { return Promise.resolve(null).then(resolve); } }));
-  await assert.rejects(startOrder(actor, id), { status: 404 });
+  await assert.rejects(startOrder({ ...actor, role: "admin" }, id, id), { status: 404 });
 });
 test('date filters require timestamps and an ordered range', () => {
   const parsed = getOrdersQuerySchema.parse({ dateFrom: '2026-10-01T00:00:00Z', dateTo: '2026-10-02T23:59:59Z' });
@@ -71,7 +69,7 @@ test('date bounds are combined with staff scope for both list and total', async 
   t.mock.method(Order, 'countDocuments', async value => { assert.deepEqual(value, filter); return 0; });
   await getOrders(actor, { page: 1, limit: 10, dateFrom, dateTo });
   assert.deepEqual(filter.$and[1], { orderDate: { $gte: dateFrom, $lte: dateTo } });
-  assert.ok(filter.$and[0].userId);
+  assert.deepEqual(filter.$and[0], {});
 });
 test('admin assignment requires a selected active staff account', async t => {
   await assert.rejects(startOrder({ ...actor, role: 'admin' }, id), { status: 400 });

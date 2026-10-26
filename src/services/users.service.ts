@@ -21,9 +21,9 @@ async function protectLastAdmin(id: string, session: ClientSession) {
 }
 
 export const UserService = {
-  async getAllUsers({ page, limit, search }: GetUsersQuery) {
+  async getAllUsers({ page, limit, search, role, active, sortBy, sortOrder }: GetUsersQuery) {
     const searchTerms = search?.trim().split(/\s+/).filter(Boolean) ?? [];
-    const filter = searchTerms.length
+    const searchFilter = searchTerms.length
       ? {
           $and: searchTerms.map((term) => ({
             $or: ["firstName", "lastName", "email"].map((field) => ({
@@ -32,8 +32,18 @@ export const UserService = {
           })),
         }
       : {};
+    const filter = { ...searchFilter, ...(role ? { role } : {}), ...(active === true ? { $or: [{ active: true }, { active: { $exists: false } }] } : active === false ? { active: false } : {}) };
+    const direction = sortOrder === "desc" ? -1 : 1;
+    const rows = sortBy === "username" ? User.aggregate([
+      { $match: filter },
+      { $set: { sortUsername: { $toLower: { $arrayElemAt: [{ $split: ["$email", "@"] }, 0] } } } },
+      { $sort: { sortUsername: direction, _id: direction } },
+      { $skip: (page - 1) * limit }, { $limit: limit },
+      { $project: { _id: 1, firstName: 1, lastName: 1, email: 1, role: 1, active: { $ifNull: ["$active", true] }, mustChangePassword: 1,
+        personalEmail: 1, phone: 1, avatar: 1, location: 1, bio: 1, createdAt: 1, updatedAt: 1 } },
+    ]) : User.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit);
     const [data, total] = await Promise.all([
-      User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      rows,
       User.countDocuments(filter),
     ]);
     return { data, pagination: buildPagination(page, limit, total) };
@@ -58,7 +68,7 @@ export const UserService = {
     };
     const saveUser = async (session?: ClientSession) => {
       const user = await User.findByIdAndUpdate(id, update, {
-        new: true, runValidators: true, ...(session ? { session } : {}),
+        returnDocument: 'after', runValidators: true, ...(session ? { session } : {}),
       });
       if (!user) throw createHttpError(404, "User not found");
       return user;

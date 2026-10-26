@@ -7,12 +7,14 @@ export enum Permission {
   OrderCreate = 'orders:create',
   OrderUpdateStatus = 'orders:update-status',
   OrderAssign = 'orders:assign',
+  OrderNote = 'orders:note',
   OrderDelete = 'orders:delete',
 
   // Product permissions
   ProductView = 'products:view',
   ProductCreate = 'products:create',
   ProductUpdate = 'products:update',
+  ProductInventory = 'products:inventory',
   ProductDelete = 'products:delete',
 
   // Category permissions

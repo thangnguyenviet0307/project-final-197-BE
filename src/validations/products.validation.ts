@@ -54,9 +54,13 @@ export const updateProductSchema = createProductSchema
     discount: discountSchema.optional(),
     is_active: z.boolean().optional(),
     variants: z.array(productVariantSchema).optional(),
+    expectedVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   })
-  .refine(hasUpdateFields, {
-    message: UPDATE_REQUIRED_MESSAGE,
+  .refine(value => (value.variants === undefined && value.stock === undefined) || value.expectedVersion !== undefined, {
+    path: ["expectedVersion"], error: "Read the product version before updating inventory or variants",
+  })
+  .refine(({ expectedVersion, ...fields }) => hasUpdateFields(fields), {
+    error: UPDATE_REQUIRED_MESSAGE,
   }) satisfies z.ZodType<UpdateProductInput>;
 
 export const productIdParamSchema = idParamSchema;
@@ -66,12 +70,18 @@ export const getProductsQuerySchema = paginationSchema.extend({
   search: z.string().trim().max(255).optional(),
   category: objectId.optional(),
   brand: objectId.optional(),
-  minPrice: z.coerce.number().finite().min(0).optional(),
-  maxPrice: z.coerce.number().finite().min(0).optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
   sortBy: z.enum(['product_name', 'price', 'createdAt']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   sku: z.string().trim().min(1).optional(),
   color: z.string().trim().optional(),
   size: z.string().trim().optional(),
 }).refine(value => value.minPrice === undefined || value.maxPrice === undefined || value.minPrice <= value.maxPrice,
-  { path: ['maxPrice'], message: 'Maximum price must be greater than or equal to minimum price' }) satisfies z.ZodType<GetProductsQuery>;
+  { path: ['maxPrice'], error: 'Maximum price must be greater than or equal to minimum price' }) satisfies z.ZodType<GetProductsQuery>;
+
+export const updateInventorySchema = z.strictObject({
+  expectedVersion: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  stock: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  variants: z.array(z.strictObject({ _id: objectId, stock: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) })).min(1).optional(),
+}).refine(value => (value.stock !== undefined) !== (value.variants !== undefined), { error: "Provide product stock or variant stocks, not both." });

@@ -3,64 +3,31 @@ import { Permission } from '../types/permissions.type.js';
 export type Role = 'admin' | 'staff';
 
 const rolePermissions: Record<Role, Permission[]> = {
-  admin: [
-    // Orders
+  admin: Object.values(Permission),
+  staff: [
+    // Staff read all history and operate orders assigned to themselves.
     Permission.OrderView,
-    Permission.OrderStart,
-    Permission.OrderUpdateDates,
     Permission.OrderViewAll,
     Permission.OrderCreate,
-    Permission.OrderUpdateStatus,
-    Permission.OrderAssign,
-    Permission.OrderDelete,
-    // Products
-    Permission.ProductView,
-    Permission.ProductCreate,
-    Permission.ProductUpdate,
-    Permission.ProductDelete,
-    // Categories
-    Permission.CategoryView,
-    Permission.CategoryCreate,
-    Permission.CategoryUpdate,
-    Permission.CategoryDelete,
-    // Brands
-    Permission.BrandView,
-    Permission.BrandCreate,
-    Permission.BrandUpdate,
-    Permission.BrandDelete,
-    // Customers
-    Permission.CustomerView,
-    Permission.CustomerCreate,
-    Permission.CustomerUpdate,
-    Permission.CustomerDelete,
-    // Users
-    Permission.UserView,
-    Permission.UserCreate,
-    Permission.UserUpdate,
-    Permission.UserDelete,
-  ],
-  staff: [
-    // Orders - view own/unassigned orders and start eligible pending orders
-    Permission.OrderView,
     Permission.OrderStart,
+    Permission.OrderUpdateStatus,
     Permission.OrderUpdateDates,
-    // Products - chỉ xem
+    Permission.OrderNote,
+    // Inventory changes use a strict endpoint; catalog/price writes stay Admin-only.
     Permission.ProductView,
-    // Categories - chỉ xem
+    Permission.ProductInventory,
     Permission.CategoryView,
-    // Brands - chỉ xem
     Permission.BrandView,
-    // Customers - xem và tạo
     Permission.CustomerView,
     Permission.CustomerCreate,
   ],
 };
 
 export function hasPermission(role: string, permission: Permission): boolean {
-  const permissions = rolePermissions[role as Role] || [];
-  return permissions.includes(permission);
+  return getPermissionsForRole(role).includes(permission);
 }
 
 export function getPermissionsForRole(role: string): Permission[] {
-  return rolePermissions[role as Role] || [];
+  if (role !== 'admin' && role !== 'staff') return [];
+  return [...rolePermissions[role]];
 }

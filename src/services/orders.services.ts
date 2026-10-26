@@ -29,6 +29,14 @@ const orderScope = (actor: AuthUser): QueryFilter<IOrder> =>
   hasPermission(actor.role, Permission.OrderViewAll) ? {} : {
     userId: { $in: [new Types.ObjectId(actor.id), null] },
   };
+const orderWriteScope = (actor: AuthUser): QueryFilter<IOrder> =>
+  canAssign(actor) ? {} : { userId: new Types.ObjectId(actor.id) };
+const MAX_ACTIVE_ORDERS = 5;
+async function assertOrderCapacity(userId: string, session: ClientSession, excludeId?: string) {
+  const count = await Order.countDocuments({ userId: new Types.ObjectId(userId), orderStatus: { $in: OPEN_ORDER_STATUSES },
+    ...(excludeId ? { _id: { $ne: new Types.ObjectId(excludeId) } } : {}) }).session(session);
+  if (count >= MAX_ACTIVE_ORDERS) throw createHttpError(409, "This staff member already has 5 active orders. Complete or cancel an order before accepting another.");
+}
 async function resolveAssignee(actor: AuthUser, requested?: string, session?: ClientSession) {
   if (!requested) return undefined;
   if (!canAssign(actor) && requested !== actor.id) throw createHttpError(403, "Cannot assign another user");
@@ -93,6 +101,7 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
   if (input.requireDate && input.requireDate < new Date()) throw createHttpError(400, "Required date cannot precede order creation");
   return withRelationsTransaction(async (session) => {
     const userId = await resolveAssignee(actor, input.userId ?? (canAssign(actor) ? undefined : actor.id), session);
+    if (userId) await assertOrderCapacity(userId, session);
     const customer = await Customer.findOne({ _id: input.customerId, isActive: true }).session(session);
     if (!customer) {
       throw createHttpError(404, "Active customer not found");
@@ -123,8 +132,9 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
       } else product.stock -= item.quantity;
       await product.save({ session });
       orderItems.push({ productId: product._id, quantity: item.quantity,
-        price: variant?.price ?? product.price, discount: product.discount,
-        ...(variant ? { variantId: variant._id, sku: variant.sku } : {}) });
+        price: variant?.price ?? product.price, discount: product.discount, productName: product.product_name,
+        ...(variant ? { variantId: variant._id, sku: variant.sku, variantName: variant.variant_name,
+          selectedOptions: { ...variant.attributes, ...(variant.color ? { color: variant.color } : {}), ...(variant.size ? { size: variant.size } : {}) } } : {}) });
     }
     calculateOrderTotal(orderItems);
     const order = new Order({ ...input, orderCode: generateOrderCode(), customerId: new Types.ObjectId(input.customerId),
@@ -135,8 +145,10 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
   });
 }
 export async function updateOrderStatus(actor: AuthUser, id: string, input: UpdateOrderStatusInput) {
+  if (!hasPermission(actor.role, Permission.OrderUpdateStatus)) throw createHttpError(403, "Cannot update orders");
+  if (input.orderStatus === OrderStatus.Rejected && actor.role !== 'admin' && !input.cancellationReason?.trim()) throw createHttpError(400, "Enter a cancellation reason.");
   return withRelationsTransaction(async (session) => {
-    const order = await Order.findOne({ _id: id, ...orderScope(actor) }).session(session);
+    const order = await Order.findOne({ _id: id, ...orderWriteScope(actor) }).session(session);
     if (!order) throw createHttpError(404, "Order not found");
     if (!STATUS_TRANSITIONS[order.orderStatus]?.includes(input.orderStatus)) {
       const current = OrderStatus[order.orderStatus] ?? String(order.orderStatus);
@@ -155,15 +167,17 @@ export async function updateOrderStatus(actor: AuthUser, id: string, input: Upda
       await resolveAssignee(actor, userId, session);
     }
     const fields: Partial<IOrder> = { orderStatus: input.orderStatus };
+    if (input.orderStatus === OrderStatus.Rejected && input.cancellationReason) fields.cancellationReason = input.cancellationReason.trim();
     if (input.shippingDate && (input.orderStatus !== OrderStatus.Completed || input.shippingDate < order.orderDate || input.shippingDate > new Date())) {
       throw createHttpError(400, "Shipping date must be a completion timestamp between order creation and now");
     }
     if (userId) fields.userId = new Types.ObjectId(userId);
     if (input.shippingDate) fields.shippingDate = input.shippingDate;
     else if (input.orderStatus === OrderStatus.Completed && !order.shippingDate) fields.shippingDate = new Date();
+    if (userId && OPEN_ORDER_STATUSES.includes(input.orderStatus)) await assertOrderCapacity(userId, session, id);
     const updated = await Order.findOneAndUpdate(
-      { _id: id, ...orderScope(actor), orderStatus: order.orderStatus }, { $set: fields },
-      { new: true, session, runValidators: true });
+      { _id: id, ...orderWriteScope(actor), orderStatus: order.orderStatus }, { $set: fields },
+      { returnDocument: 'after', session, runValidators: true });
     if (!updated) throw createHttpError(409, "Order changed; please retry");
     if (input.orderStatus === OrderStatus.Rejected) await restoreStock(order.orderItems, session);
     return updated;
@@ -186,6 +200,7 @@ export async function assignOrder(actor: AuthUser, id: string, requested: string
       throw createHttpError(409, "Only open orders can be reassigned");
     }
     await resolveAssignee(actor, requested, session);
+    await assertOrderCapacity(requested, session, id);
     order.userId = new Types.ObjectId(requested);
     await order.save({ session });
     return order;
@@ -199,11 +214,12 @@ export async function startOrder(actor: AuthUser, id: string, requested?: string
   if (!canAssign(actor) && requested && requested !== actor.id) throw createHttpError(403, 'Cannot assign another user');
   return withRelationsTransaction(async (session) => {
     const userId = await resolveAssignee(actor, requested ?? actor.id, session);
+    await assertOrderCapacity(userId!, session, id);
     const filter: QueryFilter<IOrder> = { _id: id, orderStatus: OrderStatus.Pending,
       ...(!canAssign(actor) ? { userId: { $in: [new Types.ObjectId(actor.id), null] } } : {}) };
     const order = await Order.findOneAndUpdate(filter,
       { $set: { userId: new Types.ObjectId(userId), orderStatus: OrderStatus.Processing } },
-      { new: true, session, runValidators: true });
+      { returnDocument: 'after', session, runValidators: true });
     if (!order) throw createHttpError(409, 'Order is no longer pending or is assigned to another handler. Refresh and try again.');
     return order;
   });
@@ -248,4 +264,22 @@ export async function updateOrderDates(actor: AuthUser, id: string, input: {
     if (!updated) throw createHttpError(409, 'Order changed; refresh and try again');
     return updated;
   });
+}
+export async function updateOrderNote(actor: AuthUser, id: string, orderNote: string) {
+  if (!hasPermission(actor.role, Permission.OrderNote)) throw createHttpError(403, "Cannot edit order notes");
+  const order = await Order.findOneAndUpdate({ _id: id, ...orderWriteScope(actor), orderStatus: { $in: OPEN_ORDER_STATUSES } },
+    { $set: { orderNote } }, { returnDocument: 'after', runValidators: true });
+  if (!order) throw createHttpError(404, "Open order not found");
+  return order;
+}
+export async function getPersonalSales(actor: AuthUser) {
+  let revenueCents = 0n;
+  let completedOrders = 0;
+  const cursor = Order.find({ userId: new Types.ObjectId(actor.id), orderStatus: OrderStatus.Completed }).select('orderItems').lean().cursor();
+  for await (const order of cursor) {
+    revenueCents += BigInt(Math.round(calculateOrderTotal(order.orderItems) * 100));
+    completedOrders++;
+  }
+  if (revenueCents > BigInt(Number.MAX_SAFE_INTEGER)) throw createHttpError(400, "Sales total is too large");
+  return { completedOrders, revenue: Number(revenueCents) / 100 };
 }

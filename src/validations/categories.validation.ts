@@ -5,6 +5,7 @@ import { z } from "zod";
 import { objectId } from "./common.validation.js";
 
 export const createCategoriesSchema = z.object({
+  icon: z.union([z.string().trim().check(z.url()).regex(/^https?:\/\//i).max(255), z.literal("")]).optional(),
   name: z
     .string("Category name must be a string")
     .trim()
@@ -25,5 +26,5 @@ export const createCategoriesSchema = z.object({
 export const updateCategoriesSchema = createCategoriesSchema
   .partial()
   .refine(hasUpdateFields, {
-    message: UPDATE_REQUIRED_MESSAGE,
+    error: UPDATE_REQUIRED_MESSAGE,
   }) satisfies z.ZodType<UpdateCategoriesInput>;

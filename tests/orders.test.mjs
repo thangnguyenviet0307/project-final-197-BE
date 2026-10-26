@@ -44,7 +44,7 @@ const input = (items) => ({ customerId, street: "123 Street", city: "City", stat
 test("order reserves only the selected variant, merges duplicates and snapshots server price", async (t) => {
   const { session, state } = transactionHarness(t);
   const product = new Product({ product_name: "Product", price: 99, discount: 10, stock: 8,
-    variants: [{ sku: "SKU-A", price: 25, stock: 5 }, { sku: "SKU-B", price: 40, stock: 3 }] });
+    variants: [{ sku: "SKU-A", variant_name: "Original variant", color: "Black", attributes: { material: "Silicone" }, price: 25, stock: 5 }, { sku: "SKU-B", price: 40, stock: 3 }] });
   const variantId = String(product.variants[0]._id);
   t.mock.method(Product, "findById", () => ({ session: async () => product }));
   t.mock.method(product, "save", async (options) => { assert.equal(options.session, session); return product; });
@@ -57,6 +57,13 @@ test("order reserves only the selected variant, merges duplicates and snapshots 
   assert.equal(order.orderItems.length, 1);
   assert.equal(order.orderItems[0].price, 25);
   assert.equal(order.orderItems[0].sku, "SKU-A");
+  assert.equal(order.orderItems[0].productName, "Product");
+  assert.equal(order.orderItems[0].variantName, "Original variant");
+  assert.deepEqual(order.orderItems[0].selectedOptions, { material: "Silicone", color: "Black" });
+  product.product_name = "Changed name";
+  product.variants[0].attributes.material = "Changed material";
+  assert.equal(order.orderItems[0].productName, "Product");
+  assert.equal(order.orderItems[0].selectedOptions.material, "Silicone");
   assert.equal(order.orderItems[0].quantity, 3);
   assert.equal(product.variants[0].stock, 2);
   assert.equal(product.variants[1].stock, 3);

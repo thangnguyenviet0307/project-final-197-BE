@@ -36,5 +36,9 @@ export interface UpdateUserInput {
   active?: boolean | undefined;
 }
 export interface GetUsersQuery extends IPaginationQuery {
+  role?: "admin" | "staff" | undefined;
+  active?: boolean | undefined;
+  sortBy?: "username" | undefined;
+  sortOrder?: "asc" | "desc" | undefined;
   search?: string | undefined;
 }

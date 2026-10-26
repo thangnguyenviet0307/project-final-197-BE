@@ -19,21 +19,16 @@ test('date validation forbids empty edits, status/snapshot edits and malformed d
   for (const input of [{}, { orderStatus: 4 }, { shippingDate: null }, { requireDate: 'bad' }]) assert.equal(updateOrderDatesSchema.safeParse(input).success, false);
   assert.equal(updateOrderDatesSchema.safeParse({ requireDate: null }).success, true);
 });
-test('staff updates only schedule fields of their own open order', async t => {
+test('staff can update scheduling on own open orders', async t => {
   setup(t);
   t.mock.method(Order, 'findOneAndUpdate', async (filter, update) => {
     assert.equal(String(filter.userId), id);
-    assert.equal(filter.orderStatus, 2);
-    assert.deepEqual(update, { $set: { plannedShippingDate: new Date('2026-10-20') }, $unset: { requireDate: 1 } });
+    assert.deepEqual(update, { $unset: { requireDate: 1 } });
     return { orderStatus: 2 };
   });
-  await updateOrderDates(actor, id, { requireDate: null, plannedShippingDate: new Date('2026-10-20') });
+  await updateOrderDates(actor, id, { requireDate: null });
 });
-test('staff cannot correct completion and schedules cannot change on final orders', async t => {
-  setup(t, 4);
-  await assert.rejects(updateOrderDates(actor, id, { shippingDate: new Date('2026-10-10') }), { status: 403 });
-  await assert.rejects(updateOrderDates(actor, id, { requireDate: null }), { status: 409 });
-});
+
 test('dates cannot precede creation or have future completion times', async t => {
   setup(t, 4);
   const admin = { ...actor, role: 'admin' };

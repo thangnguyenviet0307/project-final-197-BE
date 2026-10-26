@@ -6,7 +6,7 @@ import { z } from "zod";
 
 // Schema tạo thương hiệu
 export const createBrandSchema = z.object({
-  logoUrl: z.string().trim().url().max(255).optional(),
+  logoUrl: z.union([z.string().trim().check(z.url()).regex(/^https?:\/\//i).max(255), z.literal("")]).optional(),
   isActive: z.boolean().optional(),
   name: z
     .string()
@@ -26,7 +26,7 @@ export const updateBrandSchema = createBrandSchema
   .refine(
     hasUpdateFields,
     {
-      message: UPDATE_REQUIRED_MESSAGE,
+      error: UPDATE_REQUIRED_MESSAGE,
     }
   ) satisfies z.ZodType<UpdateBrandInput>;
 

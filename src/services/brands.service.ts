@@ -71,7 +71,7 @@ export class BrandService {
       { _id: id, isDeleted: false },
       { $set: updateData },
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
         session,
       }
@@ -94,7 +94,7 @@ export class BrandService {
             deletedAt: new Date(),
           },
         },
-        { new: true, session }
+        { returnDocument: 'after', session }
       );
     });
   }

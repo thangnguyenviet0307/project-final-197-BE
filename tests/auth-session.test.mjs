@@ -68,7 +68,7 @@ test("staff cannot create users or reset another user's password", async (t) => 
 test("password change verifies the old password before touching the database", async (t) => {
   const headers = authenticate(t, account({ mustChangePassword: true }));
   const update = t.mock.method(User, "findOneAndUpdate", async () => { throw new Error("Must not write"); });
-  const response = await post("/api/v1/auth/change-password", { currentPassword: "incorrect", newPassword: "NewPassword123" }, headers);
+  const response = await post("/api/v1/auth/change-password", { currentPassword: "incorrect", newPassword: "NewPassword123!" }, headers);
   assert.equal(response.status, 400);
   assert.equal(update.mock.callCount(), 0);
 });
@@ -82,21 +82,21 @@ test("self-service change hashes the new password, clears the flag, and revokes 
     assert.equal(update.$set.refreshToken, null);
     assert.equal(update.$inc.tokenVersion, 1);
     assert.equal(update.$set.mustChangePassword, false);
-    assert.equal(await argon2.verify(update.$set.password, "NewPassword123"), true);
+    assert.equal(await argon2.verify(update.$set.password, "NewPassword123!"), true);
     assert.equal(options.runValidators, true);
     return user;
   });
-  const response = await post("/api/v1/auth/change-password", { currentPassword: password, newPassword: "NewPassword123" }, headers);
+  const response = await post("/api/v1/auth/change-password", { currentPassword: password, newPassword: "NewPassword123!" }, headers);
   assert.equal(response.status, 200);
 });
 
 test("self-service change rejects reuse, short passwords, and concurrent account changes", async (t) => {
   const headers = authenticate(t, account());
-  for (const newPassword of [password, "short"]) {
+  for (const newPassword of [password, "short", "abcdef1!", "Abcdef!", "Abcdef1", "Abcd1 "]) {
     assert.equal((await post("/api/v1/auth/change-password", { currentPassword: password, newPassword }, headers)).status, 400);
   }
   t.mock.method(User, "findOneAndUpdate", async () => null);
-  assert.equal((await post("/api/v1/auth/change-password", { currentPassword: password, newPassword: "NewPassword123" }, headers)).status, 409);
+  assert.equal((await post("/api/v1/auth/change-password", { currentPassword: password, newPassword: "NewPassword123!" }, headers)).status, 409);
 });
 
 test("admin resets require the target to change password and revoke its previous sessions", async (t) => {

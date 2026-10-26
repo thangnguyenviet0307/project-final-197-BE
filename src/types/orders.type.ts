@@ -19,6 +19,9 @@ export interface IOrderItem {
   productId: Types.ObjectId;
   variantId?: Types.ObjectId;
   sku?: string;
+  productName?: string;
+  variantName?: string | null;
+  selectedOptions?: Record<string, string | number | boolean | null>;
   quantity: number;
   price: number; // giá tại thời điểm đặt hàng
   discount: number; // % giảm giá tại thời điểm đặt hàng, 0 - 70
@@ -35,6 +38,7 @@ export interface IOrder {
   shippingDate?: Date;
   userId?: Types.ObjectId; // User (Admin/Staff) đang phụ trách đơn
   orderNote?: string;
+  cancellationReason?: string;
   street: string;
   city: string;
   state: string;
@@ -59,6 +63,7 @@ export interface CreateOrderInput {
   orderItems: OrderItemInput[];
 }
 export interface UpdateOrderStatusInput {
+  cancellationReason?: string | undefined;
   orderStatus: number;
   shippingDate?: Date | undefined;
   userId?: string | undefined;

@@ -37,7 +37,7 @@ export interface CreateProductInput extends ProductInput {
   is_active: boolean;
   variants: ProductVariantInput[];
 }
-export interface UpdateProductInput extends OptionalUpdate<ProductInput> {}
+export interface UpdateProductInput extends OptionalUpdate<ProductInput> { expectedVersion?: number | undefined; }
 export interface GetProductsQuery extends IPaginationQuery {
   stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' | undefined;
   search?: string | undefined;

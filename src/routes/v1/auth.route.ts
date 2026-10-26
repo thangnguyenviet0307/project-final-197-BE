@@ -6,6 +6,7 @@ import {
   loginSchema,
   bootstrapSchema,
   refreshSchema,
+  registerCustomerSchema,
 } from "../../validations/auth.validation.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
@@ -18,6 +19,7 @@ import { cookieAuthTransport } from "../../utils/auth-cookie.js";
 const router: RouterType = Router();
 router.use(cookieAuthTransport);
 const rateLimit = createAuthRateLimit();
+router.post("/register", rateLimit, validate({ body: registerCustomerSchema }), authController["registerCustomer"]!);
 
 router.post(
   "/bootstrap",

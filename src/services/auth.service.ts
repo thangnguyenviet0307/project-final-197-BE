@@ -14,6 +14,20 @@ import type { CreateUserInput } from "../types/users.type.js";
 import { verifyPassword } from "../utils/password.js";
 import { sessionRevocationUpdate } from "../utils/session.js";
 
+export async function registerCustomer(input: Pick<CreateUserInput, "email" | "password" | "firstName" | "lastName">) {
+  if (await User.exists({ email: input.email })) throw createHttpError(409, "Email already exists");
+  const password = await argon2.hash(input.password);
+  try {
+    await User.create({ email: input.email, firstName: input.firstName, lastName: input.lastName,
+      password, role: "customer", active: true, mustChangePassword: false, tokenVersion: 0 });
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      throw createHttpError(409, "Email already exists");
+    }
+    throw error;
+  }
+}
+
 export async function login(email: string, password: string) {
   const user = await User.findOne({ email }).select("+password +tokenVersion");
   // Missing active belongs to legacy accounts; explicit false/null remains disabled.
@@ -59,7 +73,7 @@ export async function bootstrapAdmin(input: Omit<CreateUserInput, "role">, suppl
   )) throw createHttpError(403, "Bootstrap is disabled or secret is invalid");
   const password = await argon2.hash(input.password);
   return mongoose.connection.transaction(async (session) => {
-    if (await User.countDocuments().session(session)) throw createHttpError(403, "System already initialized");
+    if (await User.countDocuments({ role: { $in: ["admin", "staff"] } }).session(session)) throw createHttpError(403, "System already initialized");
     await SystemLock.create([{ _id: "admin-bootstrap" }], { session });
     const user = new User({ ...input, password, role: "admin", active: true, tokenVersion: 0 });
     const authUser = toAuthUser(user, true);

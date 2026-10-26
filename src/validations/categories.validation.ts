@@ -13,11 +13,6 @@ export const createCategoriesSchema = z.object({
 
   description: z.string("Description must be a string").trim().optional(),
 
-  icon: z.union([
-    z.url().refine((url) => /^https?:\/\//i.test(url), "Image URL must use HTTP or HTTPS"),
-    z.literal(""),
-  ]).optional(),
-
   parent: objectId.nullable().optional(),
 
   isActive: z.boolean("isActive must be a boolean").optional(),

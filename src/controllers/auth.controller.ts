@@ -2,7 +2,7 @@ import { authResponse, clearRefreshCookie } from "../utils/auth-cookie.js";
 import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
-import { changePassword } from "../services/auth.service.js";
+import { changePassword, registerCustomer } from "../services/auth.service.js";
 import createHttpError from "http-errors";
 import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, RequestHandler } from "express";
@@ -71,6 +71,10 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
+  registerCustomer: asyncHandler(async (req, res) => {
+    await registerCustomer(req.body);
+    sendResponse(res, 201, { message: "Account created. Please sign in.", data: null });
+  }),
   updateProfile: asyncHandler(async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");

@@ -1,3 +1,4 @@
+import type mongoose from 'mongoose';
 import { faker } from '@faker-js/faker';
 import argon2 from 'argon2';
 import { BrandModel } from '../models/brands.model.js';
@@ -5,6 +6,7 @@ import { Categories } from '../models/categories.model.js';
 import { Customer } from '../models/customers.model.js';
 import { User } from '../models/users.model.js';
 import Product from '../models/products.model.js';
+import { ProductReview } from '../models/product-reviews.model.js';
 import { Order } from '../models/orders.model.js';
 import { OrderStatus, PaymentType } from '../types/orders.type.js';
 import { sumVariantStock } from '../utils/inventory.js';
@@ -15,6 +17,37 @@ import { createCustomerSchema } from '../validations/customers.validation.js';
 import { createUserSchema } from '../validations/users.validation.js';
 import { createProductSchema } from '../validations/products.validation.js';
 import { createOrderSchema } from '../validations/orders.validation.js';
+import { reviewInputSchema } from '../validations/products.validation.js';
+
+/** Shared metadata for new and legacy native Faker products (kg, cm, VND). */
+export function generateProductMetadata(sku: string, categorySlug: string, index = 0) {
+  return {
+      sku: sku,
+      barcode: `0${faker.string.numeric(12)}`,
+      currency: 'VND',
+      tags: [categorySlug, 'seed', index % 2 === 0 ? 'featured' : 'new-arrival'],
+      weight: faker.number.float({ min: 0.1, max: 5, fractionDigits: 2 }),
+      dimensions: {
+        width: faker.number.float({ min: 5, max: 50, fractionDigits: 1 }),
+        height: faker.number.float({ min: 2, max: 40, fractionDigits: 1 }),
+        depth: faker.number.float({ min: 2, max: 30, fractionDigits: 1 }),
+      },
+      warrantyInformation: index % 3 === 0 ? 'Không áp dụng bảo hành.' : 'Bảo hành 12 tháng theo chính sách cửa hàng.',
+      shippingInformation: 'Dự kiến giao trong 2–5 ngày làm việc; phí vận chuyển xác nhận khi đặt hàng.',
+      returnPolicy: 'Hỗ trợ đổi trả trong 30 ngày theo điều kiện của cửa hàng.',
+      minimumOrderQuantity: index % 5 === 0 ? 3 : 1,
+  };
+}
+
+export function generateProductReview(product: mongoose.Types.ObjectId, reviewerName: string, now = new Date()) {
+  const rating = faker.helpers.arrayElement([2, 3, 4, 4, 5, 5]);
+  return new ProductReview({
+    product, rating, reviewerName: reviewerName.slice(0, 100),
+    comment: rating >= 4 ? 'S?n ph?m ??ng m? t?, ??ng g?i c?n th?n. T?i h?i l?ng v?i tr?i nghi?m mua h?ng.' : 'S?n ph?m s? d?ng ???c nh?ng c?n c?i thi?n ch?t l??ng v? th?i gian giao h?ng.',
+    date: faker.date.between({ from: new Date(now.getTime() - 60 * 86400000), to: now }),
+    source: 'admin',
+  });
+}
 
 /** Build and validate documents without connecting to MongoDB. */
 export async function generateSeedData(password: string, existing: ExistingCatalog = {}) {
@@ -73,11 +106,13 @@ export async function generateSeedData(password: string, existing: ExistingCatal
       image: thumbnail, images: [thumbnail],
     }));
     const identity = productName(faker.commerce.productName());
+    const category = faker.helpers.arrayElement(categories);
     return new Product({
       product_name: identity.name, slug: identity.slug,
+      ...generateProductMetadata(`SEED-${batch.toUpperCase()}-PRODUCT-${i}`, category.slug, i),
       price, discount: faker.number.int({ min: 0, max: 50 }),
-      category: faker.helpers.arrayElement(categories)._id, brand: faker.helpers.arrayElement(brands)._id,
-      description: faker.commerce.productDescription(), model_year: new Date().getFullYear(),
+      category: category._id, brand: faker.helpers.arrayElement(brands)._id,
+      description: faker.commerce.productDescription(), model_year: i % 3 === 0 ? null : now.getFullYear(),
       thumbnail, stock: sumVariantStock(variants),
       is_active: true, variants,
       // External placeholder URLs must not masquerade as managed Cloudinary assets.
@@ -92,7 +127,7 @@ export async function generateSeedData(password: string, existing: ExistingCatal
     const plannedShippingDate = new Date(orderDate.getTime() + day);
     const orderItems = faker.helpers.arrayElements(products, { min: 1, max: 3 }).map(product => {
       const variant = product.variants.length ? faker.helpers.arrayElement(product.variants) : undefined;
-      const quantity = faker.number.int({ min: 1, max: 3 });
+      const quantity = faker.number.int({ min: product.minimumOrderQuantity, max: product.minimumOrderQuantity + 2 });
       if (status !== OrderStatus.Rejected) {
         if (variant) {
           variant.stock -= quantity;
@@ -120,7 +155,13 @@ export async function generateSeedData(password: string, existing: ExistingCatal
       updatedAt: status === OrderStatus.Completed ? shippingDate : orderDate,
     });
   });
-  const data = { brands, categories, customers, users, products, orders };
+  // Native demo catalog data has no DummyJSON source IDs or exchange-rate metadata.
+  // Stars/counts are derived by the API from these records, sales from completed orders.
+  const reviews = products.flatMap((product, index) => Array.from({ length: index % 6 }, () => {
+    const customer = faker.helpers.arrayElement(customers);
+    return generateProductReview(product._id, `${customer.firstName} ${customer.lastName}`, now);
+  }));
+  const data = { brands, categories, customers, users, products, orders, reviews };
   // API validation catches constraints not present in Mongoose (lengths, URLs, SKU).
   // JSON serialization converts ObjectIds into the string IDs expected by the API.
   const input = (value: unknown): unknown => JSON.parse(JSON.stringify(value)) as unknown;
@@ -130,6 +171,7 @@ export async function generateSeedData(password: string, existing: ExistingCatal
   for (const user of users) createUserSchema.parse({ ...user.toObject(), password });
   for (const product of products) createProductSchema.parse(input(product));
   for (const order of orders) createOrderSchema.parse(input(order));
+  for (const review of reviews) reviewInputSchema.parse(input(review));
   for (const documents of Object.values(data)) {
     for (const document of documents) await document.validate();
   }

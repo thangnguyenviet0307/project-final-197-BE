@@ -79,6 +79,23 @@ const productImageSchema = new Schema({
 
 const productSchema = new Schema(
   {
+    sku: { type: String, trim: true, uppercase: true, match: /^[A-Z0-9-]+$/, minlength: 3, maxlength: 64 },
+    barcode: { type: String, trim: true, maxlength: 64, default: null },
+    currency: { type: String, enum: ["VND"], default: "VND" },
+    tags: { type: [String], default: [] },
+    weight: { type: Number, min: 0, default: null },
+    dimensions: { type: new Schema({ width: { type: Number, min: 0, required: true }, height: { type: Number, min: 0, required: true }, depth: { type: Number, min: 0, required: true } }, { _id: false }), default: null },
+    warrantyInformation: { type: String, maxlength: 2000, default: null },
+    shippingInformation: { type: String, maxlength: 2000, default: null },
+    returnPolicy: { type: String, maxlength: 2000, default: null },
+    minimumOrderQuantity: { type: Number, min: 1, default: 1, validate: Number.isSafeInteger },
+    source: { type: String, enum: ["dummyjson"] },
+    external_id: { type: String },
+    sourceImages: { type: [String], default: [] },
+    sourceCreatedAt: Date,
+    sourceUpdatedAt: Date,
+    sourceCurrency: { type: String, enum: ["USD"] },
+    importExchangeRate: { type: Number, min: 0 },
     images: { type: [productImageSchema], default: [], validate: {
       validator: (images: unknown[]) => images.length <= 8, message: "A product can have up to 8 images",
     } },
@@ -117,7 +134,7 @@ const productSchema = new Schema(
     },
     model_year: {
       type: Number,
-      required: true,
+      default: null,
       min: [1900, "Năm model không hợp lệ"],
       max: [new Date().getFullYear() + 2, "Năm model không hợp lệ"],
     },
@@ -171,6 +188,8 @@ productSchema.pre("validate", function () {
   }
 });
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
+productSchema.index({ sku: 1 }, { unique: true, partialFilterExpression: { sku: { $type: "string" } } });
+productSchema.index({ source: 1, external_id: 1 }, { unique: true, partialFilterExpression: { source: { $type: "string" }, external_id: { $type: "string" } } });
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;

@@ -16,7 +16,7 @@ const orderStatusSchema = z.number().refine((val) => orderStatusValues.includes(
 export const orderItemSchema = z.object({
   productId: objectId,
   variantId: objectId.optional(),
-  quantity: z.number().int().min(1, 'Số lượng phải >= 1'),
+  quantity: z.int().min(1, 'Số lượng phải >= 1'),
 }) satisfies z.ZodType<OrderItemInput>;
 
 export const createOrderSchema = z.object({

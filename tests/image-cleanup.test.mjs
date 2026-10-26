@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
 import Product from '../dist/models/products.model.js';
+import { ProductReview } from '../dist/models/product-reviews.model.js';
 import { Order } from '../dist/models/orders.model.js';
 import { SystemLock } from '../dist/models/system-locks.model.js';
 import { ImageCleanupJob } from '../dist/models/image-cleanup-jobs.model.js';
@@ -13,9 +14,11 @@ test('product deletion queues only managed gallery assets in the deletion transa
  const session={}; t.mock.method(mongoose.connection,'transaction',async fn=>fn(session));
  t.mock.method(SystemLock,'updateOne',async()=>({acknowledged:true}));
  t.mock.method(Order,'exists',()=>({session:async()=>null}));
+ const reviews=t.mock.method(ProductReview,'deleteMany',()=>({session:async actual=>{assert.equal(actual,session);return {deletedCount:2};}}));
  t.mock.method(Product,'findByIdAndDelete',async()=>new Product({images:[{public_id:'managed/id',secure_url:'https://image.example/a'}],thumbnail:'https://external.example/image'}));
  const jobs=t.mock.method(ImageCleanupJob,'bulkWrite',async (ops,opts)=>{assert.equal(opts.session,session);assert.deepEqual(ops.map(op=>op.updateOne.filter),[{publicId:'managed/id'}]);});
  await service.deleteProduct(String(new mongoose.Types.ObjectId()));assert.equal(jobs.mock.callCount(),1);
+ assert.equal(reviews.mock.callCount(),1);
 });
 test('cleanup failure schedules retry and already-removed storage assets finish idempotently', async t => {
  const saved={...process.env};t.after(()=>{for(const key of ['CLOUDINARY_CLOUD_NAME','CLOUDINARY_API_KEY','CLOUDINARY_API_SECRET']) {if(saved[key]===undefined) delete process.env[key];else process.env[key]=saved[key];}});

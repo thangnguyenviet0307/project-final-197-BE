@@ -6,6 +6,46 @@ import { OrderStatus } from '../dist/types/orders.type.js';
 import { formatSeedError } from '../dist/seeds/errors.js';
 import { createNameAllocator, cleanLegacySeedName } from '../dist/seeds/names.js';
 import { buildSlug } from '../dist/helpers/buildSlug.helper.js';
+import { Types } from 'mongoose';
+import { planProductMetadata, backfillProductGuard, fakerProductFilter } from '../dist/seeds/backfill-products.js';
+
+test('Faker backfill fills missing metadata and remains idempotent with raw stored documents', () => {
+  const legacy = { _id: new Types.ObjectId(), __v: 3, product_name: 'Existing product', price: 99000, stock: 5,
+    model_year: 2024, variants: [{ sku: 'EXISTING', stock: 5 }], images: [] };
+  const patch = planProductMetadata(legacy, 'beauty');
+  assert.equal(patch.sku, `SEED-LEGACY-${String(legacy._id).toUpperCase()}`);
+  assert.equal(patch.currency, 'VND');
+  assert.equal(patch.minimumOrderQuantity, 1);
+  assert.ok(patch.tags.includes('beauty'));
+  for (const field of ['price', 'stock', 'model_year', 'variants', 'images', 'source', 'external_id', 'rating', 'soldCount', 'reviewCount']) {
+    assert.equal(Object.hasOwn(patch, field), false, `${field} must not be overwritten or fabricated`);
+  }
+  assert.deepEqual(planProductMetadata({ ...legacy, ...patch }, 'beauty'), {});
+  const guard = backfillProductGuard(legacy, patch);
+  assert.equal(guard.__v, 3);
+  assert.ok(guard.$and.some(condition => condition.sku?.$exists === false));
+});
+
+test('Faker backfill preserves populated metadata and valid zero values but fills empty legacy defaults', () => {
+  const raw = { _id: new Types.ObjectId(), sku: 'CUSTOM-SKU', barcode: '000123', currency: 'VND', tags: ['custom'], weight: 0,
+    dimensions: { width: 1, height: 2, depth: 3 }, warrantyInformation: 'Custom policy', shippingInformation: 'Custom delivery',
+    returnPolicy: 'Custom returns', minimumOrderQuantity: 7, model_year: null, sourceImages: [] };
+  assert.deepEqual(planProductMetadata(raw), {});
+  const patch = planProductMetadata({ ...raw, weight: null, tags: [], barcode: '' });
+  assert.deepEqual(Object.keys(patch).sort(), ['barcode', 'tags', 'weight']);
+  const guard = backfillProductGuard({ ...raw, weight: null }, patch);
+  assert.ok(guard.$and.some(condition => condition.weight?.$exists === true && condition.weight?.$eq === null));
+});
+
+test('Faker backfill selects only exact native seed signatures and excludes imported sources', () => {
+  const signatures = fakerProductFilter.$or;
+  assert.deepEqual(fakerProductFilter.source, { $exists: false });
+  assert.equal(signatures[0]['variants.sku'].test('SEED-A1234567-1234-5678-ABCD-A123456789AB-0-1'), true);
+  assert.equal(signatures[0]['variants.sku'].test('SEED-MANUAL-SKU'), false);
+  assert.equal(signatures[1].sku.test('SEED-A1234567-1234-5678-ABCD-A123456789AB-PRODUCT-0'), true);
+  assert.equal(signatures[2].slug.test('seed-product-a1234567-0'), true);
+  assert.equal(signatures[2].slug.test('normal-catalog-product'), false);
+});
 
 test('readable names reserve existing names and normalized slugs without UUID suffixes', () => {
   const allocate = createNameAllocator([{ name: 'Music', slug: 'music' }, { name: 'Music (2)', slug: 'music-2' }]);
@@ -69,10 +109,38 @@ test('seed documents have valid relations, inventory, assignments and hashed pas
     assert.ok(brands.has(String(product.brand)));
     assert.ok(categories.has(String(product.category)));
     assert.ok(product.stock >= 0);
+    assert.match(product.sku, /^SEED-[A-Z0-9-]+-PRODUCT-\d+$/);
+    assert.match(product.barcode, /^0\d{12}$/);
+    assert.equal(product.currency, 'VND');
+    assert.ok(product.tags.length >= 2);
+    assert.ok(product.weight > 0);
+    assert.ok(product.dimensions.width > 0 && product.dimensions.height > 0 && product.dimensions.depth > 0);
+    for (const field of ['warrantyInformation', 'shippingInformation', 'returnPolicy']) assert.ok(product[field].length > 0);
+    assert.ok(product.minimumOrderQuantity >= 1);
+    assert.equal(product.source, undefined, 'Native seed products must not impersonate DummyJSON imports');
+    assert.equal(product.external_id, undefined);
+    assert.equal(product.images.length, 0, 'Placeholder images are not managed Cloudinary assets');
     if (product.variants.length) assert.equal(product.stock, product.variants.reduce((sum, variant) => sum + variant.stock, 0));
   }
   const skus = [...data.products, ...nextBatch.products].flatMap(product => product.variants.map(variant => variant.sku));
   assert.equal(new Set(skus).size, skus.length, 'Variant SKUs must be unique across seed runs');
+  const allSkus = [...skus, ...[...data.products, ...nextBatch.products].map(product => product.sku)];
+  assert.equal(new Set(allSkus).size, allSkus.length, 'Product and variant SKUs must not collide');
+  assert.ok(data.products.some(product => product.model_year === null));
+  assert.ok(data.products.some(product => product.minimumOrderQuantity > 1));
+  const productIds = ids(data.products);
+  const reviewCounts = new Map();
+  for (const review of data.reviews) {
+    const productId = String(review.product);
+    assert.ok(productIds.has(productId));
+    assert.ok(Number.isInteger(review.rating) && review.rating >= 1 && review.rating <= 5);
+    assert.equal(review.source, 'admin');
+    assert.ok(review.reviewerName.length > 0 && review.comment.length > 0);
+    assert.ok(review.date <= new Date());
+    assert.equal(review.toObject().reviewerEmail, undefined);
+    reviewCounts.set(productId, (reviewCounts.get(productId) ?? 0) + 1);
+  }
+  for (const [index, product] of data.products.entries()) assert.equal(reviewCounts.get(String(product._id)) ?? 0, index % 6);
   const activeCounts = new Map();
   const reserved = new Map();
   const now = new Date();
@@ -97,6 +165,7 @@ test('seed documents have valid relations, inventory, assignments and hashed pas
     for (const item of order.orderItems) {
       const product = data.products.find(product => product._id.equals(item.productId));
       assert.ok(product);
+      assert.ok(item.quantity >= product.minimumOrderQuantity);
       if (item.variantId) {
         const variant = product.variants.id(item.variantId);
         assert.ok(variant);

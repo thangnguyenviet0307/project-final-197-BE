@@ -1,8 +1,7 @@
-import { updateInventorySchema } from "../../validations/products.validation.js";
-import { objectId } from "../../validations/common.validation.js";
+import { objectId, paginationSchema } from "../../validations/common.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
 import { z } from "zod";
-import productsController from "../../controllers/products.controller.js";
+import productsController, { importDummy, productMetrics, productReviews, createReview, removeReview } from "../../controllers/products.controller.js";
 import {
   authenticate,
   requirePermission,
@@ -10,6 +9,9 @@ import {
 import { validate } from "../../middlewares/validate.middleware.js";
 import { Permission } from "../../types/permissions.type.js";
 import {
+  updateInventorySchema,
+  importDummyProductSchema,
+  reviewInputSchema,
   createProductSchema,
   getProductsQuerySchema,
   productIdParamSchema,
@@ -22,6 +24,11 @@ import { uploadProductImage, deleteProductImage } from "../../controllers/produc
 const router: ExpressRouter = Router();
 
 router.use(authenticate);
+router.post('/import/dummyjson', requirePermission(Permission.ProductCreate), validate({ body: importDummyProductSchema }), importDummy);
+router.get('/:id/metrics', requirePermission(Permission.ProductView), validate({ params: productIdParamSchema }), productMetrics);
+router.get('/:id/reviews', requirePermission(Permission.ProductView), validate({ params: productIdParamSchema, query: paginationSchema }), productReviews);
+router.post('/:id/reviews', requirePermission(Permission.ProductUpdate), validate({ params: productIdParamSchema, body: reviewInputSchema }), createReview);
+router.delete('/:id/reviews/:reviewId', requirePermission(Permission.ProductUpdate), validate({ params: z.object({ id: objectId, reviewId: objectId }) }), removeReview);
 router.patch('/:id/inventory', requirePermission(Permission.ProductInventory),
   validate({ params: productIdParamSchema, body: updateInventorySchema }), productsController.updateInventory);
 router.get('/statistics', requirePermission(Permission.ProductView), productsController.getStatistics);

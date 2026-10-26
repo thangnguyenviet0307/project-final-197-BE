@@ -4,7 +4,11 @@ import type { GetProductsQuery } from '../types/products.type.js';
 export function buildProductQuery(filters: Partial<GetProductsQuery>): Record<string, unknown> {
   const query: Record<string, unknown> = {};
   const variants: Record<string, unknown> = {};
-  if (filters.sku) variants['sku'] = filters.sku.trim().toUpperCase();
+  if (filters.sku) query['$or'] = [{ sku: filters.sku.trim().toUpperCase() }, { 'variants.sku': filters.sku.trim().toUpperCase() }];
+  if (filters.sku && (filters.color || filters.size)) {
+    delete query['$or'];
+    variants['sku'] = filters.sku.trim().toUpperCase();
+  }
   if (filters.color) variants['color'] = { $regex: escapeRegex(filters.color.trim()), $options: 'i' };
   if (filters.size) variants['size'] = { $regex: escapeRegex(filters.size.trim()), $options: 'i' };
   if (Object.keys(variants).length) query['variants'] = { $elemMatch: variants };

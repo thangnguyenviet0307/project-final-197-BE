@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createUserSchema } from "./users.validation.js";
 export const loginSchema = createUserSchema.pick({ email: true, password: true }) satisfies z.ZodType<LoginInput>;
 // Registration never accepts roles, activation flags or administrative fields.
-export const registerCustomerSchema = createUserSchema.pick({ email: true, password: true, firstName: true, lastName: true }).strict();
+export const registerCustomerSchema = z.strictObject(createUserSchema.pick({ email: true, password: true, firstName: true, lastName: true }).shape);
 export const bootstrapSchema = createUserSchema.omit({ role: true }).extend({
   active: z.literal(true).default(true),
 }) satisfies z.ZodType<BootstrapInput>;

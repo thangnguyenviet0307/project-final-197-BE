@@ -32,7 +32,7 @@ export const UserService = {
           })),
         }
       : {};
-    const filter = { ...searchFilter, ...(role ? { role } : {}), ...(active === true ? { $or: [{ active: true }, { active: { $exists: false } }] } : active === false ? { active: false } : {}) };
+    const filter = { ...searchFilter, role: role ?? { $in: ["admin", "staff"] as const }, ...(active === true ? { $or: [{ active: true }, { active: { $exists: false } }] } : active === false ? { active: false } : {}) };
     const direction = sortOrder === "desc" ? -1 : 1;
     const rows = sortBy === "username" ? User.aggregate([
       { $match: filter },

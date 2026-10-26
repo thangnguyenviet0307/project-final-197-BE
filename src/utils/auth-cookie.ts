@@ -7,7 +7,7 @@ export function frontendOrigins(): string[] {
 }
 const name = "admin_refresh";
 const options = () => ({ httpOnly: true, secure: process.env["NODE_ENV"] === "production", sameSite: "strict" as const, path: "/api/v1/auth" });
-export function clearRefreshCookie(res: Response) { res.clearCookie(name, options()); }
+export function clearRefreshCookie(res: Response) { res.clearCookie(name, options()); res.clearCookie("refreshToken", options()); }
 export function authResponse(req: Request, res: Response, result: { accessToken: string; refreshToken: string; user?: unknown }) {
   res.setHeader("Cache-Control", "no-store");
   if (req.get("X-Auth-Transport") !== "cookie") return result;
@@ -26,8 +26,8 @@ export const cookieAuthTransport: RequestHandler = (req, _res, next) => {
   const origin = req.get("Origin");
   if (!origin || !frontendOrigins().includes(origin)) return next(createHttpError(403, "Untrusted authentication origin"));
   if (req.path === "/refresh") {
-    const raw = req.headers.cookie?.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
-    try { req.body = { refreshToken: raw ? decodeURIComponent(raw) : "" }; }
+    const cookieHeader = req.headers.cookie?.replace(/(^|;\s*)refreshToken=/g, "$1admin_refresh="); const raw = cookieHeader?.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
+    if (!raw) return next(createHttpError(401, "Your session has expired. Please sign in again.")); try { req.body = { refreshToken: raw ? decodeURIComponent(raw) : "" }; }
     catch { return next(createHttpError(400, "Invalid authentication cookie")); }
   }
   next();

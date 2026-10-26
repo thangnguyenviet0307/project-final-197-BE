@@ -154,3 +154,14 @@ POST {{baseUrl}}/auth/logout
 x-rest-client-session: staff
 x-rest-client-auth: staff
 Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+
+### Register a customer (does not sign in)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "buyer@example.com",
+  "password": "Customer123",
+  "firstName": "Test",
+  "lastName": "Buyer"
+}

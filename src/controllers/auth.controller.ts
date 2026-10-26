@@ -7,6 +7,7 @@ import createHttpError from "http-errors";
 import { sendResponse } from "../helpers/response.helper.js";
 import type { Request, Response, RequestHandler } from "express";
 import {
+  registerCustomer,
   login as loginService,
   logout as logoutService,
   refresh as refreshService,
@@ -71,6 +72,10 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
+  register: asyncHandler(async (req, res) => {
+    const user = await registerCustomer(req.body);
+    sendResponse(res, 201, { message: "Account created. Please sign in.", data: user });
+  }),
   updateProfile: asyncHandler(async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");

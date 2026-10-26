@@ -55,3 +55,22 @@ Real replica-set integration tests are provided separately: set `MONGODB_TEST_UR
 - Startup rejects standalone MongoDB. Production startup disables automatic index creation; provision schema indexes explicitly during deployment. Shutdown closes HTTP connections and disconnects MongoDB. Build scripts stop on failures.
 
 The GitHub Actions workflow runs typecheck, unit/HTTP tests, build, and real integration tests against an isolated local MongoDB replica set. The integration suite covers rollback, overselling, exactly-once stock restoration, concurrent admin changes, category cycles, and category-delete/product-create races. A workflow added to the repository has not necessarily run yet; inspect CI results after pushing.
+
+## Customer registration
+
+POST /api/v1/auth/register accepts email, password (6–1024 characters), firstName and lastName (1–50 trimmed characters). Extra fields, including role, are rejected. Email is trimmed and lowercased. Duplicate emails return 409; invalid input returns 400. Registration uses the existing authentication rate limiter.
+
+The endpoint creates an active User with role customer and an Argon2-hashed password. It returns 201 with the public user and no session tokens. The client should then open customer sign-in and use POST /api/v1/auth/login. Customer accounts have no management permissions. No existing records are migrated. Registration now creates a linked Customer contact in the same MongoDB transaction (Customer.accountId references User). Phone/address default to empty until provided. Administrative contact creation still requires phone/address. Existing contacts are never claimed by matching email; conflicting registrations return 409. Earlier accounts are not backfilled automatically. MongoDB must support transactions (replica set or sharded cluster).
+
+### Browser sessions
+
+Frontend origins are configured through FRONTEND_ORIGINS (comma-separated exact origins); local defaults are http://localhost:5173 and http://127.0.0.1:5173. Production must configure this list explicitly. Credentialed CORS is enabled only for allowed origins.
+
+Browser login/refresh send X-Auth-Transport: cookie and a trusted Origin. Refresh tokens use an HttpOnly, SameSite=Strict cookie scoped to /api/v1/auth (Secure in production), and are omitted from JSON. Refresh reads the cookie; logout/password changes expire it. Keep frontend and API on the same site. REST clients without the header retain the existing JSON token contract.
+
+## Registered accounts in customer management
+
+GET /api/v1/users lists only admin/staff accounts; role filtering applies to both rows and counts before pagination.
+GET /api/v1/customers/accounts lists User records with role=customer, including existing registrations. CustomerView permission is required. Query: page, limit, search (name/email), isActive. Response data includes only _id, firstName, lastName, email, active and createdAt, plus pagination. Customer contact CRUD remains separate; this does not migrate records or link accounts by email.
+
+The frontend no longer displays the separate registered-account section. Newly registered customers appear through the existing GET /customers list and contact statistics; /users continues to exclude customer accounts. Contact deletion does not delete the login account.

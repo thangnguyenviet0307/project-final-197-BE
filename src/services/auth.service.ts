@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto";
 import { SystemLock } from "../models/system-locks.model.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
+import { Customer } from "../models/customers.model.js";
 import { User } from "../models/users.model.js";
 import {
   generateTokenPair,
@@ -13,6 +14,31 @@ import {
 import type { CreateUserInput } from "../types/users.type.js";
 import { verifyPassword } from "../utils/password.js";
 import { sessionRevocationUpdate } from "../utils/session.js";
+
+import type { RegisterCustomerInput } from "../types/auth.type.js";
+
+export async function registerCustomer(input: RegisterCustomerInput) {
+  if (await User.exists({ email: input.email })) {
+    throw createHttpError(409, "Email already exists");
+  }
+  if (await Customer.exists({ email: input.email })) {
+    throw createHttpError(409, "Email already exists in customer contacts. Please contact the store for assistance.");
+  }
+  const password = await argon2.hash(input.password);
+  return mongoose.connection.transaction(async session => {
+    const [user] = await User.create([{
+      email: input.email, firstName: input.firstName, lastName: input.lastName,
+      password, role: "customer", active: true, mustChangePassword: false,
+      tokenVersion: 0, refreshToken: null,
+    }], { session });
+    if (!user) throw createHttpError(500, "Cannot create customer account");
+    await Customer.create([{
+      accountId: user._id, email: input.email, firstName: input.firstName,
+      lastName: input.lastName, isActive: true,
+    }], { session });
+    return toPublicUser(toAuthUser(user));
+  });
+}
 
 export async function login(email: string, password: string) {
   const user = await User.findOne({ email }).select("+password +tokenVersion");

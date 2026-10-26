@@ -20,6 +20,13 @@ async function validateParent(parent: string | null | undefined, session: Client
 }
 
 export class CategoriesService {
+  public static async getPublicCategories() {
+    return Categories.find({ isActive: true, isDeleted: { $ne: true } })
+      .select("_id name slug icon parent")
+      .sort({ name: 1 })
+      .lean();
+  }
+
   public static async createCategory(data: CreateCategoriesInput): Promise<ICategories> {
     return withRelationsTransaction(async (session) => {
       await validateParent(data.parent, session);

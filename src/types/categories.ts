@@ -19,7 +19,6 @@ export interface CreateCategoriesInput {
   icon?: string | undefined;
   name: string;
   description?: string | undefined;
-  icon?: string | undefined;
   parent?: string | null | undefined;
   isActive?: boolean | undefined;
 }
@@ -27,7 +26,6 @@ export interface UpdateCategoriesInput {
   icon?: string | undefined;
   name?: string | undefined;
   description?: string | undefined;
-  icon?: string | undefined;
   parent?: string | null | undefined;
   isActive?: boolean | undefined;
 }

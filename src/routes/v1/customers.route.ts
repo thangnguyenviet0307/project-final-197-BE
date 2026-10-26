@@ -14,6 +14,8 @@ const router: RouterType = Router();
 
 router.use(authenticate);
 
+router.get('/accounts', requirePermission(Permission.CustomerView), validate({ query: getCustomersQuerySchema }), customerController['getAccounts']!);
+
 router.get('/', requirePermission(Permission.CustomerView), validate({ query: getCustomersQuerySchema }), customerController['getCustomers']!);
 router.get('/:id', requirePermission(Permission.CustomerView), validate({ params: idParamSchema }), customerController['getCustomerById']!);
 router.post('/', requirePermission(Permission.CustomerCreate), validate({ body: createCustomerSchema }), customerController['createCustomer']!);

@@ -31,6 +31,11 @@ export interface LoginInput {
   email: string;
   password: string;
 }
+export interface RegisterCustomerInput extends LoginInput {
+  firstName: string;
+  lastName: string;
+}
+
 export interface BootstrapInput extends LoginInput {
   firstName: string;
   lastName: string;

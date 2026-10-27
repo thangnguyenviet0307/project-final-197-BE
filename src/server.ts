@@ -10,7 +10,13 @@ import mongoose from "mongoose";
 const PORT = Number(process.env["PORT"] || 5000);
 
 const startServer = async (): Promise<void> => {
-  validateEnvironment();
+  try {
+    validateEnvironment();
+  } catch (error) {
+    // Validation messages contain variable names only, never their secret values.
+    if (error instanceof Error) console.error(`Invalid server configuration: ${error.message}`);
+    throw error;
+  }
   await connectDatabase();
 
   const stopImageCleanup = startImageCleanupWorker();

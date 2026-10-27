@@ -76,7 +76,9 @@ test('seed errors report driver diagnostics and redact credentials', () => {
 test('catalog seeding creates only brands, categories and products with valid metadata and batch markers', async () => {
   const data = await generateSeedData();
   assert.deepEqual(Object.keys(data).sort(), ['brands', 'categories', 'products']);
-  assert.equal(data.brands.length, 8);
+  assert.deepEqual(data.brands.map(row => row.name), [
+    'Anker', 'Apple', 'Baseus', 'Belkin', 'JBL', 'Logitech', 'Samsung', 'Sony', 'UGREEN', 'Xiaomi',
+  ]);
   assert.equal(data.categories.length, 10);
   assert.equal(data.products.length, 50);
   const batch = data.brands[0].seedBatch;
@@ -105,6 +107,11 @@ test('catalog seeding creates only brands, categories and products with valid me
       assert.ok(variant.stock >= 100 && variant.stock <= 200);
       assert.ok(variant.compare_at_price >= variant.price);
     }
+  }
+  for (const brand of data.brands) {
+    assert.equal(data.products.filter(product => String(product.brand) === String(brand._id)).length, 5);
+    assert.equal(brand.isActive, true);
+    assert.match(brand.logoUrl, /^https:\/\//);
   }
   const next = await generateSeedData({
     brands: data.brands.map(row => ({ name: row.name, slug: row.slug })),

@@ -10,6 +10,19 @@ import { createBrandSchema } from '../validations/brands.validation.js';
 import { createCategoriesSchema } from '../validations/categories.validation.js';
 import { createProductSchema } from '../validations/products.validation.js';
 
+const accessoryBrands: { name: string; description: string; logoUrl?: string }[] = [
+  { name: 'Anker', description: 'Thương hiệu phụ kiện sạc và thiết bị di động.', logoUrl: 'https://www.anker.com/favicon.ico' },
+  { name: 'Apple', description: 'Thương hiệu thiết bị công nghệ và phụ kiện.', logoUrl: 'https://www.apple.com/favicon.ico' },
+  { name: 'Baseus', description: 'Thương hiệu phụ kiện điện thoại và thiết bị số.', logoUrl: 'https://www.google.com/s2/favicons?domain=baseus.com&sz=128' },
+  { name: 'Belkin', description: 'Thương hiệu phụ kiện kết nối và sạc.', logoUrl: 'https://www.belkin.com/favicon.ico' },
+  { name: 'JBL', description: 'Thương hiệu thiết bị âm thanh và phụ kiện.', logoUrl: 'https://www.jbl.com/favicon.ico' },
+  { name: 'Logitech', description: 'Thương hiệu phụ kiện máy tính và thiết bị ngoại vi.', logoUrl: 'https://www.logitech.com/favicon.ico' },
+  { name: 'Samsung', description: 'Thương hiệu thiết bị di động và phụ kiện.', logoUrl: 'https://www.google.com/s2/favicons?domain=samsung.com&sz=128' },
+  { name: 'Sony', description: 'Thương hiệu thiết bị điện tử và phụ kiện.', logoUrl: 'https://www.google.com/s2/favicons?domain=sony.com&sz=128' },
+  { name: 'UGREEN', description: 'Thương hiệu phụ kiện kết nối và sạc.', logoUrl: 'https://www.google.com/s2/favicons?domain=ugreen.com&sz=128' },
+  { name: 'Xiaomi', description: 'Thương hiệu thiết bị thông minh và phụ kiện.', logoUrl: 'https://www.mi.com/favicon.ico' },
+] as const;
+
 /** Shared metadata for new and legacy native Faker products (kg, cm, VND). */
 export function generateProductMetadata(sku: string, categorySlug: string, index = 0) {
   return {
@@ -47,10 +60,12 @@ export async function generateSeedData(existing: ExistingCatalog = {}) {
   const brandName = createNameAllocator(existing.brands, 100);
   const categoryName = createNameAllocator(existing.categories);
   const productName = createNameAllocator(existing.products);
-  const brands = Array.from({ length: 8 }, () => new BrandModel({
+  const brands = accessoryBrands.map(({ name, description, logoUrl }) => new BrandModel({
     seedBatch: batch,
-    ...brandName(faker.company.name()),
-    description: faker.company.catchPhrase(), logoUrl: faker.image.url(), isActive: true,
+    ...brandName(name),
+    description,
+    ...(logoUrl ? { logoUrl } : {}),
+    isActive: true,
   }));
   const departments = faker.helpers.arrayElements([
     'Computers', 'Phones', 'Accessories', 'Clothing', 'Shoes', 'Sports',
@@ -76,12 +91,14 @@ export async function generateSeedData(existing: ExistingCatalog = {}) {
     }));
     const identity = productName(faker.commerce.productName());
     const category = faker.helpers.arrayElement(categories);
+    const brand = brands[i % brands.length];
+    if (!brand) throw new Error('No seed brand is available for product assignment.');
     return new Product({
       seedBatch: batch,
       product_name: identity.name, slug: identity.slug,
       ...generateProductMetadata(`SEED-${batch.toUpperCase()}-PRODUCT-${i}`, category.slug, i),
       price, discount: faker.number.int({ min: 0, max: 50 }),
-      category: category._id, brand: faker.helpers.arrayElement(brands)._id,
+      category: category._id, brand: brand._id,
       description: faker.commerce.productDescription(), model_year: i % 3 === 0 ? null : now.getFullYear(),
       thumbnail, stock: sumVariantStock(variants),
       is_active: true, variants,

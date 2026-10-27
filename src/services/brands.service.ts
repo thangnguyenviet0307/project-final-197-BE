@@ -13,6 +13,13 @@ import type {
 } from '../types/brands.js';
 
 export class BrandService {
+  static async getPublic() {
+    return BrandModel.find({ isActive: true, isDeleted: { $ne: true } })
+      .select("_id name slug logoUrl")
+      .sort({ name: 1 })
+      .lean();
+  }
+
   // 1. Lấy tất cả thương hiệu chưa bị xóa
   static async getAll() {
     return BrandModel.find({

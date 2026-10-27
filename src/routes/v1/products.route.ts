@@ -12,6 +12,7 @@ import {
   updateInventorySchema,
   importDummyProductSchema,
   reviewInputSchema,
+  storeReviewInputSchema,
   createProductSchema,
   getProductsQuerySchema,
   productIdParamSchema,
@@ -19,9 +20,20 @@ import {
 } from "../../validations/products.validation.js";
 
 import { parseProductImage } from "../../middlewares/product-image.middleware.js";
+import { storeProducts, storeProduct, storeMetrics, storeReviews, storeRelated, createStoreReview } from "../../controllers/store-products.controller.js";
+import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
 import { uploadProductImage, deleteProductImage } from "../../controllers/product-images.controller.js";
 
 const router: ExpressRouter = Router();
+
+// Public catalog and guest review submission precede administrative authentication.
+router.get('/public', validate({ query: getProductsQuerySchema }), storeProducts);
+router.get('/public/:slug', validate({ params: z.object({ slug: z.string().trim().min(3).max(255) }) }), storeProduct);
+const publicSlug = z.object({ slug: z.string().trim().min(3).max(255) });
+router.get('/public/:slug/metrics', validate({ params: publicSlug }), storeMetrics);
+router.get('/public/:slug/reviews', validate({ params: publicSlug, query: paginationSchema.extend({ limit: z.coerce.number().int().min(1).max(5).default(5) }) }), storeReviews);
+router.post('/public/:slug/reviews', createAuthRateLimit(5, 15 * 60 * 1000, "Bạn đã gửi quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau."), validate({ params: publicSlug, body: storeReviewInputSchema }), createStoreReview);
+router.get('/public/:slug/related', validate({ params: publicSlug }), storeRelated);
 
 router.use(authenticate);
 router.post('/import/dummyjson', requirePermission(Permission.ProductCreate), validate({ body: importDummyProductSchema }), importDummy);

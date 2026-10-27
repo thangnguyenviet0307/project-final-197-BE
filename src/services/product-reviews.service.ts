@@ -5,15 +5,18 @@ import Product from "../models/products.model.js";
 import { ProductReview } from "../models/product-reviews.model.js";
 import { Order } from "../models/orders.model.js";
 import { OrderStatus } from "../types/orders.type.js";
-import { reviewInputSchema } from "../validations/products.validation.js";
+import { reviewInputSchema, storeReviewInputSchema } from "../validations/products.validation.js";
+import { assertActiveCatalog } from "../utils/catalog-reference.js";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
 import { buildPagination } from "../utils/pagination.js";
 
-export async function getProductMetrics(productId: string) {
+export async function getProductMetrics(productId: string, includeDistribution = false) {
   const id = new Types.ObjectId(productId);
   const [reviews, sales] = await Promise.all([
-    ProductReview.aggregate<{ rating: number; reviewCount: number }>([
-      { $match: { product: id } }, { $group: { _id: null, rating: { $avg: "$rating" }, reviewCount: { $sum: 1 } } },
+    ProductReview.aggregate<{ rating: number; reviewCount: number; star1?: number; star2?: number; star3?: number; star4?: number; star5?: number }>([
+      { $match: { product: id } }, { $group: { _id: null, rating: { $avg: "$rating" }, reviewCount: { $sum: 1 },
+        ...(includeDistribution ? Object.fromEntries([1, 2, 3, 4, 5].map(star => [`star${star}`, { $sum: { $cond: [{ $eq: ["$rating", star] }, 1, 0] } }])) : {}),
+      } },
     ]),
     Order.aggregate<{ soldCount: number }>([
       { $match: { orderStatus: OrderStatus.Completed, "orderItems.productId": id } },
@@ -21,7 +24,10 @@ export async function getProductMetrics(productId: string) {
       { $group: { _id: null, soldCount: { $sum: "$orderItems.quantity" } } },
     ]),
   ]);
-  return { rating: Math.round((reviews[0]?.rating ?? 0) * 10) / 10, reviewCount: reviews[0]?.reviewCount ?? 0, soldCount: sales[0]?.soldCount ?? 0 };
+  const review = reviews[0];
+  return { rating: Math.round((review?.rating ?? 0) * 10) / 10, reviewCount: review?.reviewCount ?? 0, soldCount: sales[0]?.soldCount ?? 0,
+    ...(includeDistribution ? { ratingDistribution: { 1: review?.star1 ?? 0, 2: review?.star2 ?? 0, 3: review?.star3 ?? 0, 4: review?.star4 ?? 0, 5: review?.star5 ?? 0 } } : {}),
+  };
 }
 
 export async function listProductReviews(product: string, page: number, limit: number) {
@@ -33,9 +39,21 @@ export async function listProductReviews(product: string, page: number, limit: n
 }
 
 export async function addProductReview(product: string, input: z.infer<typeof reviewInputSchema>) {
+  return saveReview(product, input, "admin");
+}
+
+export async function addStoreProductReview(product: string, input: z.infer<typeof storeReviewInputSchema>) {
+  return saveReview(product, input, "storefront");
+}
+
+async function saveReview(product: string, input: z.infer<typeof storeReviewInputSchema>, source: "admin" | "storefront") {
   return withRelationsTransaction(async session => {
-    if (!(await Product.exists({ _id: product }).session(session))) throw createHttpError(404, "Product not found");
-    const review = new ProductReview({ ...input, product, source: "admin" });
+    if (source === "storefront") {
+      const current = await Product.findOne({ _id: product, is_active: true }).session(session);
+      if (!current) throw createHttpError(404, "Product not found");
+      await assertActiveCatalog(String(current.brand), String(current.category), session);
+    } else if (!(await Product.exists({ _id: product }).session(session))) throw createHttpError(404, "Product not found");
+    const review = new ProductReview({ ...input, product, source });
     await review.save({ session });
     return review.toObject();
   });

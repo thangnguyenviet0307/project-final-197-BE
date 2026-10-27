@@ -27,6 +27,11 @@ export const reviewInputSchema = z.object({
   date: z.iso.datetime().optional(),
 });
 
+export const storeReviewInputSchema = reviewInputSchema.omit({ date: true }).extend({
+  email: z.union([z.email().max(254), z.literal("")]).optional(),
+  phone: z.string().trim().max(20).refine(value => !value || /^\+?[0-9 ()-]{7,20}$/.test(value), "Số điện thoại không hợp lệ").optional(),
+}).strict();
+
 export const productVariantSchema = z.object({
   _id: objectId.optional(),
   sku: z

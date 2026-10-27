@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 import { sendResponse } from "../helpers/response.helper.js";
 
 // Per-process guard. Multiple public API instances need a shared gateway limiter.
-export function createAuthRateLimit(limit = 30, windowMs = 15 * 60 * 1000): RequestHandler {
+export function createAuthRateLimit(limit = 30, windowMs = 15 * 60 * 1000, message = "Too many authentication requests; retry later"): RequestHandler {
   const attempts = new Map<string, { count: number; expires: number }>();
   return (req, res, next) => {
     const now = Date.now();
@@ -12,13 +12,13 @@ export function createAuthRateLimit(limit = 30, windowMs = 15 * 60 * 1000): Requ
     // Bound memory even under traffic from many different addresses.
     if (!entry && attempts.size >= 10000) {
       res.setHeader("Retry-After", String(Math.ceil(windowMs / 1000)));
-      sendResponse(res, 429, { success: false, message: "Too many authentication requests; retry later", data: null });
+      sendResponse(res, 429, { success: false, message, data: null });
       return;
     }
     if (!entry) { entry = { count: 0, expires: now + windowMs }; attempts.set(key, entry); }
     if (entry.count >= limit) {
       res.setHeader("Retry-After", String(Math.ceil((entry.expires - now) / 1000)));
-      sendResponse(res, 429, { success: false, message: "Too many authentication requests; retry later", data: null });
+      sendResponse(res, 429, { success: false, message, data: null });
       return;
     }
     entry.count++;

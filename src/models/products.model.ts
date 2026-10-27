@@ -157,6 +157,12 @@ const productSchema = new Schema(
       default: 0,
       min: [0, "Số lượng tồn kho không được nhỏ hơn 0"],
     },
+    on_sale: { type: Boolean, default: true },
+    count_view: { type: Number, default: 0, min: 0, validate: Number.isSafeInteger },
+    is_best_seller: { type: Boolean, default: false },
+    is_new: { type: Boolean, default: false },
+    is_hot: { type: Boolean, default: false },
+    is_home: { type: Boolean, default: false },
     is_active: {
       type: Boolean,
       default: true,

@@ -1,3 +1,4 @@
+import heroSlideRoutes from "./routes/v1/hero-slides.route.js";
 import customerAuthRoutes from "./routes/v1/customer-auth.route.js";
 import express, {
   type Express,
@@ -32,6 +33,7 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
+app.use("/api/v1/hero-slides", heroSlideRoutes);
 app.use("/api/v1/brands", brandRoutes);
 app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/storefront", storefrontRoutes);

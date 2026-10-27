@@ -1,0 +1,15 @@
+import { Router, type Router as ExpressRouter } from "express";
+import { authenticate, requirePermission } from "../../middlewares/auth.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { idParamSchema } from "../../validations/common.validation.js";
+import { createHeroSlideSchema, updateHeroSlideSchema, heroSlideVersionSchema } from "../../validations/hero-slides.validation.js";
+import { Permission } from "../../types/permissions.type.js";
+import * as controller from "../../controllers/hero-slides.controller.js";
+const router: ExpressRouter = Router();
+router.get("/public", controller.publicHeroSlides);
+router.use(authenticate, requirePermission(Permission.HeroManage));
+router.get("/", controller.heroSlides);
+router.post("/", validate({ body: createHeroSlideSchema }), controller.createHeroSlide);
+router.patch("/:id", validate({ params: idParamSchema, body: updateHeroSlideSchema }), controller.updateHeroSlide);
+router.delete("/:id", validate({ params: idParamSchema, body: heroSlideVersionSchema }), controller.deleteHeroSlide);
+export default router;

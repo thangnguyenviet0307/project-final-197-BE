@@ -9,6 +9,7 @@ import {
 import { validate } from "../../middlewares/validate.middleware.js";
 import { Permission } from "../../types/permissions.type.js";
 import {
+  updateProductFlagsSchema,
   updateInventorySchema,
   importDummyProductSchema,
   reviewInputSchema,
@@ -20,7 +21,7 @@ import {
 } from "../../validations/products.validation.js";
 
 import { parseProductImage } from "../../middlewares/product-image.middleware.js";
-import { storeProducts, storeProduct, storeMetrics, storeReviews, storeRelated, createStoreReview } from "../../controllers/store-products.controller.js";
+import { storeProductView, storeProducts, storeProduct, storeMetrics, storeReviews, storeRelated, createStoreReview } from "../../controllers/store-products.controller.js";
 import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
 import { uploadProductImage, deleteProductImage } from "../../controllers/product-images.controller.js";
 
@@ -30,6 +31,7 @@ const router: ExpressRouter = Router();
 router.get('/public', validate({ query: getProductsQuerySchema }), storeProducts);
 router.get('/public/:slug', validate({ params: z.object({ slug: z.string().trim().min(3).max(255) }) }), storeProduct);
 const publicSlug = z.object({ slug: z.string().trim().min(3).max(255) });
+router.post('/public/:slug/views', validate({ params: publicSlug, body: z.strictObject({}) }), storeProductView);
 router.get('/public/:slug/metrics', validate({ params: publicSlug }), storeMetrics);
 router.get('/public/:slug/reviews', validate({ params: publicSlug, query: paginationSchema.extend({ limit: z.coerce.number().int().min(1).max(5).default(5) }) }), storeReviews);
 router.post('/public/:slug/reviews', createAuthRateLimit(5, 15 * 60 * 1000, "Bạn đã gửi quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau."), validate({ params: publicSlug, body: storeReviewInputSchema }), createStoreReview);
@@ -41,6 +43,8 @@ router.get('/:id/metrics', requirePermission(Permission.ProductView), validate({
 router.get('/:id/reviews', requirePermission(Permission.ProductView), validate({ params: productIdParamSchema, query: paginationSchema }), productReviews);
 router.post('/:id/reviews', requirePermission(Permission.ProductUpdate), validate({ params: productIdParamSchema, body: reviewInputSchema }), createReview);
 router.delete('/:id/reviews/:reviewId', requirePermission(Permission.ProductUpdate), validate({ params: z.object({ id: objectId, reviewId: objectId }) }), removeReview);
+router.patch('/:id/flags', requirePermission(Permission.ProductUpdate),
+  validate({ params: productIdParamSchema, body: updateProductFlagsSchema }), productsController.updateProduct);
 router.patch('/:id/inventory', requirePermission(Permission.ProductInventory),
   validate({ params: productIdParamSchema, body: updateInventorySchema }), productsController.updateInventory);
 router.get('/statistics', requirePermission(Permission.ProductView), productsController.getStatistics);

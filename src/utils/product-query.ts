@@ -4,6 +4,12 @@ import type { GetProductsQuery } from '../types/products.type.js';
 export function buildProductQuery(filters: Partial<GetProductsQuery>): Record<string, unknown> {
   const query: Record<string, unknown> = {};
   const variants: Record<string, unknown> = {};
+  for (const field of ["on_sale", "is_best_seller", "is_new", "is_hot", "is_home"] as const) {
+    if (filters[field] === undefined) continue;
+    query[field] = field === "on_sale"
+      ? (filters[field] ? { $ne: false } : false)
+      : (filters[field] ? true : { $ne: true });
+  }
   if (filters.sku) query['$or'] = [{ sku: filters.sku.trim().toUpperCase() }, { 'variants.sku': filters.sku.trim().toUpperCase() }];
   if (filters.sku && (filters.color || filters.size)) {
     delete query['$or'];

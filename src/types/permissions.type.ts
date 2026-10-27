@@ -1,4 +1,5 @@
 export enum Permission {
+  HeroManage = "hero:manage",
   // Order permissions
   OrderView = 'orders:view',
   OrderStart = 'orders:start',

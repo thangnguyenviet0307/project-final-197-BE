@@ -17,6 +17,12 @@ export interface ProductVariant extends ProductVariantInput {}
 
 // Request fields before validation applies defaults.
 export interface ProductInput {
+  on_sale?: boolean | undefined;
+  is_best_seller?: boolean | undefined;
+  is_new?: boolean | undefined;
+  is_hot?: boolean | undefined;
+  is_home?: boolean | undefined;
+
   sku?: string | null | undefined;
   barcode?: string | null | undefined;
   currency?: "VND" | undefined;
@@ -49,6 +55,12 @@ export interface CreateProductInput extends ProductInput {
 }
 export interface UpdateProductInput extends OptionalUpdate<ProductInput> { expectedVersion?: number | undefined; }
 export interface GetProductsQuery extends IPaginationQuery {
+  on_sale?: boolean | undefined;
+  is_best_seller?: boolean | undefined;
+  is_new?: boolean | undefined;
+  is_hot?: boolean | undefined;
+  is_home?: boolean | undefined;
+
   stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' | undefined;
   search?: string | undefined;
   category?: string | undefined;
@@ -64,6 +76,7 @@ export interface GetProductsQuery extends IPaginationQuery {
 export type CreateProductDto = ProductInput;
 export type UpdateProductDto = UpdateProductInput;
 export interface TProduct extends ProductInput {
+  count_view?: number;
   id?: string;
   slug: string;
   createdAt?: Date;

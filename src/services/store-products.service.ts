@@ -6,7 +6,7 @@ import { Categories } from "../models/categories.model.js";
 import { BrandModel } from "../models/brands.model.js";
 
 // Explicit public fields: import provenance and optimistic concurrency stay private.
-export const publicProductFields = "_id product_name slug sku price discount category brand description model_year thumbnail images.secure_url sourceImages stock is_active variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency";
+export const publicProductFields = "_id product_name slug sku price discount category brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency";
 const references = [{ path: "category", select: "_id name" }, { path: "brand", select: "_id name" }];
 
 async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
@@ -18,7 +18,7 @@ async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
 export async function listStoreProducts(filters: Partial<GetProductsQuery>) {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 12;
-  const query: Record<string, unknown> = { $and: [buildProductQuery(filters), await visibleCatalogFilter()], is_active: true };
+  const query: Record<string, unknown> = { $and: [buildProductQuery(filters), await visibleCatalogFilter()], is_active: true, on_sale: { $ne: false } };
   const [data, total] = await Promise.all([
     Product.find(query).select(publicProductFields).populate(references).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).lean(),
     Product.countDocuments(query),
@@ -27,14 +27,23 @@ export async function listStoreProducts(filters: Partial<GetProductsQuery>) {
 }
 
 export async function getStoreProduct(slug: string) {
-  return Product.findOne({ slug, is_active: true, ...await visibleCatalogFilter() }).select(publicProductFields).populate(references).lean();
+  return Product.findOne({ slug, is_active: true, on_sale: { $ne: false }, ...await visibleCatalogFilter() }).select(publicProductFields).populate(references).lean();
 }
 
 export async function relatedStoreProducts(product: { _id: unknown; category: unknown; tags?: string[] }) {
   const category = product.category && typeof product.category === 'object' && '_id' in product.category ? product.category._id : product.category;
   const query: Record<string, unknown> = {
-    _id: { $ne: product._id }, is_active: true,
+    _id: { $ne: product._id }, is_active: true, on_sale: { $ne: false },
     $and: [await visibleCatalogFilter(), { category }],
   };
   return Product.find(query).select(publicProductFields).populate(references).sort({ createdAt: -1, _id: -1 }).limit(5).lean();
+}
+
+// Atomic counter writes deliberately leave metadata/inventory __v and updatedAt unchanged.
+export async function recordStoreProductView(slug: string) {
+  return Product.findOneAndUpdate(
+    { slug, is_active: true, on_sale: { $ne: false }, ...await visibleCatalogFilter() },
+    { $inc: { count_view: 1 } },
+    { new: true, timestamps: false },
+  ).select("count_view -_id").lean();
 }

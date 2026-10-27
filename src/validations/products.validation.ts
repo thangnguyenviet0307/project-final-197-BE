@@ -7,7 +7,20 @@ import { objectId, paginationSchema, idParamSchema } from "./common.validation.j
 
 // Shared catalog metadata and review input.
 export const skuSchema = z.string().trim().toUpperCase().min(3).max(64).regex(/^[A-Z0-9-]+$/);
+export const productFlagsShape = {
+  on_sale: z.boolean().optional(),
+  is_best_seller: z.boolean().optional(),
+  is_new: z.boolean().optional(),
+  is_hot: z.boolean().optional(),
+  is_home: z.boolean().optional(),
+};
+export const updateProductFlagsSchema = z.strictObject({
+  ...productFlagsShape,
+  expectedVersion: z.int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).refine(({ expectedVersion, ...fields }) => hasUpdateFields(fields), { error: UPDATE_REQUIRED_MESSAGE });
+
 export const productDetailsShape = {
+  ...productFlagsShape,
   sku: skuSchema.nullable().optional(),
   barcode: z.string().trim().min(1).max(64).nullable().optional(),
   currency: z.literal("VND").optional(),
@@ -92,6 +105,12 @@ export const updateProductSchema = createProductSchema
 export const productIdParamSchema = idParamSchema;
 
 export const getProductsQuerySchema = paginationSchema.extend({
+  on_sale: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+  is_best_seller: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+  is_new: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+  is_hot: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+  is_home: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+
   stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock']).optional(),
   search: z.string().trim().max(255).optional(),
   category: objectId.optional(),

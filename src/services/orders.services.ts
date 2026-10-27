@@ -176,3 +176,17 @@ export async function assignOrder(actor: AuthUser, id: string, requested: string
     return order;
   });
 }
+
+export async function getPersonalSales(actor: AuthUser) {
+  if (!hasPermission(actor.role, Permission.OrderView)) throw createHttpError(403, "Access denied");
+  const cursor = Order.find({ userId: new Types.ObjectId(actor.id), orderStatus: OrderStatus.Completed })
+    .select("orderItems").cursor();
+  let completedOrders = 0;
+  let cents = 0n;
+  for await (const order of cursor) {
+    completedOrders++;
+    cents += BigInt(Math.round(calculateOrderTotal(order.orderItems) * 100));
+  }
+  if (cents > BigInt(Number.MAX_SAFE_INTEGER)) throw createHttpError(400, "Sales total is too large");
+  return { completedOrders, revenue: Number(cents) / 100 };
+}

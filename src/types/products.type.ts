@@ -55,3 +55,5 @@ export interface QueryParams {
   limit?: number; page?: number; search?: string; category?: string; brand?: string;
   sortBy?: string; sortType?: "asc" | "desc";
 }
+
+export interface ProductStatistics { total: number; active: number; outOfStock: number; stockUnits: number }

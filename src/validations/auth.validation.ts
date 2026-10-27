@@ -2,6 +2,7 @@ import type { LoginInput, BootstrapInput, RefreshInput } from "../types/auth.typ
 export type { LoginInput, BootstrapInput, RefreshInput } from "../types/auth.type.js";
 import { z } from "zod";
 import { createUserSchema } from "./users.validation.js";
+export const loginAreaSchema = z.enum(["storefront", "admin"]).optional();
 export const loginSchema = createUserSchema.pick({ email: true, password: true }) satisfies z.ZodType<LoginInput>;
 // Public registration accepts credentials only, never roles or session flags.
 export const registerCustomerSchema = createUserSchema.pick({

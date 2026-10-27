@@ -16,6 +16,8 @@ const router: RouterType = Router();
 
 router.use(authenticate); // phạm vi dữ liệu theo quyền (orders:view-all) được xử lý trong service
 
+router.get('/personal-sales', requirePermission(Permission.OrderView), orderController['getPersonalSales']!);
+
 router.get('/', requirePermission(Permission.OrderView), validate({ query: getOrdersQuerySchema }), orderController['getOrders']!);
 router.get('/:id', requirePermission(Permission.OrderView), validate({ params: idParamSchema }), orderController['getOrderById']!);
 router.post('/', requirePermission(Permission.OrderCreate), validate({ body: createOrderSchema }), orderController['createOrder']!);

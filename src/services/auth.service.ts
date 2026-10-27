@@ -40,7 +40,7 @@ export async function registerCustomer(input: RegisterCustomerInput) {
   });
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, area?: "storefront" | "admin") {
   const user = await User.findOne({ email }).select("+password +tokenVersion");
   // Missing active belongs to legacy accounts; explicit false/null remains disabled.
   if (!user || (user.active !== undefined && user.active !== true)) {
@@ -52,6 +52,9 @@ export async function login(email: string, password: string) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
   }
 
+  if (area && (area === "storefront" ? user.role !== "customer" : user.role === "customer")) {
+    throw createHttpError(401, "Tài khoản không tồn tại !");
+  }
   const authUser = toAuthUser(user, true);
 
   const { accessToken, refreshToken } = generateTokenPair(authUser);
@@ -100,11 +103,14 @@ export async function logout(userId: string) {
   await User.findByIdAndUpdate(userId, sessionRevocationUpdate());
 }
 
-export async function refresh(refreshToken: string) {
+export async function refresh(refreshToken: string, area?: "storefront" | "admin") {
   const decoded = verifyRefreshToken(refreshToken);
   const user = await User.findById(decoded.userId).select("+refreshToken +tokenVersion");
   if (!user || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
     throw createHttpError(401, "Refresh token không hợp lệ");
+  }
+  if (area && (area === "storefront" ? user.role !== "customer" : user.role === "customer")) {
+    throw createHttpError(401, "Tài khoản không tồn tại !");
   }
   const authUser = toAuthUser(user);
   const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokenPair(authUser);

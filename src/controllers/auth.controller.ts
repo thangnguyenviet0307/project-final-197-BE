@@ -1,4 +1,5 @@
 import { browserTokenResponse, clearRefreshCookie } from "../middlewares/browser-auth.middleware.js";
+import { loginAreaSchema } from "../validations/auth.validation.js";
 import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
@@ -18,7 +19,8 @@ import { asyncHandler } from "../utils/async-handler.util.js";
 const loginHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const { email, password } = req.body;
-    const result = await loginService(email, password);
+    const area = loginAreaSchema.parse(req.get("X-Login-Area"));
+    const result = await loginService(email, password, area);
 
     sendResponse(res, 200, {
       success: true,
@@ -44,7 +46,7 @@ const logoutHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const user = (req as { user?: { id: string } }).user;
     if (user) await logoutService(user.id);
-    clearRefreshCookie(res);
+    clearRefreshCookie(res, req);
 
     sendResponse(res, 200, {
       success: true,
@@ -61,7 +63,7 @@ const refreshHandler: RequestHandler = asyncHandler(
       sendResponse(res, 400, { success: false, message: "Refresh token là bắt buộc" });
       return;
     }
-    const result = browserTokenResponse(req, res, await refreshService(refreshToken));
+    const result = browserTokenResponse(req, res, await refreshService(refreshToken, loginAreaSchema.parse(req.get("X-Login-Area"))));
 
     sendResponse(res, 200, {
       success: true,
@@ -91,7 +93,7 @@ export const authController: Record<string, RequestHandler> = {
     const user = (req as AuthenticatedRequest).user;
     if (!user) throw createHttpError(401, "Authentication required");
     await changePassword(user.id, req.body);
-    clearRefreshCookie(res);
+    clearRefreshCookie(res, req);
     sendResponse(res, 200, { message: "Password changed. Please sign in again.", data: null });
   }),
   login: loginHandler,

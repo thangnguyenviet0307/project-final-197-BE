@@ -22,6 +22,9 @@ const router: ExpressRouter = Router();
 
 router.use(authenticate);
 
+// Named endpoints must precede /:id so their names are never parsed as ObjectIds.
+router.get("/statistics", requirePermission(Permission.ProductView), productsController.getStatistics);
+
 router.post("/:id/images", requirePermission(Permission.ProductUpdate),
   validate({ params: productIdParamSchema }), parseProductImage, uploadProductImage);
 

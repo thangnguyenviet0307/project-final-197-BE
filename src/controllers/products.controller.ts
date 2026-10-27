@@ -122,9 +122,12 @@ const deleteProduct: RequestHandler = asyncHandler(async (
 });
 
 const productsController: Record<
-  "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
+  "getStatistics" | "getAllProducts" | "getProductBySku" | "getVariantByProductAndVariantId" |
   "getProductById" | "createProduct" | "updateProduct" | "deleteProduct", RequestHandler
 > = {
+  getStatistics: asyncHandler(async (_req, res) => {
+    sendResponse(res, 200, { data: await productService.getStatistics() });
+  }),
   getAllProducts,
   getProductBySku,
   getVariantByProductAndVariantId,

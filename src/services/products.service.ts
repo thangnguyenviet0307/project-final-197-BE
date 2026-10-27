@@ -277,7 +277,21 @@ const deleteProduct = async (id: string) => withRelationsTransaction(async (sess
   return product ? product.toObject() : null;
 });
 
+async function getStatistics(): Promise<import("../types/products.type.js").ProductStatistics> {
+  const [statistics] = await Product.aggregate<import("../types/products.type.js").ProductStatistics>([
+    { $group: { _id: null,
+      total: { $sum: 1 },
+      active: { $sum: { $cond: [{ $eq: ["$is_active", true] }, 1, 0] } },
+      outOfStock: { $sum: { $cond: [{ $lte: [{ $ifNull: ["$stock", 0] }, 0] }, 1, 0] } },
+      stockUnits: { $sum: { $ifNull: ["$stock", 0] } },
+    } },
+    { $project: { _id: 0, total: 1, active: 1, outOfStock: 1, stockUnits: 1 } },
+  ]);
+  return statistics ?? { total: 0, active: 0, outOfStock: 0, stockUnits: 0 };
+}
+
 export default {
+  getStatistics,
   getAllProducts,
   getProductBySku,
   getVariantByProductAndVariantId,

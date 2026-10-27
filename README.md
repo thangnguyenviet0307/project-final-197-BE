@@ -74,3 +74,7 @@ GET /api/v1/users lists only admin/staff accounts; role filtering applies to bot
 GET /api/v1/customers/accounts lists User records with role=customer, including existing registrations. CustomerView permission is required. Query: page, limit, search (name/email), isActive. Response data includes only _id, firstName, lastName, email, active and createdAt, plus pagination. Customer contact CRUD remains separate; this does not migrate records or link accounts by email.
 
 The frontend no longer displays the separate registered-account section. Newly registered customers appear through the existing GET /customers list and contact statistics; /users continues to exclude customer accounts. Contact deletion does not delete the login account.
+
+Browser login sends X-Login-Area: storefront (customers only) or admin (admin/staff only). Wrong-area credentials return 401 with "Tài khoản không tồn tại !" before issuing tokens, updating sessions or setting cookies. Invalid area values return 400. REST clients omitting this header retain the existing generic login contract; resource permissions still apply.
+
+Admin and storefront browser sessions use separate HttpOnly cookies (adminRefreshToken/customerRefreshToken). Send X-Login-Area on login, refresh, logout and password changes. Refresh validates the account role before rotation. Scoped requests never fall back to the old shared refreshToken cookie; legacy REST transport without an area header retains its contract.

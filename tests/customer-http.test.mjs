@@ -16,7 +16,7 @@ process.env.JWT_SECRET = randomBytes(32).toString('hex');
 process.env.JWT_REFRESH_SECRET = randomBytes(32).toString('hex');
 const { default: app } = await import('../dist/app.js');
 
-test('actual customers.http requests create separate ID slots and update/delete the correct customer', async (t) => {
+test('legacy customers.http creation requests are forbidden without creating records', async (t) => {
   t.mock.method(mongoose.connection, 'transaction', async (callback) => callback({}));
   const admin = new User({ email: 'fixture@example.com', firstName: 'Test', lastName: 'Admin', role: 'admin', active: true, tokenVersion: 0 });
   const records = new Map();
@@ -85,25 +85,9 @@ test('actual customers.http requests create separate ID slots and update/delete 
   assert.match((await missing.json()).message, /ID is empty/);
   assert.equal(records.size, 0);
 
-  assert.equal((await sendNamed('createCustomer')).status, 201);
-  const primary = (await values()).CUSTOMER_ID;
-  assert.match(primary, /^[0-9a-fA-F]{24}$/);
-  const updated = await sendNamed('updateCustomer');
-  assert.equal(updated.status, 200);
-  assert.equal((await updated.json()).data._id, primary);
-  assert.equal(records.get(primary).phone, '0909998888');
-
-  assert.equal((await sendNamed('createCustomer2')).status, 201);
-  const second = (await values()).CUSTOMER_2_ID;
-  assert.notEqual(second, primary);
-  assert.equal((await sendNamed('deactivateCustomer')).status, 200);
-  assert.equal(records.get(second).isActive, false);
-  assert.equal(records.get(primary).isActive, true);
-
-  assert.equal((await sendNamed('createCustomer3')).status, 201);
-  const third = (await values()).CUSTOMER_3_ID;
-  assert.equal((await sendNamed('deleteCustomer')).status, 200);
-  assert.equal(records.has(third), false);
-  assert.equal(records.has(primary), true);
-  assert.equal(records.has(second), true);
+  for (const name of ["createCustomer", "createCustomer2", "createCustomer3"]) {
+    // These old REST Client examples must no longer provision customer accounts.
+    if (source.includes(`# @name ${name}`)) assert.equal((await sendNamed(name)).status, 403);
+  }
+  assert.equal(records.size, 0);
 });

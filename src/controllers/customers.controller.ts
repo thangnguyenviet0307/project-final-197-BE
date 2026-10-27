@@ -5,7 +5,6 @@ import {
   getCustomers,
   getCustomerAccounts,
   getCustomerById,
-  createCustomer,
   updateCustomer,
   deleteCustomer,
 } from '../services/customers.service.js';
@@ -25,16 +24,6 @@ const getCustomerByIdHandler: RequestHandler = asyncHandler(async (req: Request,
   sendResponse(res, 200, {
     success: true,
     message: 'Lấy chi tiết khách hàng thành công',
-    data: customer,
-  });
-});
-
-const createCustomerHandler: RequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const customer = await createCustomer(req.body);
-
-  sendResponse(res, 201, {
-    success: true,
-    message: 'Tạo khách hàng thành công',
     data: customer,
   });
 });
@@ -71,7 +60,6 @@ export const customerController: Record<string, RequestHandler> = {
     sendResponse(res, 200, { message: "Customer accounts retrieved successfully", ...result });
   }),
   getCustomerById: getCustomerByIdHandler,
-  createCustomer: createCustomerHandler,
   updateCustomer: updateCustomerHandler,
   deleteCustomer: deleteCustomerHandler,
 };

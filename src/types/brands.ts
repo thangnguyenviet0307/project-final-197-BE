@@ -1,6 +1,7 @@
 import type { BaseDocument } from "./common.types.js";
 
 export interface IBrand {
+  seedBatch?: string;
   name: string;
   slug: string;
   description?: string;

@@ -1,3 +1,4 @@
+import customerAuthRoutes from "./routes/v1/customer-auth.route.js";
 import express, {
   type Express,
   type NextFunction,
@@ -39,6 +40,7 @@ app.use("/api/v1/orders", orderRoutes);
 app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/customer-auth", customerAuthRoutes);
 
 app.use((_req: Request, _res: Response, next: NextFunction) => {
   next(createError(404, "Not Found"));

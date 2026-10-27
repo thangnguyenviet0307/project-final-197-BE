@@ -1,4 +1,3 @@
-import type { Types } from "mongoose";
 import type { IPaginationQuery } from "./common.types.js";
 export interface IAddress {
   street: string;
@@ -7,7 +6,15 @@ export interface IAddress {
 }
 
 export interface ICustomer {
-  accountId?: Types.ObjectId;
+  birthDate?: string;
+  gender?: "" | "male" | "female" | "other";
+  shippingAddress?: { recipientName: string; email: string; province: string; ward: string; street: string; deliveryTime: string };
+  mustChangePassword?: boolean;
+  password?: string;
+  accountEnabled?: boolean;
+  tokenVersion?: number;
+  refreshToken?: string | null;
+  personalEmail?: string; location?: string; bio?: string; avatar?: string;
   firstName: string;
   lastName: string;
   email: string;

@@ -5,7 +5,6 @@ import { validate } from '../../middlewares/validate.middleware.js';
 import { Permission } from '../../types/permissions.type.js';
 import { idParamSchema } from '../../validations/common.validation.js';
 import {
-  createCustomerSchema,
   getCustomersQuerySchema,
   updateCustomerSchema,
 } from '../../validations/customers.validation.js';
@@ -18,7 +17,8 @@ router.get('/accounts', requirePermission(Permission.CustomerView), validate({ q
 
 router.get('/', requirePermission(Permission.CustomerView), validate({ query: getCustomersQuerySchema }), customerController['getCustomers']!);
 router.get('/:id', requirePermission(Permission.CustomerView), validate({ params: idParamSchema }), customerController['getCustomerById']!);
-router.post('/', requirePermission(Permission.CustomerCreate), validate({ body: createCustomerSchema }), customerController['createCustomer']!);
+// Customer accounts can only be created by public registration.
+router.post('/', (_req, res) => { res.status(403).json({ success: false, message: 'Customer self-registration is required' }); });
 router.put(
   '/:id',
   requirePermission(Permission.CustomerUpdate),

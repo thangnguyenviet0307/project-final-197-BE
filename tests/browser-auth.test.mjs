@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { before, after, test } from "node:test";
 import argon2 from "argon2";
-import { User } from "../dist/models/users.model.js";
+import { Customer as User } from "../dist/models/customers.model.js";
 import { generateTokenPair, hashToken } from "../dist/utils/token.js";
 
 process.env.JWT_SECRET = randomBytes(32).toString("hex");
@@ -11,10 +11,10 @@ process.env.JWT_REFRESH_SECRET = randomBytes(32).toString("hex");
 process.env.FRONTEND_ORIGINS = "http://localhost:5173";
 const { default: app } = await import("../dist/app.js");
 let server, base;
-const headers = { "Content-Type": "application/json", Origin: "http://localhost:5173", "X-Auth-Transport": "cookie" };
+const headers = { "Content-Type": "application/json", Origin: "http://localhost:5173", "X-Auth-Transport": "cookie", "X-Login-Area": "storefront" };
 before(async () => {
   server = app.listen(0, "127.0.0.1"); await once(server, "listening");
-  base = "http://127.0.0.1:" + server.address().port + "/api/v1/auth";
+  base = "http://127.0.0.1:" + server.address().port + "/api/v1/customer-auth";
 });
 after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
 
@@ -31,7 +31,7 @@ test("CORS permits credentialed frontend requests and denies unrelated origins",
 
 test("cookie login hides refresh tokens; refresh rotates cookies and logout expires them", async t => {
   const user = new User({ email: "buyer@example.com", password: await argon2.hash("Customer123"),
-    firstName: "Test", lastName: "Buyer", role: "customer", active: true, tokenVersion: 0 });
+    firstName: "Test", lastName: "Buyer", accountEnabled: true, isActive: true, tokenVersion: 0 });
   t.mock.method(User, "findOne", () => ({ select: async () => user }));
   t.mock.method(User, "findOneAndUpdate", async () => user);
   const login = await fetch(base + "/login", { method: "POST", headers, body: JSON.stringify({ email: user.email, password: "Customer123" }) });
@@ -42,18 +42,18 @@ test("cookie login hides refresh tokens; refresh rotates cookies and logout expi
   const cookie = login.headers.get("set-cookie");
   assert.match(cookie, /HttpOnly/i);
   assert.match(cookie, /SameSite=Strict/i);
-  assert.match(cookie, /Path=\/api\/v1\/auth/i);
-  const pair = generateTokenPair({ id: String(user._id), tokenVersion: 0 });
+  assert.match(cookie, /Path=\/api\/v1\/customer-auth/i);
+  const pair = generateTokenPair({ id: String(user._id), tokenVersion: 0, accountType: "customer" });
   user.refreshToken = hashToken(pair.refreshToken);
   t.mock.method(User, "findById", () => ({ select: async () => user }));
-  const refreshed = await fetch(base + "/refresh", { method: "POST", headers: { ...headers, Cookie: "refreshToken=" + pair.refreshToken }, body: "{}" });
+  const refreshed = await fetch(base + "/refresh", { method: "POST", headers: { ...headers, Cookie: "customerRefreshToken=" + pair.refreshToken }, body: "{}" });
   assert.equal(refreshed.status, 200);
   assert.equal((await refreshed.json()).data.refreshToken, undefined);
   assert.ok(refreshed.headers.get("set-cookie"));
   t.mock.method(User, "findByIdAndUpdate", async () => user);
   const logout = await fetch(base + "/logout", { method: "POST", headers: { ...headers, Authorization: "Bearer " + data.accessToken }, body: "{}" });
   assert.equal(logout.status, 200);
-  assert.match(logout.headers.get("set-cookie"), /refreshToken=;/);
+  assert.match(logout.headers.get("set-cookie"), /customerRefreshToken=;/);
 });
 
 test("cookie refresh requires both a trusted origin and a refresh cookie", async () => {

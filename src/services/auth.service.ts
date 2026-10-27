@@ -1,10 +1,10 @@
+import { matchesLoginArea, type LoginArea } from "../utils/auth-cookie.js";
 import { toAuthUser, toPublicUser } from "../utils/user-mapper.js";
 import mongoose from "mongoose";
 import { timingSafeEqual } from "node:crypto";
 import { SystemLock } from "../models/system-locks.model.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
-import { Customer } from "../models/customers.model.js";
 import { User } from "../models/users.model.js";
 import {
   generateTokenPair,
@@ -15,45 +15,16 @@ import type { CreateUserInput } from "../types/users.type.js";
 import { verifyPassword } from "../utils/password.js";
 import { sessionRevocationUpdate } from "../utils/session.js";
 
-import type { RegisterCustomerInput } from "../types/auth.type.js";
 
-export async function registerCustomer(input: RegisterCustomerInput) {
-  if (await User.exists({ email: input.email })) {
-    throw createHttpError(409, "Email already exists");
-  }
-  if (await Customer.exists({ email: input.email })) {
-    throw createHttpError(409, "Email already exists in customer contacts. Please contact the store for assistance.");
-  }
-  const password = await argon2.hash(input.password);
-  try {
-    return await mongoose.connection.transaction(async session => {
-      const [user] = await User.create([{
-        email: input.email, firstName: input.firstName, lastName: input.lastName,
-        password, role: "customer", active: true, mustChangePassword: false,
-        tokenVersion: 0, refreshToken: null,
-      }], { session });
-      if (!user) throw createHttpError(500, "Cannot create customer account");
-      await Customer.create([{
-        accountId: user._id, email: input.email, firstName: input.firstName,
-        lastName: input.lastName, isActive: true,
-      }], { session });
-      return toPublicUser(toAuthUser(user));
-    });
-  } catch (error: unknown) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-      throw createHttpError(409, "Email already exists");
-    }
-    throw error;
-  }
-}
-
-export async function login(email: string, password: string) {
-  const user = await User.findOne({ email }).select("+password +tokenVersion");
+export async function login(email: string, password: string, area: LoginArea = "admin") {
+  if (area !== "admin") throw createHttpError(401, "Use customer authentication");
+  const user = await User.findOne({ email, role: { $in: ["admin", "staff"] } }).select("+password +tokenVersion");
   // Missing active belongs to legacy accounts; explicit false/null remains disabled.
   if (!user || (user.active !== undefined && user.active !== true)) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
   }
 
+  if (!matchesLoginArea(user.role, area)) throw createHttpError(401, "Tài khoản không tồn tại !");
   const verification = await verifyPassword(user.password, password);
   if (!verification.valid) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
@@ -107,12 +78,14 @@ export async function logout(userId: string) {
   await User.findByIdAndUpdate(userId, sessionRevocationUpdate());
 }
 
-export async function refresh(refreshToken: string) {
+export async function refresh(refreshToken: string, area?: LoginArea) {
   const decoded = verifyRefreshToken(refreshToken);
+  if (decoded.accountType !== "user" || area === "storefront") throw createHttpError(401, "Invalid administrative session");
   const user = await User.findById(decoded.userId).select("+refreshToken +tokenVersion");
-  if (!user || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
+  if (!user || !["admin", "staff"].includes(user.role) || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
     throw createHttpError(401, "Refresh token không hợp lệ");
   }
+  if (!matchesLoginArea(user.role, area)) throw createHttpError(401, "Tài khoản không tồn tại !");
   const authUser = toAuthUser(user);
   const { accessToken: newAccessToken, refreshToken: newRefreshToken } = generateTokenPair(authUser);
   const rotated = await User.findOneAndUpdate(

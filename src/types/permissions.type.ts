@@ -31,7 +31,6 @@ export enum Permission {
 
   // Customer permissions
   CustomerView = 'customers:view',
-  CustomerCreate = 'customers:create',
   CustomerUpdate = 'customers:update',
   CustomerDelete = 'customers:delete',
 

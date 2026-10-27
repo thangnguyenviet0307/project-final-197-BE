@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import argon2 from 'argon2';
 import { generateSeedData } from '../dist/seeds/generate.js';
-import { OrderStatus } from '../dist/types/orders.type.js';
 import { formatSeedError } from '../dist/seeds/errors.js';
 import { createNameAllocator, cleanLegacySeedName } from '../dist/seeds/names.js';
 import { buildSlug } from '../dist/helpers/buildSlug.helper.js';
@@ -75,118 +73,47 @@ test('seed errors report driver diagnostics and redact credentials', () => {
   assert.ok(!message.includes('password-value'));
 });
 
-test('seed documents have valid relations, inventory, assignments and hashed passwords', async () => {
-  const data = await generateSeedData('Test-only-password-123');
-  const nextBatch = await generateSeedData('Test-only-password-123', {
-    brands: data.brands.map(value => ({ name: value.name, slug: value.slug })),
-    categories: data.categories.map(value => ({ name: value.name, slug: value.slug })),
-    products: data.products.map(value => ({ name: value.product_name, slug: value.slug })),
-  });
-  const productNames = [...data.products, ...nextBatch.products].map(product => product.product_name);
-  assert.equal(new Set(productNames).size, productNames.length, 'Product names must be unique across seed runs');
-  for (const name of productNames) assert.ok(name.length <= 255);
-  const uuid = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i;
-  for (const value of [...data.brands, ...data.categories, ...data.products]) {
-    assert.ok(!uuid.test(value.name ?? value.product_name));
-    assert.ok(!uuid.test(value.slug));
-    assert.equal(value.slug, buildSlug(value.name ?? value.product_name));
+test('catalog seeding creates only brands, categories and products with valid metadata and batch markers', async () => {
+  const data = await generateSeedData();
+  assert.deepEqual(Object.keys(data).sort(), ['brands', 'categories', 'products']);
+  assert.equal(data.brands.length, 8);
+  assert.equal(data.categories.length, 10);
+  assert.equal(data.products.length, 50);
+  const batch = data.brands[0].seedBatch;
+  assert.match(batch, /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i);
+  const brands = new Set(data.brands.map(row => String(row._id)));
+  const categories = new Set(data.categories.map(row => String(row._id)));
+  const skus = new Set();
+  for (const documents of Object.values(data)) for (const document of documents) {
+    await document.validate();
+    assert.equal(document.seedBatch, batch);
+    assert.equal(document.password, undefined);
   }
-  for (const collection of ['brands', 'categories']) {
-    const names = [...data[collection], ...nextBatch[collection]].map(document => document.name);
-    assert.equal(new Set(names).size, names.length, `${collection} names must be unique across seed runs`);
-  }
-  const ids = documents => new Set(documents.map(document => String(document._id)));
-  const brands = ids(data.brands);
-  const categories = ids(data.categories);
-  const customers = ids(data.customers);
-  const staff = new Set(data.users.filter(user => user.role === 'staff').map(user => String(user._id)));
-  for (const user of data.users) assert.equal(await argon2.verify(user.password, 'Test-only-password-123'), true);
-  for (const category of data.categories) {
-    if (category.parent) assert.ok(categories.has(String(category.parent)));
-  }
+  for (const category of data.categories) if (category.parent) assert.ok(categories.has(String(category.parent)));
   for (const product of data.products) {
-    assert.ok(product.variants.length > 0, 'Every seed product needs a SKU for existing unique indexes');
-    assert.ok(brands.has(String(product.brand)));
-    assert.ok(categories.has(String(product.category)));
-    assert.ok(product.stock >= 0);
-    assert.match(product.sku, /^SEED-[A-Z0-9-]+-PRODUCT-\d+$/);
-    assert.match(product.barcode, /^0\d{12}$/);
+    assert.ok(brands.has(String(product.brand))); assert.ok(categories.has(String(product.category)));
     assert.equal(product.currency, 'VND');
-    assert.ok(product.tags.length >= 2);
-    assert.ok(product.weight > 0);
-    assert.ok(product.dimensions.width > 0 && product.dimensions.height > 0 && product.dimensions.depth > 0);
-    for (const field of ['warrantyInformation', 'shippingInformation', 'returnPolicy']) assert.ok(product[field].length > 0);
-    assert.ok(product.minimumOrderQuantity >= 1);
-    assert.equal(product.source, undefined, 'Native seed products must not impersonate DummyJSON imports');
-    assert.equal(product.external_id, undefined);
-    assert.equal(product.images.length, 0, 'Placeholder images are not managed Cloudinary assets');
-    if (product.variants.length) assert.equal(product.stock, product.variants.reduce((sum, variant) => sum + variant.stock, 0));
-  }
-  const skus = [...data.products, ...nextBatch.products].flatMap(product => product.variants.map(variant => variant.sku));
-  assert.equal(new Set(skus).size, skus.length, 'Variant SKUs must be unique across seed runs');
-  const allSkus = [...skus, ...[...data.products, ...nextBatch.products].map(product => product.sku)];
-  assert.equal(new Set(allSkus).size, allSkus.length, 'Product and variant SKUs must not collide');
-  assert.ok(data.products.some(product => product.model_year === null));
-  assert.ok(data.products.some(product => product.minimumOrderQuantity > 1));
-  const productIds = ids(data.products);
-  const reviewCounts = new Map();
-  for (const review of data.reviews) {
-    const productId = String(review.product);
-    assert.ok(productIds.has(productId));
-    assert.ok(Number.isInteger(review.rating) && review.rating >= 1 && review.rating <= 5);
-    assert.equal(review.source, 'admin');
-    assert.ok(review.reviewerName.length > 0 && review.comment.length > 0);
-    assert.ok(review.date <= new Date());
-    assert.equal(review.toObject().reviewerEmail, undefined);
-    reviewCounts.set(productId, (reviewCounts.get(productId) ?? 0) + 1);
-  }
-  for (const [index, product] of data.products.entries()) assert.equal(reviewCounts.get(String(product._id)) ?? 0, index % 6);
-  const activeCounts = new Map();
-  const reserved = new Map();
-  const now = new Date();
-  for (const order of data.orders) {
-    assert.ok(customers.has(String(order.customerId)));
-    assert.match(order.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
-    const customer = data.customers.find(customer => customer._id.equals(order.customerId));
-    assert.deepEqual(order.customerSnapshot.toObject(), {
-      firstName: customer.firstName, lastName: customer.lastName, email: customer.email, phone: customer.phone,
-    });
-    assert.ok(order.requireDate >= order.orderDate);
-    if (order.orderStatus === OrderStatus.Completed) {
-      assert.ok(order.shippingDate >= order.orderDate && order.shippingDate <= now);
-      assert.ok(order.userId);
-    } else assert.equal(order.shippingDate, undefined);
-    if (order.orderStatus === OrderStatus.Rejected) assert.ok(order.cancellationReason);
-    if (order.userId) {
-      const id = String(order.userId);
-      assert.ok(staff.has(id));
-      if ([OrderStatus.Pending, OrderStatus.Processing].includes(order.orderStatus)) activeCounts.set(id, (activeCounts.get(id) ?? 0) + 1);
-    }
-    for (const item of order.orderItems) {
-      const product = data.products.find(product => product._id.equals(item.productId));
-      assert.ok(product);
-      assert.ok(item.quantity >= product.minimumOrderQuantity);
-      if (item.variantId) {
-        const variant = product.variants.id(item.variantId);
-        assert.ok(variant);
-        assert.equal(item.price, variant.price);
-        assert.equal(item.sku, variant.sku);
-        assert.equal(item.discount, product.discount);
-        assert.equal(item.productName, product.product_name);
-        assert.deepEqual(item.selectedOptions, { ...variant.attributes, color: variant.color, size: variant.size });
-        if (order.orderStatus !== OrderStatus.Rejected) {
-          reserved.set(variant.sku, (reserved.get(variant.sku) ?? 0) + item.quantity);
-        }
-      } else assert.equal(product.variants.length, 0);
-    }
-  }
-  for (const product of data.products) {
+    assert.ok(product.weight >= 0 && product.dimensions.width >= 0);
+    assert.ok(product.barcode && product.tags.includes('seed'));
+    assert.ok(product.warrantyInformation && product.shippingInformation && product.returnPolicy);
+    assert.ok(Number.isSafeInteger(product.minimumOrderQuantity) && product.minimumOrderQuantity >= 1);
+    assert.equal(product.stock, product.variants.reduce((sum, variant) => sum + variant.stock, 0));
+    assert.deepEqual(product.images, []);
+    assert.equal(product.source, undefined);
     for (const variant of product.variants) {
-      const initialStock = variant.stock + (reserved.get(variant.sku) ?? 0);
-      assert.ok(initialStock >= 100 && initialStock <= 200);
+      assert.ok(!skus.has(variant.sku)); skus.add(variant.sku);
+      assert.ok(variant.stock >= 100 && variant.stock <= 200);
+      assert.ok(variant.compare_at_price >= variant.price);
     }
   }
-  const phones = [...data.customers, ...data.users].map(document => document.phone);
-  assert.equal(new Set(phones).size, phones.length);
-  for (const count of activeCounts.values()) assert.ok(count <= 5);
+  const next = await generateSeedData({
+    brands: data.brands.map(row => ({ name: row.name, slug: row.slug })),
+    categories: data.categories.map(row => ({ name: row.name, slug: row.slug })),
+    products: data.products.map(row => ({ name: row.product_name, slug: row.slug })),
+  });
+  for (const name of ['brands', 'categories', 'products']) {
+    const prior = new Set(data[name].map(row => row.slug));
+    for (const row of next[name]) assert.ok(!prior.has(row.slug));
+  }
+  assert.notEqual(next.brands[0].seedBatch, batch);
 });

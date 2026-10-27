@@ -15,15 +15,16 @@ test('browser transport hides refresh token and requires trusted origin/header t
   const base=`http://127.0.0.1:${server.address().port}`;
   const post=(path,headers={})=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...headers},body:'{}'});
   try {
-    const headers={Origin:'http://localhost:5173','X-Auth-Transport':'cookie'};
+    const headers={Origin:'http://localhost:5173','X-Auth-Transport':'cookie','X-Login-Area':'admin'};
+    assert.equal((await post('/login',{Origin:'http://localhost:5173','X-Auth-Transport':'cookie'})).status,400);
     const login=await post('/login',headers);
     assert.deepEqual(await login.json(),{accessToken:'access',user:{id:'id'}});
     const cookie=login.headers.get('set-cookie');
     assert.match(cookie,/HttpOnly/); assert.match(cookie,/SameSite=Strict/); assert.match(cookie,/Path=\/api\/v1\/auth/);
-    const refreshed=await post('/refresh',{...headers,Cookie:'admin_refresh=secret'});
+    const refreshed=await post('/refresh',{...headers,Cookie:'adminRefreshToken=secret'});
     assert.deepEqual(await refreshed.json(),{refreshToken:'secret'});
-    assert.equal((await post('/refresh',{...headers,Origin:'https://attacker.example',Cookie:'admin_refresh=secret'})).status,403);
-    assert.equal((await post('/refresh',{Origin:'http://localhost:5173',Cookie:'admin_refresh=secret'})).status,403);
+    assert.equal((await post('/refresh',{...headers,Origin:'https://attacker.example',Cookie:'adminRefreshToken=secret'})).status,403);
+    assert.equal((await post('/refresh',{Origin:'http://localhost:5173',Cookie:'adminRefreshToken=secret'})).status,403);
     const logout=await post('/logout'); assert.match(logout.headers.get('set-cookie'),/Expires=Thu, 01 Jan 1970/);
   } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });

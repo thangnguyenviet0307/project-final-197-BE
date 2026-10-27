@@ -2,6 +2,7 @@ import type { Types } from "mongoose";
 import type { BaseDocument } from "./common.types.js";
 
 export interface ICategories {
+  seedBatch?: string;
   name: string;
   slug: string;
   description?: string;

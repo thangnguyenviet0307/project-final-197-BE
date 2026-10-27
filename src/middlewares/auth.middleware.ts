@@ -1,3 +1,4 @@
+import { getLoginArea, matchesLoginArea } from "../utils/auth-cookie.js";
 import { toAuthUser } from "../utils/user-mapper.js";
 import type { Request, RequestHandler } from "express";
 import createHttpError from "http-errors";
@@ -12,10 +13,12 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     const header = req.headers.authorization;
     if (!header?.startsWith("Bearer ")) throw createHttpError(401, "Token không được cung cấp");
     const decoded = verifyAccessToken(header.slice(7));
+    if (decoded.accountType !== "user") throw createHttpError(403, "Administrative account required");
     const user = await User.findById(decoded.userId).select("+tokenVersion");
-    if (!user || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
+    if (!user || !["admin", "staff"].includes(user.role) || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
       throw createHttpError(401, "Phiên đăng nhập không còn hợp lệ");
     }
+    if (!matchesLoginArea(user.role, getLoginArea(req))) throw createHttpError(403, "Account does not belong to this area");
     if (user.mustChangePassword && ![
       "/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/change-password",
     ].includes(req.originalUrl.split("?")[0] ?? "")) {

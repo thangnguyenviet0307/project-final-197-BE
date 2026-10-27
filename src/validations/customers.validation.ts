@@ -14,7 +14,11 @@ export const createCustomerSchema = z.object({
   isActive: z.boolean().default(true),
 }) satisfies z.ZodType<CreateCustomerInput>;
 
-export const updateCustomerSchema = createCustomerSchema.omit({ isActive: true }).partial().extend({ isActive: z.boolean().optional() })
+export const updateCustomerSchema = createCustomerSchema.omit({ isActive: true }).partial().extend({
+    isActive: z.boolean().optional(),
+    phone: z.string().trim().max(30).optional(),
+    address: z.object({ street: z.string().trim().max(255), city: z.string().trim().max(50), state: z.string().trim().max(50) }).optional(),
+  }).strict()
   .refine(hasUpdateFields, { error: UPDATE_REQUIRED_MESSAGE }) satisfies z.ZodType<UpdateCustomerInput>;
 
 export const getCustomersQuerySchema = paginationSchema.extend({

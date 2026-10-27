@@ -4,7 +4,6 @@ import { validate } from "../../middlewares/validate.middleware.js";
 import {
   changePasswordSchema,
   loginSchema,
-  registerCustomerSchema,
   bootstrapSchema,
   refreshSchema,
 } from "../../validations/auth.validation.js";
@@ -20,7 +19,7 @@ import { cookieAuthTransport } from "../../utils/auth-cookie.js";
 const router: RouterType = Router();
 router.use(cookieAuthTransport);
 const rateLimit = createAuthRateLimit();
-router.post("/register", rateLimit, validate({ body: registerCustomerSchema }), authController["registerCustomer"]!);
+router.post("/register", (_req, res) => { res.status(410).json({ success: false, message: "Use /customer-auth/register" }); });
 
 
 router.post(

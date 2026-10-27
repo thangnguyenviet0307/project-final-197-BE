@@ -8,7 +8,6 @@ const userSchema = new Schema<IUser>(
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true,
     },
@@ -24,17 +23,19 @@ const userSchema = new Schema<IUser>(
     avatar: { type: String, default: "" },
     firstName: {
       type: String,
+      maxlength: 50,
       required: true,
       trim: true,
     },
     lastName: {
       type: String,
+      maxlength: 50,
       required: true,
       trim: true,
     },
     role: {
       type: String,
-      enum: ["admin", "staff", "customer"],
+      enum: ["admin", "staff"],
       default: "staff",
       required: true,
     },
@@ -56,6 +57,8 @@ const userSchema = new Schema<IUser>(
     versionKey: false,
   },
 );
+
+userSchema.index({ email: 1 }, { unique: true });
 
 const stripSecrets = (_doc: unknown, value: unknown) => removeUserSecrets(value as Record<string, unknown>);
 userSchema.set("toJSON", { transform: stripSecrets });

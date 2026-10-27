@@ -4,6 +4,7 @@ import type { ICategories } from "../types/categories.js";
 // Create a schema for the category model
 const categoriesSchema = new mongoose.Schema<ICategories>(
   {
+    seedBatch: { type: String, immutable: true, select: false, match: /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, trim: true, unique: true },
     description: { type: String },

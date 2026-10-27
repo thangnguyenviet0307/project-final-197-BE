@@ -127,7 +127,7 @@ test("user serialization strips secrets from JSON and plain objects", () => {
 });
 
 test("password change hashes password and revokes existing sessions", async (t) => {
-  t.mock.method(User, "findByIdAndUpdate", async (_id, update, options) => {
+  t.mock.method(User, "findOneAndUpdate", async (_id, update, options) => {
     assert.ok(await argon2.verify(update.$set.password, "new password"));
     assert.equal(update.$set.refreshToken, null);
     assert.equal(update.$inc.tokenVersion, 1);
@@ -280,7 +280,7 @@ test("actual auth routes issue and rotate HttpOnly browser cookies without retur
   t.mock.method(User, "findById", () => ({ select: async () => user }));
   t.mock.method(User, "findOneAndUpdate", async (_filter, update) => { user.refreshToken = update.$set.refreshToken; return user; });
   t.mock.method(User, "findByIdAndUpdate", async () => user);
-  const headers = { Origin: "http://localhost:5173", "X-Auth-Transport": "cookie" };
+  const headers = { Origin: "http://localhost:5173", "X-Auth-Transport": "cookie", "X-Login-Area": "admin" };
   const signedIn = await post("/api/v1/auth/login", { email: user.email, password: "CookiePassword123" }, headers);
   assert.equal(signedIn.status, 200);
   assert.equal(signedIn.headers.get("access-control-allow-origin"), headers.Origin);

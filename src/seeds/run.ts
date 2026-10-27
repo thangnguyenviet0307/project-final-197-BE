@@ -12,8 +12,6 @@ let stage = 'validating seed data';
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   if (process.env['NODE_ENV'] === 'production') throw new Error('Seeding is disabled in production.');
-  const password = process.env['SEED_PASSWORD'];
-  if (!dryRun && (!password || password.length < 12)) throw new Error('Set SEED_PASSWORD with at least 12 characters.');
   const existing: ExistingCatalog = {};
   if (!dryRun) {
     const uri = process.env['MONGODB_URI']?.trim();
@@ -31,7 +29,7 @@ async function main() {
     existing.products = products.map(value => ({ name: value.product_name, slug: value.slug }));
   }
   stage = 'validating seed data';
-  const data = await generateSeedData(password ?? 'DryRunOnly-NotStored', existing);
+  const data = await generateSeedData(existing);
   const counts = Object.fromEntries(Object.entries(data).map(([name, documents]) => [name, documents.length]));
   if (dryRun) {
     console.log('Schema validation passed; no database connection or writes.', counts);
@@ -41,7 +39,7 @@ async function main() {
   const database = mongoose.connection.db;
   if (!database) throw new Error('MongoDB connection is not ready.');
   // Collections must exist before the transaction; existing indexes remain intact.
-  for (const model of Object.values(mongoose.models)) {
+  for (const model of [BrandModel, Categories, Product]) {
     try {
       await database.createCollection(model.collection.name);
     } catch (error) {
@@ -52,13 +50,12 @@ async function main() {
   await mongoose.connection.transaction(async session => {
     for (const documents of Object.values(data)) {
       for (const document of documents) {
-        // Keep historical order timestamps instead of marking every order updated today.
-        await document.save({ session, timestamps: document.collection.name !== 'orders' });
+        // Catalog only: account/order collections are never saved by this runner.
+        await document.save({ session });
       }
     }
   });
-  console.log('Seed completed (existing data was preserved).', counts);
-  console.log('Admin login email:', data.users[0]!.email);
+  console.log('Catalog seed completed (existing data was preserved).', { ...counts, seedBatch: data.brands[0]?.seedBatch });
 }
 
 try {

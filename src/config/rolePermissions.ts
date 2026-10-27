@@ -19,7 +19,6 @@ const rolePermissions: Record<Role, Permission[]> = {
     Permission.CategoryView,
     Permission.BrandView,
     Permission.CustomerView,
-    Permission.CustomerCreate,
   ],
 };
 

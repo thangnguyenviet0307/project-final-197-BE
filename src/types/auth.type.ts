@@ -18,6 +18,7 @@ export interface AuthUser {
 export interface JwtPayload {
   userId: string;
   version: number;
+  accountType: "user" | "customer";
   iat?: number;
   exp?: number;
 }

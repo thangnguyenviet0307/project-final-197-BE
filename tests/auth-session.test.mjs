@@ -102,8 +102,8 @@ test("self-service change rejects reuse, short passwords, and concurrent account
 test("admin resets require the target to change password and revoke its previous sessions", async (t) => {
   const headers = authenticate(t, account({ role: "admin" }));
   const target = account();
-  t.mock.method(User, "findByIdAndUpdate", async (id, update) => {
-    assert.equal(id, String(target._id));
+  t.mock.method(User, "findOneAndUpdate", async (id, update) => {
+    assert.equal(id._id, String(target._id));
     assert.equal(update.$set.mustChangePassword, true);
     assert.equal(update.$set.refreshToken, null);
     assert.equal(update.$inc.tokenVersion, 1);

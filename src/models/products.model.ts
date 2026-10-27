@@ -79,6 +79,7 @@ const productImageSchema = new Schema({
 
 const productSchema = new Schema(
   {
+    seedBatch: { type: String, immutable: true, select: false, match: /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i },
     sku: { type: String, trim: true, uppercase: true, match: /^[A-Z0-9-]+$/, minlength: 3, maxlength: 64 },
     barcode: { type: String, trim: true, maxlength: 64, default: null },
     currency: { type: String, enum: ["VND"], default: "VND" },

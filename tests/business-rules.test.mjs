@@ -68,7 +68,7 @@ test('last active admin cannot be demoted, disabled or deleted', async (t) => {
   const admin = new User({ role: 'admin', active: true });
   t.mock.method(User, 'findById', () => query(admin));
   t.mock.method(User, 'exists', () => query(null));
-  const write = t.mock.method(User, 'findByIdAndUpdate', async () => { throw new Error('Must not write'); });
+  const write = t.mock.method(User, 'findOneAndUpdate', async () => { throw new Error('Must not write'); });
   await assert.rejects(UserService.updateUser(String(admin._id), { role: 'staff' }), { status: 409 });
   await assert.rejects(UserService.updateUser(String(admin._id), { active: false }), { status: 409 });
   await assert.rejects(UserService.deleteUser(String(admin._id)), { status: 409 });
@@ -79,7 +79,7 @@ test('another active admin permits demotion and revokes the previous session', a
   const admin = new User({ role: 'admin', active: true });
   t.mock.method(User, 'findById', () => query(admin));
   t.mock.method(User, 'exists', () => query({ _id: id() }));
-  t.mock.method(User, 'findByIdAndUpdate', async (_id, update, options) => {
+  t.mock.method(User, 'findOneAndUpdate', async (_id, update, options) => {
     assert.equal(options.session, session);
     assert.equal(update.$set.role, 'staff');
     assert.equal(update.$set.refreshToken, null);

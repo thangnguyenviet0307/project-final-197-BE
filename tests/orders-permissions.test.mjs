@@ -31,6 +31,8 @@ for (const permission of mutations) {
     assert.equal(checkPermission('admin', permission), undefined);
   });
 }
-for (const permission of [Permission.OrderCreate, Permission.OrderUpdateStatus, Permission.OrderStart, Permission.OrderNote, Permission.OrderUpdateDates, Permission.ProductInventory, Permission.CustomerView, Permission.CustomerCreate]) {
+for (const permission of [Permission.OrderCreate, Permission.OrderUpdateStatus, Permission.OrderStart, Permission.OrderNote, Permission.OrderUpdateDates, Permission.ProductInventory, Permission.CustomerView]) {
   test(`staff can use operational permission ${permission}`, () => assert.equal(checkPermission('staff', permission), undefined));
 }
+
+test("no administrative role can create customers", () => { for (const role of ["admin", "staff"]) assert.equal(checkPermission(role, "customers:create")?.status, 403); });

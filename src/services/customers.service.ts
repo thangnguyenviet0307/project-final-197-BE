@@ -6,33 +6,14 @@ import { withRelationsTransaction } from '../utils/relations-transaction.js';
 import type { ICustomer } from '../types/customers.type.js';
 import { buildPagination } from '../utils/pagination.js';
 import type {
-  CreateCustomerInput,
   GetCustomersQuery,
   UpdateCustomerInput,
 } from '../types/customers.type.js';
 
-import { User } from '../models/users.model.js';
 
-export async function getCustomerAccounts({ page, limit, search, isActive }: GetCustomersQuery) {
-  const filter: Record<string, unknown> = { role: "customer" };
-  if (search) {
-    const pattern = new RegExp(escapeRegex(search), "i");
-    filter["$or"] = ["firstName", "lastName", "email"].map(field => ({ [field]: pattern }));
-  }
-  if (isActive !== undefined) filter["active"] = isActive;
-  const [accounts, total] = await Promise.all([
-    User.find(filter).sort({ createdAt: -1, _id: -1 }).skip((page - 1) * limit).limit(limit)
-      .select("_id firstName lastName email active createdAt").lean(),
-    User.countDocuments(filter),
-  ]);
-  // Explicit response fields keep authentication secrets outside this management endpoint.
-  const data = accounts.map(account => ({ _id: account._id, firstName: account.firstName,
-    lastName: account.lastName, email: account.email, active: account.active, createdAt: account.createdAt }));
-  return { data, pagination: buildPagination(page, limit, total) };
-}
 
 export async function getCustomers({ page, limit, search, isActive }: GetCustomersQuery) {
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { accountEnabled: true };
   if (search) {
     filter['$or'] = [
       { firstName: new RegExp(escapeRegex(search), 'i') },
@@ -48,7 +29,7 @@ export async function getCustomers({ page, limit, search, isActive }: GetCustome
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .select('-__v'),
+      .select('-__v -password -refreshToken -tokenVersion -accountId'),
     Customer.countDocuments(filter),
   ]);
 
@@ -56,17 +37,12 @@ export async function getCustomers({ page, limit, search, isActive }: GetCustome
 }
 
 export async function getCustomerById(id: string) {
-  const customer = await Customer.findById(id).select('-__v');
+  const customer = await Customer.findById(id).select('-__v -password -refreshToken -tokenVersion -accountId');
   if (!customer) throw createHttpError(404, 'Customer not found');
   return customer;
 }
 
-export async function createCustomer(input: CreateCustomerInput): Promise<ICustomer> {
-  const existing = await Customer.findOne({ email: input.email });
-  if (existing) throw createHttpError(409, 'Email already exists');
-
-  return Customer.create(input);
-}
+export const getCustomerAccounts = getCustomers;
 
 export async function updateCustomer(id: string, input: UpdateCustomerInput): Promise<ICustomer | null> {
   return withRelationsTransaction(async (session) => {
@@ -75,7 +51,7 @@ export async function updateCustomer(id: string, input: UpdateCustomerInput): Pr
       if (existing) throw createHttpError(409, 'Email already exists');
     }
 
-    const customer = await Customer.findByIdAndUpdate(id, input, { returnDocument: 'after', runValidators: true, session }).select('-__v');
+    const customer = await Customer.findByIdAndUpdate(id, { $set: input, ...(input.isActive === false ? { $unset: { refreshToken: 1 }, $inc: { tokenVersion: 1 } } : {}) }, { returnDocument: 'after', runValidators: true, session }).select('-__v -password -refreshToken -tokenVersion -accountId');
     return customer;
   });
 }

@@ -25,6 +25,7 @@ import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRef
 process.env.JWT_SECRET = randomBytes(32).toString("hex");
 process.env.JWT_REFRESH_SECRET = randomBytes(32).toString("hex");
 process.env.BOOTSTRAP_SECRET = randomBytes(32).toString("hex");
+process.env.FRONTEND_ORIGINS = "http://localhost:5173";
 const { default: app } = await import("../dist/app.js");
 let server;
 let base;

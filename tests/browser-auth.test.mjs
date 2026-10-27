@@ -61,3 +61,34 @@ test("cookie refresh requires both a trusted origin and a refresh cookie", async
   const { Origin: _origin, ...withoutOrigin } = headers;
   assert.equal((await fetch(base + "/refresh", { method: "POST", headers: withoutOrigin, body: "{}" })).status, 403);
 });
+
+test("production cookies support cross-site auth and clear with matching attributes", async t => {
+  const { authResponse, clearRefreshCookie } = await import("../dist/utils/auth-cookie.js");
+  const previousEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  t.after(() => {
+    if (previousEnvironment === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnvironment;
+  });
+  for (const area of ["admin", "storefront"]) {
+    let issued, cleared;
+    const res = {
+      setHeader() {},
+      cookie(name, value, options) { issued = { name, value, options }; },
+      clearCookie(name, options) { cleared = { name, options }; },
+    };
+    const req = { get: name => ({ "X-Auth-Transport": "cookie", "X-Login-Area": area })[name] };
+    const result = authResponse(req, res, { accessToken: "test-access", refreshToken: "test-refresh" });
+    assert.equal(result.refreshToken, undefined);
+    assert.equal(issued.options.sameSite, "none");
+    assert.equal(issued.options.secure, true);
+    assert.equal(issued.options.httpOnly, true);
+    clearRefreshCookie(res, area);
+    assert.equal(cleared.name, issued.name);
+    assert.deepEqual(cleared.options, issued.options);
+  }
+  const denied = await fetch(base + "/refresh", {
+    method: "POST", headers: { ...headers, Origin: "https://untrusted.example", Cookie: "customerRefreshToken=test" }, body: "{}",
+  });
+  assert.equal(denied.status, 403);
+});

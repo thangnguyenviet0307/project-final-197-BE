@@ -1,6 +1,8 @@
 import type { Request, Response, RequestHandler } from "express";
 import createHttpError from "http-errors";
 import jwt from "jsonwebtoken";
+export { frontendOrigins } from "../config/frontend-origins.js";
+import { frontendOrigins } from "../config/frontend-origins.js";
 
 export type LoginArea = "admin" | "storefront";
 export function getLoginArea(req: Request): LoginArea | undefined {
@@ -12,11 +14,14 @@ export function getLoginArea(req: Request): LoginArea | undefined {
 export function matchesLoginArea(role: string, area?: LoginArea): boolean {
   return area !== "storefront" && (role === "admin" || role === "staff");
 }
-export function frontendOrigins(): string[] {
-  return (process.env["FRONTEND_ORIGINS"] ?? (process.env["NODE_ENV"] === "production" ? "" : "http://localhost:5173,http://127.0.0.1:5173")).split(",").map(value => value.trim()).filter(Boolean);
-}
 const cookieName = (area: LoginArea) => area === "storefront" ? "customerRefreshToken" : "adminRefreshToken";
-const options = (area: LoginArea = "admin") => ({ httpOnly: true, secure: process.env["NODE_ENV"] === "production", sameSite: "strict" as const, path: area === "storefront" ? "/api/v1/customer-auth" : "/api/v1/auth" });
+const options = (area: LoginArea = "admin") => ({
+  httpOnly: true,
+  secure: process.env["NODE_ENV"] === "production",
+  // Vercel and Render are different sites; browser auth still requires a trusted Origin.
+  sameSite: process.env["NODE_ENV"] === "production" ? "none" as const : "strict" as const,
+  path: area === "storefront" ? "/api/v1/customer-auth" : "/api/v1/auth",
+});
 export function clearRefreshCookie(res: Response, area: LoginArea = "admin") {
   res.clearCookie(cookieName(area), options(area));
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "seed": "tsx src/seeds/run.ts",
     "seed:check": "tsx src/seeds/run.ts --dry-run",
+    "seed:backfill": "pnpm run build && node dist/seeds/backfill-products.js",
     "seed:clean-names": "tsx src/seeds/clean-names.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",

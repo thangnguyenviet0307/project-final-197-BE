@@ -9,6 +9,8 @@ import Product from "../models/products.model.js";
 import { buildSlug } from "../helpers/buildSlug.helper.js";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
 import { assertActiveCatalog } from "../utils/catalog-reference.js";
+import type { ClientSession } from "mongoose";
+import { ProductReview } from "../models/product-reviews.model.js";
 
 import type { ProductVariantInput, ProductInput, UpdateProductInput, GetProductsQuery } from "../types/products.type.js";
 export type { ProductVariantInput, ProductInput } from "../types/products.type.js";
@@ -82,7 +84,7 @@ const ensureUniqueVariantSkus = async (
     seen.add(sku);
 
     const exists = await Product.exists({
-      "variants.sku": sku,
+      $or: [{ sku }, { "variants.sku": sku }],
       ...(excludeId ? { _id: { $ne: excludeId } } : {}),
     });
 
@@ -91,6 +93,14 @@ const ensureUniqueVariantSkus = async (
     }
   }
 };
+
+async function ensureProductSku(sku: string | null | undefined, variants: ReadonlyArray<{ sku: string }>, excludeId?: string) {
+  if (!sku) return;
+  if (variants.some(variant => variant.sku === sku)) throw createHttpError(409, "Product SKU must differ from its variant SKUs");
+  if (await Product.exists({ $or: [{ sku }, { "variants.sku": sku }], ...(excludeId ? { _id: { $ne: excludeId } } : {}) })) {
+    throw createHttpError(409, "SKU already exists");
+  }
+}
 
 const getAllProducts = async (
   filters: Partial<GetProductsQuery> = {},
@@ -117,7 +127,7 @@ const getStatistics = async () => {
 const getProductBySku = async (sku: string) => {
   const normalizedSku = String(sku).trim().toUpperCase();
 
-  return Product.findOne({ "variants.sku": normalizedSku })
+  return Product.findOne({ $or: [{ sku: normalizedSku }, { "variants.sku": normalizedSku }] })
     .populate("brand category")
     .lean();
 };
@@ -162,7 +172,7 @@ function lowestVariantPrice(variants: ProductVariantInput[]): number | undefined
   return variants.length ? Math.min(...variants.map(variant => variant.price)) : undefined;
 }
 
-const createProduct = async (payload: ProductInput) => withRelationsTransaction(async (session) => {
+export const createProductInSession = async (payload: ProductInput, session: ClientSession) => {
   await assertActiveCatalog(payload.brand, payload.category, session);
   const name = payload.product_name?.trim();
 
@@ -178,6 +188,7 @@ const createProduct = async (payload: ProductInput) => withRelationsTransaction(
   );
 
   await ensureUniqueVariantSkus(normalizedVariants);
+  await ensureProductSku(payload.sku, normalizedVariants);
 
   const computedPrice = payload.price ?? lowestVariantPrice(normalizedVariants) ?? 0;
 
@@ -202,7 +213,8 @@ const createProduct = async (payload: ProductInput) => withRelationsTransaction(
   await product.save({ session });
 
   return product.toObject();
-});
+};
+const createProduct = async (payload: ProductInput) => withRelationsTransaction(session => createProductInSession(payload, session));
 
 const updateProduct = async (
   id: string,
@@ -212,6 +224,7 @@ const updateProduct = async (
 
   if (!existing) return null;
   const { expectedVersion, ...fields } = payload;
+  await ensureProductSku(payload.sku === undefined ? existing.sku : payload.sku, payload.variants ?? existing.variants, id);
   if ((payload.variants !== undefined || payload.stock !== undefined) && expectedVersion === undefined) {
     throw createHttpError(400, "Read the product version before updating inventory or variants");
   }
@@ -311,6 +324,7 @@ const deleteProduct = async (id: string) => withRelationsTransaction(async (sess
   }
   const product = await Product.findByIdAndDelete(id, { session });
   if (product) await enqueueImageCleanup(product.images.map(image => image.public_id), session);
+  if (product) await ProductReview.deleteMany({ product: product._id }).session(session);
   return product ? product.toObject() : null;
 });
 

@@ -49,6 +49,7 @@ const orderSchema = new Schema<IOrder>(
 
 orderSchema.index({ customerId: 1, orderDate: -1 });
 orderSchema.index({ orderStatus: 1 });
+orderSchema.index({ orderStatus: 1, "orderItems.productId": 1 });
 orderSchema.index({ userId: 1 });
 orderSchema.index({ orderCode: 1 }, { unique: true, partialFilterExpression: { orderCode: { $type: 'string' } } });
 orderSchema.pre('validate', function () {

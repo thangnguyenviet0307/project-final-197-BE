@@ -17,13 +17,23 @@ export interface ProductVariant extends ProductVariantInput {}
 
 // Request fields before validation applies defaults.
 export interface ProductInput {
+  sku?: string | null | undefined;
+  barcode?: string | null | undefined;
+  currency?: "VND" | undefined;
+  tags?: string[] | undefined;
+  weight?: number | null | undefined;
+  dimensions?: { width: number; height: number; depth: number } | null | undefined;
+  warrantyInformation?: string | null | undefined;
+  shippingInformation?: string | null | undefined;
+  returnPolicy?: string | null | undefined;
+  minimumOrderQuantity?: number | undefined;
   product_name: string;
   price?: number | undefined;
   discount?: number | undefined;
   category: string;
   brand: string;
   description?: string | null | undefined;
-  model_year: number;
+  model_year?: number | null | undefined;
   slug?: string | undefined;
   thumbnail?: string | null | undefined;
   stock?: number | undefined;

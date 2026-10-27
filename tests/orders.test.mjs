@@ -41,6 +41,20 @@ function transactionHarness(t) {
 }
 const input = (items) => ({ customerId, street: "123 Street", city: "City", state: "State", paymentType: 1, orderItems: items });
 
+test('minimum order quantity is enforced before reserving stock, including duplicate lines', async t => {
+  transactionHarness(t);
+  const product = new Product({ product_name: 'Bulk', sku: 'BULK-001', price: 100, stock: 30, minimumOrderQuantity: 24 });
+  t.mock.method(Product, 'findById', () => ({ session: async () => product }));
+  const save = t.mock.method(product, 'save', async () => product);
+  t.mock.method(Order.prototype, 'save', async function () { return this; });
+  const productId = String(product._id);
+  await assert.rejects(createOrder(actor, input([{ productId, quantity: 23 }])), { status: 400 });
+  assert.equal(product.stock, 30); assert.equal(save.mock.callCount(), 0);
+  const order = await createOrder(actor, input([{ productId, quantity: 12 }, { productId, quantity: 12 }]));
+  assert.equal(product.stock, 6);
+  assert.equal(order.orderItems[0].sku, 'BULK-001');
+});
+
 test("order reserves only the selected variant, merges duplicates and snapshots server price", async (t) => {
   const { session, state } = transactionHarness(t);
   const product = new Product({ product_name: "Product", price: 99, discount: 10, stock: 8,

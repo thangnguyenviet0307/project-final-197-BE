@@ -25,19 +25,26 @@ export async function registerCustomer(input: RegisterCustomerInput) {
     throw createHttpError(409, "Email already exists in customer contacts. Please contact the store for assistance.");
   }
   const password = await argon2.hash(input.password);
-  return mongoose.connection.transaction(async session => {
-    const [user] = await User.create([{
-      email: input.email, firstName: input.firstName, lastName: input.lastName,
-      password, role: "customer", active: true, mustChangePassword: false,
-      tokenVersion: 0, refreshToken: null,
-    }], { session });
-    if (!user) throw createHttpError(500, "Cannot create customer account");
-    await Customer.create([{
-      accountId: user._id, email: input.email, firstName: input.firstName,
-      lastName: input.lastName, isActive: true,
-    }], { session });
-    return toPublicUser(toAuthUser(user));
-  });
+  try {
+    return await mongoose.connection.transaction(async session => {
+      const [user] = await User.create([{
+        email: input.email, firstName: input.firstName, lastName: input.lastName,
+        password, role: "customer", active: true, mustChangePassword: false,
+        tokenVersion: 0, refreshToken: null,
+      }], { session });
+      if (!user) throw createHttpError(500, "Cannot create customer account");
+      await Customer.create([{
+        accountId: user._id, email: input.email, firstName: input.firstName,
+        lastName: input.lastName, isActive: true,
+      }], { session });
+      return toPublicUser(toAuthUser(user));
+    });
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      throw createHttpError(409, "Email already exists");
+    }
+    throw error;
+  }
 }
 
 export async function login(email: string, password: string) {
@@ -85,7 +92,7 @@ export async function bootstrapAdmin(input: Omit<CreateUserInput, "role">, suppl
   )) throw createHttpError(403, "Bootstrap is disabled or secret is invalid");
   const password = await argon2.hash(input.password);
   return mongoose.connection.transaction(async (session) => {
-    if (await User.countDocuments().session(session)) throw createHttpError(403, "System already initialized");
+    if (await User.countDocuments({ role: { $in: ["admin", "staff"] } }).session(session)) throw createHttpError(403, "System already initialized");
     await SystemLock.create([{ _id: "admin-bootstrap" }], { session });
     const user = new User({ ...input, password, role: "admin", active: true, tokenVersion: 0 });
     const authUser = toAuthUser(user, true);

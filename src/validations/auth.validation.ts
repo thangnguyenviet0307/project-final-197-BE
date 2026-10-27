@@ -3,11 +3,8 @@ export type { LoginInput, BootstrapInput, RefreshInput } from "../types/auth.typ
 import { z } from "zod";
 import { createUserSchema } from "./users.validation.js";
 export const loginSchema = createUserSchema.pick({ email: true, password: true }) satisfies z.ZodType<LoginInput>;
-// Public registration accepts credentials only, never roles or session flags.
-export const registerCustomerSchema = createUserSchema.pick({
-  email: true, password: true, firstName: true, lastName: true,
-}).strict() satisfies z.ZodType<import("../types/auth.type.js").RegisterCustomerInput>;
-
+// Registration never accepts roles, activation flags or administrative fields.
+export const registerCustomerSchema = z.strictObject(createUserSchema.pick({ email: true, password: true, firstName: true, lastName: true }).shape);
 export const bootstrapSchema = createUserSchema.omit({ role: true }).extend({
   active: z.literal(true).default(true),
 }) satisfies z.ZodType<BootstrapInput>;

@@ -1,10 +1,16 @@
 ﻿import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { before, after, test } from 'node:test';
+import { before, after, beforeEach, test } from 'node:test';
 import Product from '../dist/models/products.model.js';
 import { getStorefrontProduct } from '../dist/services/storefront.service.js';
 import app from '../dist/app.js';
 
+import { ProductReview } from '../dist/models/product-reviews.model.js';
+import { Order } from '../dist/models/orders.model.js';
+beforeEach(t => {
+  t.mock.method(ProductReview, 'aggregate', async () => []);
+  t.mock.method(Order, 'aggregate', async () => []);
+});
 let server, base;
 before(async () => { server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); base = `http://127.0.0.1:${server.address().port}`; });
 after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
@@ -22,6 +28,8 @@ test('public storefront DTO exposes availability and discounted prices but no in
   assert.equal(dto.price, 90); assert.equal(dto.available, true); assert.equal(dto.variants[0].price, 90);
   assert.equal(dto.variants[0].name, 'Black / L');
   assert.equal(dto.stock, undefined); assert.equal(dto.__v, undefined);
+  assert.equal(dto.currency, 'VND');
+  assert.equal(dto.rating, 0); assert.equal(dto.reviewCount, 0); assert.equal(dto.soldCount, 0);
   assert.equal(dto.variants[0].stock, undefined); assert.equal(dto.variants[0].attributes, undefined);
   assert.deepEqual(dto.images, ['https://images.test/a.jpg']);
   assert.equal(JSON.stringify(dto).includes('secret/storage/id'), false);
@@ -51,4 +59,28 @@ test('public storefront validates slug bounds before querying MongoDB', async t 
 test('internal product endpoints remain protected', async () => {
   const response = await fetch(`${base}/api/v1/products/${'a'.repeat(24)}`);
   assert.equal(response.status, 401);
+});
+
+test('product import and review writes require authentication', async () => {
+  for (const path of ['import/dummyjson', `${'a'.repeat(24)}/reviews`]) {
+    const response = await fetch(`${base}/api/v1/products/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    assert.equal(response.status, 401);
+  }
+});
+
+test('public reviews expose source attribution and omit private and internal fields', async t => {
+  mockProduct(t, sample());
+  const review = { rating: 5, comment: 'Good', reviewerName: 'Jane', date: new Date(), source: 'dummyjson', reviewerEmail: 'private@example.com', _id: 'internal-id', product: 'internal-product' };
+  const chain = { sort() { return this; }, skip() { return this; }, limit() { return this; }, lean: async () => [review] };
+  t.mock.method(ProductReview, 'find', () => chain);
+  t.mock.method(ProductReview, 'countDocuments', async () => 1);
+  const response = await fetch(`${base}/api/v1/storefront/products/api-headphones/reviews?page=1&limit=10`);
+  assert.equal(response.status, 200);
+  const json = await response.json();
+  assert.equal(json.data[0].source, 'dummyjson');
+  assert.equal(json.data[0].rating, 5);
+  assert.equal(json.data[0].reviewerEmail, undefined);
+  assert.equal(json.data[0]._id, undefined);
+  assert.equal(json.data[0].product, undefined);
+  assert.equal(json.pagination.total, 1);
 });

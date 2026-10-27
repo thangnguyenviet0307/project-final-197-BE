@@ -72,9 +72,9 @@ const refreshHandler: RequestHandler = asyncHandler(
 );
 
 export const authController: Record<string, RequestHandler> = {
-  register: asyncHandler(async (req, res) => {
-    const user = await registerCustomer(req.body);
-    sendResponse(res, 201, { message: "Account created. Please sign in.", data: user });
+  registerCustomer: asyncHandler(async (req, res) => {
+    const customer = await registerCustomer(req.body);
+    sendResponse(res, 201, { message: "Account created. Please sign in.", data: customer });
   }),
   updateProfile: asyncHandler(async (req, res) => {
     const user = (req as AuthenticatedRequest).user;

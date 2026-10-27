@@ -5,17 +5,13 @@ import { z } from "zod";
 import { objectId } from "./common.validation.js";
 
 export const createCategoriesSchema = z.object({
+  icon: z.union([z.string().trim().check(z.url()).regex(/^https?:\/\//i).max(255), z.literal("")]).optional(),
   name: z
     .string("Category name must be a string")
     .trim()
     .min(1, "Category name cannot be empty"),
 
   description: z.string("Description must be a string").trim().optional(),
-
-  icon: z.union([
-    z.url().refine((url) => /^https?:\/\//i.test(url), "Image URL must use HTTP or HTTPS"),
-    z.literal(""),
-  ]).optional(),
 
   parent: objectId.nullable().optional(),
 

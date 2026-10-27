@@ -1,5 +1,38 @@
 # Dữ liệu mẫu với Faker.js
 
+## Bổ sung trường mới cho dữ liệu Faker cũ
+
+Không chạy lại `seed` để cập nhật: lệnh đó thêm một bộ dữ liệu mới.
+Xem trước các sản phẩm Faker cần bổ sung:
+
+```powershell
+pnpm.cmd seed:backfill
+```
+
+Áp dụng vào database development/test trong `MONGODB_URI`:
+
+```powershell
+pnpm.cmd seed:backfill --apply
+```
+
+Lệnh nhận diện đúng mẫu SKU/slug từ generator cũ, bỏ qua sản phẩm import có `source`.
+Chỉ bổ sung metadata thiếu/null/rỗng: SKU sản phẩm, barcode, VND, tags,
+trọng lượng (kg), kích thước (cm), bảo hành, giao hàng, đổi trả, số lượng mua tối thiểu
+(mặc định 1 cho dữ liệu cũ), `sourceImages` và `model_year` tùy chọn nếu chưa có.
+Giữ nguyên giá, tồn kho, ID, biến thể, ảnh, tên/slug, ngày tạo/cập nhật và đơn hàng cũ.
+Giá cũ được giữ nguyên và coi là VND, không quy đổi tự động.
+
+Mỗi sản phẩm Faker chưa có đánh giá sẽ được thêm 3 đánh giá demo, đánh dấu `source: admin`
+theo model hiện tại. Không thêm tiếp nếu sản phẩm đã có đánh giá. `rating` và `reviewCount`
+được API tính từ bản ghi đánh giá; `soldCount` vẫn lấy từ đơn hoàn tất thực có trong database.
+Không tạo nguồn DummyJSON giả hoặc số lượt bán giả. Toàn bộ cập nhật nằm trong transaction;
+`__v` tăng để các bản chỉnh sửa tồn kho cũ nhận được cảnh báo xung đột. Nếu dữ liệu thay đổi
+trong lúc chạy, lệnh rollback và yêu cầu chạy lại. Chạy lại sau khi thành công sẽ không bổ sung trùng.
+Lệnh không thay đổi index và từ chối môi trường `production`.
+
+Seed mới dùng chung hàm tạo metadata/đánh giá với backfill trong `src/seeds/generate.ts`,
+và tạo thêm 121 đánh giá demo cho 50 sản phẩm, bao gồm sản phẩm chưa có đánh giá.
+
 Sử dụng dependency `@faker-js/faker` có sẵn, không cần cài thêm.
 
 Chạy `pnpm seed:check` để tạo và kiểm tra dữ liệu bằng schema Mongoose,

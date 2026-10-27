@@ -4,8 +4,8 @@ import createHttpError from "http-errors";
 import { User } from "../models/users.model.js";
 import { accentInsensitiveRegex } from "../utils/search.js";
 import { buildPagination } from "../utils/pagination.js";
-import type { CreateUserInput, UpdateUserInput, GetUsersQuery } from "../types/users.type.js";
-import type { ClientSession } from "mongoose";
+import type { CreateUserInput, UpdateUserInput, GetUsersQuery, IUser } from "../types/users.type.js";
+import type { ClientSession, QueryFilter } from "mongoose";
 import { Order } from "../models/orders.model.js";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
 import { sessionRevocationUpdate } from "../utils/session.js";
@@ -32,7 +32,7 @@ export const UserService = {
           })),
         }
       : {};
-    const filter = { ...searchFilter, role: role ?? { $in: ["admin", "staff"] as const }, ...(active === true ? { $or: [{ active: true }, { active: { $exists: false } }] } : active === false ? { active: false } : {}) };
+    const filter: QueryFilter<IUser> = { ...searchFilter, role: role ?? { $in: ["admin", "staff"] }, ...(active === true ? { $or: [{ active: true }, { active: { $exists: false } }] } : active === false ? { active: false } : {}) };
     const direction = sortOrder === "desc" ? -1 : 1;
     const rows = sortBy === "username" ? User.aggregate([
       { $match: filter },

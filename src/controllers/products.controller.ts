@@ -1,3 +1,5 @@
+import { importDummyProduct } from "../services/product-import.service.js";
+import { addProductReview, deleteProductReview, getProductMetrics, listProductReviews } from "../services/product-reviews.service.js";
 import { updateInventory } from "../services/products.service.js";
 import { assertFound } from "../utils/assert-found.js";
 import type { RequestHandler } from "express";
@@ -124,6 +126,24 @@ const deleteProduct: RequestHandler = asyncHandler(async (
     message: "Xoá sản phẩm thành công",
     data: product,
   });
+});
+
+export const importDummy: RequestHandler = asyncHandler(async (req, res) => {
+  sendResponse(res, 201, { data: await importDummyProduct(req.body) });
+});
+export const productMetrics: RequestHandler = asyncHandler(async (req, res) => {
+  sendResponse(res, 200, { data: await getProductMetrics(req.params['id'] as string) });
+});
+export const productReviews: RequestHandler = asyncHandler(async (req, res) => {
+  const { page, limit } = req.query as unknown as { page: number; limit: number };
+  sendResponse(res, 200, await listProductReviews(req.params['id'] as string, page, limit));
+});
+export const createReview: RequestHandler = asyncHandler(async (req, res) => {
+  sendResponse(res, 201, { data: await addProductReview(req.params['id'] as string, req.body) });
+});
+export const removeReview: RequestHandler = asyncHandler(async (req, res) => {
+  await deleteProductReview(req.params['id'] as string, req.params['reviewId'] as string);
+  sendResponse(res, 200, { success: true });
 });
 
 const productsController: Record<

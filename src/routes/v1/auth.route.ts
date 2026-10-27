@@ -20,6 +20,7 @@ import { cookieAuthTransport } from "../../utils/auth-cookie.js";
 const router: RouterType = Router();
 router.use(cookieAuthTransport);
 const rateLimit = createAuthRateLimit();
+router.post("/register", rateLimit, validate({ body: registerCustomerSchema }), authController["registerCustomer"]!);
 
 
 router.post(
@@ -28,7 +29,6 @@ router.post(
   validate({ body: bootstrapSchema }),
   authController["bootstrapAdmin"]!,
 );
-router.post("/register", rateLimit, validate({ body: registerCustomerSchema }), authController["register"]!);
 
 router.post(
   "/login",

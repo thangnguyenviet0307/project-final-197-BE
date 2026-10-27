@@ -1,5 +1,8 @@
 # AGENTS.md
 
+- Read [PROJECT_RULES.md](../project-final-197-FE/PROJECT_RULES.md) for shared frontend/backend business rules before changing code.
+- Use pnpm exclusively (pnpm.cmd in PowerShell). Run pnpm.cmd typecheck and pnpm.cmd test for backend changes.
+
 ## 1. Project Overview
 
 - Build a RESTful API using Node.js, Express.js, TypeScript, MongoDB and Mongoose.

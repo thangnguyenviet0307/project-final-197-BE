@@ -8,7 +8,7 @@ import { Categories } from '../dist/models/categories.model.js';
 import { BrandModel } from '../dist/models/brands.model.js';
 
 function mockReferences(t) {
-  for (const model of [Categories, BrandModel]) t.mock.method(model, 'distinct', async (_field, query) => { assert.equal(query.isActive, true); assert.deepEqual(query.isDeleted, { $ne: true }); return ['active-id']; });
+  for (const model of [Categories, BrandModel]) t.mock.method(model, 'distinct', async (_field, query) => { if (!query.name) assert.equal(query.isActive, true); assert.deepEqual(query.isDeleted, { $ne: true }); return ['active-id']; });
 }
 
 test('public catalog is anonymous, paginated and active-only; admin stays protected', async t => {
@@ -18,7 +18,7 @@ test('public catalog is anonymous, paginated and active-only; admin stays protec
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}/api/v1/products`;
   const chain = { select(fields) { assert.equal(fields, publicProductFields); return this; }, populate() { return this; }, sort() { return this; }, skip(n) { assert.equal(n, 2); return this; }, limit(n) { assert.equal(n, 2); return this; }, lean: async () => [] };
-  t.mock.method(Product, 'find', query => { assert.equal(query.is_active, true); assert.equal(query.$and[0].product_name.$regex, 'Case'); assert.deepEqual(query.$and[1].category, { $in: ['active-id'] }); return chain; });
+  t.mock.method(Product, 'find', query => { assert.equal(query.is_active, true); assert.equal(query.$and[0].$and[1].$or[0].product_name.$regex, 'Case'); assert.deepEqual(query.$and[1].category, { $in: ['active-id'] }); return chain; });
   t.mock.method(Product, 'countDocuments', async query => { assert.equal(query.is_active, true); return 3; });
   const response = await fetch(base + '/public?page=2&limit=2&search=Case');
   assert.equal(response.status, 200);
@@ -33,7 +33,7 @@ test('public detail cannot read an inactive product and excludes import/internal
   mockReferences(t);
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(() => server.close());
   t.mock.method(Product, 'findOne', query => {
-    assert.deepEqual(query, { slug: 'hidden-product', is_active: true, on_sale: { $ne: false }, category: { $in: ['active-id'] }, brand: { $in: ['active-id'] } });
+    assert.deepEqual(query, { slug: 'hidden-product', is_active: true, category: { $in: ['active-id'] }, brand: { $in: ['active-id'] } });
     return { select(fields) { assert.ok(!fields.split(' ').includes('__v')); assert.ok(!fields.split(' ').includes('external_id')); return this; }, populate() { return this; }, lean: async () => null };
   });
   const base = `http://127.0.0.1:${server.address().port}/api/v1/products/public`;

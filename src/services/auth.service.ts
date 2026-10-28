@@ -83,7 +83,7 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
   if (decoded.accountType !== "user" || area === "storefront") throw createHttpError(401, "Invalid administrative session");
   const user = await User.findById(decoded.userId).select("+refreshToken +tokenVersion");
   if (!user || !["admin", "staff"].includes(user.role) || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
-    throw createHttpError(401, "Refresh token không hợp lệ");
+    throw createHttpError(401, "Refresh token không hợp lệ", { authCode: "AUTH_REFRESH_REVOKED" });
   }
   if (!matchesLoginArea(user.role, area)) throw createHttpError(401, "Tài khoản không tồn tại !");
   const authUser = toAuthUser(user);
@@ -92,7 +92,7 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
     { _id: user._id, refreshToken: hashToken(refreshToken), tokenVersion: decoded.version, active: true },
     { $set: { refreshToken: hashToken(newRefreshToken) } },
   );
-  if (!rotated) throw createHttpError(401, "Refresh token already used");
+  if (!rotated) throw createHttpError(409, "Refresh token already used; retry with the current cookie", { authCode: "AUTH_REFRESH_CONFLICT" });
 
   return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }

@@ -93,8 +93,8 @@ export async function generateSeedData(existing: ExistingCatalog = {}) {
   // API validation catches constraints not present in Mongoose (lengths, URLs, SKU).
   // JSON serialization converts ObjectIds into the string IDs expected by the API.
   const input = (value: unknown): unknown => JSON.parse(JSON.stringify(value)) as unknown;
-  for (const brand of brands) createBrandSchema.parse(input(brand));
-  for (const category of categories) createCategoriesSchema.parse(input(category));
+  for (const brand of brands) createBrandSchema.parse(input({ name: brand.name, description: brand.description, logoUrl: brand.logoUrl, isActive: brand.isActive }));
+  for (const category of categories) createCategoriesSchema.parse(input({ name: category.name, description: category.description, icon: category.icon, isActive: category.isActive, parent: category.parent }));
   for (const product of products) createProductSchema.parse(input(product));
   for (const documents of Object.values(data)) {
     for (const document of documents) await document.validate();

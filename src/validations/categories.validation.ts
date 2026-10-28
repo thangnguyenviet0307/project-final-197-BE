@@ -16,7 +16,7 @@ export const createCategoriesSchema = z.object({
   parent: objectId.nullable().optional(),
 
   isActive: z.boolean("isActive must be a boolean").optional(),
-}) satisfies z.ZodType<CreateCategoriesInput>;
+}).strict() satisfies z.ZodType<CreateCategoriesInput>;
 
 export const updateCategoriesSchema = createCategoriesSchema
   .partial()

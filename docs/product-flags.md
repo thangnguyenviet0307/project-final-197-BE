@@ -30,3 +30,6 @@ The full create/update product endpoints also accept all five flags. GET /produc
 `count_view` is server-owned, defaults to zero and is exposed read-only in product responses. `POST /api/v1/products/public/:slug/views` with `{}` records one visit using atomic `$inc`, returning `{ data: { count_view: number } }` in the standard response envelope. Invalid slug/body returns 400; missing/non-public products return 404. The counter does not change inventory, metadata version or updatedAt. GET requests never count views. Clients send once per successful product navigation, with no automatic retries. Refresh/re-entry counts again; this is not a unique-visitor metric.
 
 The Most View storefront section and sortBy=count_view support are removed. Product view recording and admin counts are retained. Home, New and Featured query is_home/is_new/is_hot independently; Best Seller keeps its own is_best_seller section.
+
+
+Availability update: on_sale=false retains the active product on public lists/detail/reviews/related/view counting. The ordering button says temporarily out of stock, and order creation rejects it with 409. is_active=false and inactive/missing catalog references continue to hide products. Price sorting/ranges use the cheapest variant after product discount, rounded half-up to cents. Search covers product, brand and category names.

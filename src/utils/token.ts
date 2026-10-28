@@ -21,8 +21,8 @@ function verify(token: string, key: string): TokenPayload {
     if (payload["accountType"] !== undefined && payload["accountType"] !== "user" && payload["accountType"] !== "customer") throw createHttpError(401, "Invalid account type");
     return { userId: payload["userId"], version: payload["version"] as number, accountType: payload["accountType"] === "customer" ? "customer" : "user" };
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) throw createHttpError(401, "Token đã hết hạn");
-    if (error instanceof jwt.JsonWebTokenError) throw createHttpError(401, "Token không hợp lệ");
+    if (error instanceof jwt.TokenExpiredError) throw createHttpError(401, "Token đã hết hạn", { authCode: "AUTH_TOKEN_EXPIRED" });
+    if (error instanceof jwt.JsonWebTokenError) throw createHttpError(401, "Token không hợp lệ", { authCode: "AUTH_TOKEN_INVALID" });
     throw error;
   }
 }

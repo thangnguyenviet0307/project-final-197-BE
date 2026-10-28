@@ -104,6 +104,7 @@ export function errorMiddleware(
       success: false,
       data: null,
       message: err.statusCode >= 500 ? "Internal server error" : err.message,
+      ...("authCode" in err && typeof err.authCode === "string" && /^AUTH_[A-Z_]+$/.test(err.authCode) ? { code: err.authCode } : {}),
     });
     return;
   }

@@ -9,7 +9,7 @@ const unitPrice = (price: number, discount: number) => calculateOrderTotal([{ pr
 
 export async function getStorefrontProduct(slug: string) {
   const product = await Product.findOne({ slug, is_active: true })
-    .select("product_name slug description model_year thumbnail images price discount stock variants category brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity")
+    .select("on_sale product_name slug description model_year thumbnail images price discount stock variants category brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity")
     .populate<{ category: PublicReference | null }>({ path: "category", select: "name slug", match: activeReference })
     .populate<{ brand: PublicReference | null }>({ path: "brand", select: "name slug", match: activeReference })
     .lean();
@@ -22,7 +22,7 @@ export async function getStorefrontProduct(slug: string) {
     color: variant.color ?? null, size: variant.size ?? null,
     price: unitPrice(variant.price, discount),
     compareAtPrice: Math.max(variant.compare_at_price ?? 0, variant.price),
-    available: variant.stock > 0,
+    available: product.on_sale !== false && variant.stock > 0,
     image: variant.image ?? null, images: variant.images ?? [],
   }));
   const cheapest = variants.length ? Math.min(...variants.map(variant => variant.price)) : unitPrice(product.price, discount);
@@ -37,7 +37,7 @@ export async function getStorefrontProduct(slug: string) {
     category: { id: String(product.category._id), name: product.category.name, slug: product.category.slug },
     brand: { id: String(product.brand._id), name: product.brand.name, slug: product.brand.slug },
     price: cheapest, compareAtPrice: variants.length ? cheapest : product.price,
-    available: variants.length ? variants.some(variant => variant.available) : product.stock > 0,
+    available: product.on_sale !== false && (variants.length ? variants.some(variant => variant.available) : product.stock > 0),
     thumbnail: product.thumbnail ?? null,
     images: product.images.map(image => image.secure_url), variants,
   };

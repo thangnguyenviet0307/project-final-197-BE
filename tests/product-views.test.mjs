@@ -31,7 +31,7 @@ test('public view endpoint atomically increments once per request without changi
   let count = 0;
   const write = t.mock.method(Product, 'findOneAndUpdate', (filter, update, options) => {
     assert.equal(filter.slug, 'test-product'); assert.equal(filter.is_active, true);
-    assert.deepEqual(filter.on_sale, { $ne: false });
+    assert.equal(filter.on_sale, undefined);
     assert.deepEqual(filter.category, { $in: ['active-id'] });
     assert.deepEqual(filter.brand, { $in: ['active-id'] });
     assert.deepEqual(update, { $inc: { count_view: 1 } });

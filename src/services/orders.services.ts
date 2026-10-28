@@ -129,6 +129,7 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
     for (const item of merged.values()) {
       const product = await Product.findById(item.productId).session(session);
       if (!product || !product.is_active) throw createHttpError(404, "Active product not found");
+      if (product.on_sale === false) throw createHttpError(409, "Product is temporarily unavailable");
       if ((productQuantities.get(item.productId) ?? 0) < (product.minimumOrderQuantity ?? 1)) {
         throw createHttpError(400, "Quantity is below the product minimum order quantity");
       }

@@ -18,7 +18,7 @@ export const createBrandSchema = z.object({
     .string()
     .trim()
     .optional(),
-}) satisfies z.ZodType<BrandInput>;
+}).strict() satisfies z.ZodType<BrandInput>;
 
 // Schema cập nhật thương hiệu
 export const updateBrandSchema = createBrandSchema

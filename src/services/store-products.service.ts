@@ -1,5 +1,5 @@
 import Product from "../models/products.model.js";
-import { buildProductQuery, buildProductSort } from "../utils/product-query.js";
+import { buildProductSearchQuery, discountedPricePageIds, buildProductSort } from "../utils/product-query.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { GetProductsQuery } from "../types/products.type.js";
 import { Categories } from "../models/categories.model.js";
@@ -18,22 +18,24 @@ async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
 export async function listStoreProducts(filters: Partial<GetProductsQuery>) {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 12;
-  const query: Record<string, unknown> = { $and: [buildProductQuery(filters), await visibleCatalogFilter()], is_active: true, on_sale: { $ne: false } };
+  const query: Record<string, unknown> = { $and: [await buildProductSearchQuery(filters), await visibleCatalogFilter()], is_active: true };
+  const priceIds = filters.sortBy === 'price' ? await discountedPricePageIds(query, filters, page, limit) : null;
   const [data, total] = await Promise.all([
-    Product.find(query).select(publicProductFields).populate(references).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).lean(),
+    priceIds ? Product.find({ $and: [query, { _id: { $in: priceIds } }] }).select(publicProductFields).populate(references).lean() : Product.find(query).select(publicProductFields).populate(references).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).lean(),
     Product.countDocuments(query),
   ]);
+  if (priceIds) { const positions = new Map(priceIds.map((id, index) => [String(id), index])); data.sort((a, b) => positions.get(String(a._id))! - positions.get(String(b._id))!); }
   return { data, pagination: buildPagination(page, limit, total) };
 }
 
 export async function getStoreProduct(slug: string) {
-  return Product.findOne({ slug, is_active: true, on_sale: { $ne: false }, ...await visibleCatalogFilter() }).select(publicProductFields).populate(references).lean();
+  return Product.findOne({ slug, is_active: true, ...await visibleCatalogFilter() }).select(publicProductFields).populate(references).lean();
 }
 
 export async function relatedStoreProducts(product: { _id: unknown; category: unknown; tags?: string[] }) {
   const category = product.category && typeof product.category === 'object' && '_id' in product.category ? product.category._id : product.category;
   const query: Record<string, unknown> = {
-    _id: { $ne: product._id }, is_active: true, on_sale: { $ne: false },
+    _id: { $ne: product._id }, is_active: true,
     $and: [await visibleCatalogFilter(), { category }],
   };
   return Product.find(query).select(publicProductFields).populate(references).sort({ createdAt: -1, _id: -1 }).limit(5).lean();
@@ -42,7 +44,7 @@ export async function relatedStoreProducts(product: { _id: unknown; category: un
 // Atomic counter writes deliberately leave metadata/inventory __v and updatedAt unchanged.
 export async function recordStoreProductView(slug: string) {
   return Product.findOneAndUpdate(
-    { slug, is_active: true, on_sale: { $ne: false }, ...await visibleCatalogFilter() },
+    { slug, is_active: true, ...await visibleCatalogFilter() },
     { $inc: { count_view: 1 } },
     { new: true, timestamps: false },
   ).select("count_view -_id").lean();

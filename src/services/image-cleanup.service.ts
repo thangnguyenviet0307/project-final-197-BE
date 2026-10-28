@@ -3,12 +3,12 @@ import type { ClientSession } from "mongoose";
 import { ImageCleanupJob } from "../models/image-cleanup-jobs.model.js";
 import { configureCloudinary } from "../config/cloudinary.js";
 
-export async function enqueueImageCleanup(publicIds: string[], session: ClientSession) {
+export async function enqueueImageCleanup(publicIds: string[], session?: ClientSession) {
   const ids = [...new Set(publicIds)];
   if (!ids.length) return;
   await ImageCleanupJob.bulkWrite(ids.map(publicId => ({ updateOne: {
     filter: { publicId }, update: { $setOnInsert: { publicId, runAt: new Date(), leaseUntil: new Date(0), attempts: 0 } }, upsert: true,
-  } })), { session });
+  } })), session ? { session } : {});
 }
 export async function processImageCleanupBatch() {
   // Bounded batch and expiring lease allow retries after crashes and multiple API processes.

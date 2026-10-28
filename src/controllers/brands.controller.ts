@@ -16,6 +16,10 @@ import type {
 } from '../types/brands.js';
 
 export class BrandController {
+  static getPublic: RequestHandler = asyncHandler(async (_req, res) => {
+    const brands = await BrandService.getPublic();
+    sendResponse(res, 200, { success: true, data: brands });
+  });
   // GET /api/v1/brands
   static getAll: RequestHandler = asyncHandler(async (
     _req: Request,

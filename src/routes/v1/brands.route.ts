@@ -16,6 +16,7 @@ import {
 
 const router: RouterType = Router();
 
+router.get("/public", BrandController.getPublic);
 router.use(authenticate);
 
 router.get(

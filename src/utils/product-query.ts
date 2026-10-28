@@ -19,8 +19,11 @@ export function buildProductQuery(filters: Partial<GetProductsQuery>): Record<st
   if (filters.size) variants['size'] = { $regex: escapeRegex(filters.size.trim()), $options: 'i' };
   if (Object.keys(variants).length) query['variants'] = { $elemMatch: variants };
   if (filters.search) query['product_name'] = { $regex: escapeRegex(filters.search), $options: 'i' };
-  if (filters.category) query['category'] = filters.category;
-  if (filters.brand) query['brand'] = filters.brand;
+  for (const field of ['category', 'brand'] as const) {
+    if (!filters[field]) continue;
+    const ids = [...new Set(filters[field].split(','))];
+    query[field] = ids.length === 1 ? ids[0] : { $in: ids };
+  }
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined) query['price'] = {
     ...(filters.minPrice !== undefined ? { $gte: filters.minPrice } : {}),
     ...(filters.maxPrice !== undefined ? { $lte: filters.maxPrice } : {}),

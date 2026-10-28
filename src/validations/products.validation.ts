@@ -104,6 +104,8 @@ export const updateProductSchema = createProductSchema
 
 export const productIdParamSchema = idParamSchema;
 
+const catalogIds = z.string().max(10000).refine(value => value.split(",").every(id => objectId.safeParse(id).success), "Expected comma-separated catalog IDs");
+
 export const getProductsQuerySchema = paginationSchema.extend({
   on_sale: z.enum(["true", "false"]).transform(value => value === "true").optional(),
   is_best_seller: z.enum(["true", "false"]).transform(value => value === "true").optional(),
@@ -113,11 +115,11 @@ export const getProductsQuerySchema = paginationSchema.extend({
 
   stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock']).optional(),
   search: z.string().trim().max(255).optional(),
-  category: objectId.optional(),
-  brand: objectId.optional(),
+  category: catalogIds.optional(),
+  brand: catalogIds.optional(),
   minPrice: z.coerce.number().min(0).optional(),
   maxPrice: z.coerce.number().min(0).optional(),
-  sortBy: z.enum(['product_name', 'price', 'createdAt']).optional(),
+  sortBy: z.enum(['product_name', 'price', 'createdAt', 'is_hot', 'is_best_seller', 'discount']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   sku: z.string().trim().min(1).optional(),
   color: z.string().trim().optional(),

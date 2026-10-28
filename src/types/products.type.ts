@@ -67,7 +67,7 @@ export interface GetProductsQuery extends IPaginationQuery {
   brand?: string | undefined;
   minPrice?: number | undefined;
   maxPrice?: number | undefined;
-  sortBy?: 'product_name' | 'price' | 'createdAt' | undefined;
+  sortBy?: 'product_name' | 'price' | 'createdAt' | 'is_hot' | 'is_best_seller' | 'discount' | undefined;
   sortOrder?: 'asc' | 'desc' | undefined;
   sku?: string | undefined;
   color?: string | undefined;

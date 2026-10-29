@@ -1,0 +1,144 @@
+# Public article requests need no login.
+# Management requests require an Admin saved by auth.http as the primary session.
+# Create article first to populate ARTICLE_ID and ARTICLE_SLUG in REST_CLIENT/.env.
+@baseUrl = http://127.0.0.1:5001/api/v1/articles
+@articleId = {{$dotenv ARTICLE_ID}}
+@articleSlug = {{$dotenv ARTICLE_SLUG}}
+
+### Danh sách tin tức công khai: phân trang, bài mới nhất trước
+GET {{baseUrl}}/public?type=news&page=1&limit=10&sort=newest
+Accept: application/json
+
+### Tìm kiếm và lọc bài viết công khai
+GET {{baseUrl}}/public?search=cap sac&category=C%E1%BA%A9m%20nang%20ch%E1%BB%8Dn%20mua&isFeatured=true
+Accept: application/json
+
+### Danh sách chuyên mục công khai
+GET {{baseUrl}}/public/categories
+Accept: application/json
+
+### Danh sách thẻ công khai
+GET {{baseUrl}}/public/tags
+Accept: application/json
+
+### Chi tiết bài viết công khai (chỉ bài đã xuất bản; bài nháp trả về 404)
+GET {{baseUrl}}/public/{{articleSlug}}
+Accept: application/json
+
+### Ghi nhận lượt xem bài viết (giới hạn 60 yêu cầu/IP/15 phút)
+POST {{baseUrl}}/public/{{articleSlug}}/views
+Accept: application/json
+
+### Quản trị: danh sách bài viết ở mọi trạng thái
+GET {{baseUrl}}?page=1&limit=10&sort=newest
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Quản trị: thống kê bài viết
+GET {{baseUrl}}/stats
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Nhân viên không được quản lý bài viết (dự kiến 403; cần đăng nhập nhân viên trước)
+GET {{baseUrl}}
+x-rest-client-auth: staff
+Authorization: Bearer {{$dotenv STAFF_ACCESS_TOKEN}}
+Accept: application/json
+
+### Quản trị: danh sách chuyên mục và thẻ
+GET {{baseUrl}}/categories
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Quản trị: danh sách thẻ
+GET {{baseUrl}}/tags
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Tạo bài viết nháp (thành công sẽ lưu ARTICLE_ID và ARTICLE_SLUG)
+POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "type": "news",
+  "title": "Cách chọn cáp sạc phù hợp - REST Client",
+  "category": "Cẩm nang chọn mua",
+  "excerpt": "Các bước cơ bản để chọn cáp sạc phù hợp với thiết bị.",
+  "content": "## Kiểm tra thiết bị\n\nXác định cổng kết nối và công suất sạc trước khi mua.",
+  "imageUrl": "https://example.com/test-cap-sac.jpg",
+  "tags": ["cáp sạc", "hướng dẫn"],
+  "authorName": "REST Client test",
+  "status": "draft",
+  "publishAt": null,
+  "isFeatured": false,
+  "seo": {
+    "title": "Cách chọn cáp sạc phù hợp",
+    "description": "Hướng dẫn kiểm tra cáp sạc.",
+    "keywords": ["cáp sạc"],
+    "canonicalUrl": null
+  }
+}
+
+### Ví dụ dữ liệu không hợp lệ: từ chối trường không được hỗ trợ (dự kiến 400)
+POST {{baseUrl}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "title": "Invalid article",
+  "category": "Test",
+  "excerpt": "Invalid payload",
+  "content": "Validation should reject this.",
+  "authorName": "REST Client test",
+  "unexpectedField": true
+}
+
+### Quản trị: lấy chi tiết bài viết; dùng __v trong phản hồi khi cập nhật/xóa
+GET {{baseUrl}}/{{articleId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Accept: application/json
+
+### Cập nhật bài nháp: thay expectedVersion bằng __v hiện tại
+PATCH {{baseUrl}}/{{articleId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "expectedVersion": 0,
+  "excerpt": "Đã cập nhật nội dung tóm tắt bằng REST Client."
+}
+
+### Xuất bản bài nháp: dùng __v mới nhất sau lần cập nhật thành công trước đó
+PATCH {{baseUrl}}/{{articleId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "expectedVersion": 1,
+  "status": "published",
+  "publishAt": null
+}
+
+### Kiểm tra chi tiết công khai sau khi bài viết được xuất bản
+GET {{baseUrl}}/public/{{articleSlug}}
+Accept: application/json
+
+### Xóa bài viết kiểm thử: dùng __v mới nhất; chỉ thực hiện với dữ liệu kiểm thử
+DELETE {{baseUrl}}/{{articleId}}
+x-rest-client-auth: primary
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "expectedVersion": 2
+}

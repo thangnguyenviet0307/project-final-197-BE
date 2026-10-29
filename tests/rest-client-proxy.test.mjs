@@ -107,6 +107,23 @@ test("new product IDs are shared across files without exposing credentials", asy
   assert.equal(values.LOGIN_EMAIL, "test@example.com");
 });
 
+test("new article IDs and slugs are saved for REST Client article workflows", async (t) => {
+  const fixture = await setup(t, (_req, res) => reply(res, {
+    _id: "article-1",
+    slug: "test-article",
+  }, 201));
+  assert.equal((await fixture.post("/articles")).status, 201);
+  const values = await fixture.values();
+  assert.equal(values.ARTICLE_ID, "article-1");
+  assert.equal(values.ARTICLE_SLUG, "test-article");
+});
+
+test("article detail routes reject an unset saved ID before reaching the backend", async (t) => {
+  const fixture = await setup(t, () => assert.fail("Invalid article ID must not be forwarded"));
+  const response = await fixture.get("/articles/");
+  assert.equal(response.status, 400);
+});
+
 test("browser origins and remote backend targets are rejected", async (t) => {
   const fixture = await setup(t, () => { assert.fail("Must not forward a browser request"); });
   assert.equal((await fixture.post("/auth/login", { origin: "https://example.com" })).status, 403);

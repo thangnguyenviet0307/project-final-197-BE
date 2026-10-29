@@ -13,6 +13,7 @@ import { UserService } from "../dist/services/users.service.js";
 import { CategoriesService } from "../dist/services/categories.service.js";
 import productService from "../dist/services/products.service.js";
 import { createOrder, updateOrderStatus } from "../dist/services/orders.services.js";
+import { checkout } from "../dist/services/checkout.service.js";
 
 // Deliberately do not import dotenv: never fall back to the application's database.
 const uri = process.env.MONGODB_TEST_URI;
@@ -180,6 +181,23 @@ test("stale editor cannot overwrite stock reserved after its preflight read", as
   const stored = await Product.findById(entry._id);
   assert.equal(stored.stock, 4);
   assert.equal(stored.variants[0].stock, 4);
+});
+
+test("checkout concurrent retries reserve once and failed multi-line orders roll back", async t => {
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', districts: [{ code: 2, name: 'District', wards: [{ code: 3, name: 'Ward' }] }] }] }));
+  const buyer = await Customer.create({ firstName: 'Checkout', lastName: 'Fixture', email: `checkout-${randomUUID()}@example.com`, accountEnabled: true });
+  fixtures.customers.push(buyer._id);
+  const first = await product(5);
+  const second = await product(1);
+  const payload = { requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
+  const results = await Promise.all([checkout(String(buyer._id), 0, payload), checkout(String(buyer._id), 0, payload)]);
+  fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
+  assert.equal(results[0]._id, results[1]._id);
+  assert.equal((await Product.findById(first._id)).stock, 3);
+  await assert.rejects(checkout(String(buyer._id), 0, { ...payload, requestId: randomUUID(), items: [{ ...item(first, 1), expectedUnitPrice: 25 }, { ...item(second, 2), expectedUnitPrice: 25 }] }), { status: 409 });
+  assert.equal((await Product.findById(first._id)).stock, 3);
+  assert.equal((await Product.findById(second._id)).stock, 1);
+  assert.equal(await Order.countDocuments({ customerId: buyer._id }), 1);
 });
 
 test("purchase snapshots survive product and variant metadata changes", async () => {

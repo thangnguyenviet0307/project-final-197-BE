@@ -20,11 +20,11 @@ const productId = String(new mongoose.Types.ObjectId());
 const input = () => checkoutSchema.parse({ requestId: randomUUID(), recipientName: 'Người nhận', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: '12 Đường A', note: 'Giao buổi sáng', paymentMethod: 'cod', items: [{ productId, quantity: 2, expectedUnitPrice: 90 }] });
 const locations = [{ code: 1, name: 'Tỉnh A', districts: [{ code: 2, name: 'Huyện B', wards: [{ code: 3, name: 'Xã C' }] }] }];
 function harness(t) {
-  const state = { saved: [], aborted: 0 };
+  const state = { saved: [], aborted: 0, profileSaves: 0 };
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => locations }));
   t.mock.method(SystemLock, 'updateOne', async () => ({}));
   t.mock.method(mongoose.connection, 'transaction', async callback => { try { return await callback({}); } catch (error) { state.aborted++; throw error; } });
-  const customer = { _id: customerId, tokenVersion: 0, firstName: 'Tên', lastName: 'Họ', email: 'customer@example.com', phone: '0999999999' };
+  const customer = { _id: customerId, tokenVersion: 0, firstName: 'Tên', lastName: 'Họ', email: 'customer@example.com', phone: '0999999999', isModified: () => true, save: async () => { state.profileSaves++; } };
   t.mock.method(Customer, 'findOne', () => ({ select() { return this; }, session: async () => customer }));
   for (const model of [BrandModel, Categories]) t.mock.method(model, 'exists', () => ({ session() { return this; }, then(resolve) { return Promise.resolve({}).then(resolve); } }));
   const product = new Product({ _id: productId, product_name: 'Sản phẩm', sku: 'TEST', price: 100, discount: 10, stock: 5, is_active: true });
@@ -50,7 +50,7 @@ test('locality requests are coalesced/cached and upstream failures fail closed',
   const offline = await import('../dist/services/checkout-locations.service.js?offline-test');
   await assert.rejects(offline.getCheckoutLocations(), { status: 503 });
 });
-test('checkout creates an unassigned pending COD order, uses server price and snapshots recipient without editing profile', async t => {
+test('checkout creates an unassigned pending COD order and preserves existing contact phone', async t => {
   const { state, product, customer } = harness(t);
   const result = await checkout(customerId, 0, input());
   assert.equal(result.totalAmount, 180);
@@ -84,6 +84,32 @@ test('price changes and stock conflicts abort without creating an order', async 
   assert.equal(product.stock, 1);
   assert.equal(state.aborted, 2);
 });
+
+test('checkout completes missing phone/address once and preserves saved details', async t => {
+  const { customer, state } = harness(t);
+  customer.phone = '';
+  const request = input();
+  await checkout(customerId, 0, request);
+  assert.equal(customer.phone, request.phone);
+  assert.equal(customer.shippingAddress.street, request.street);
+  assert.equal(customer.shippingAddress.district, locations[0].districts[0].name);
+  assert.equal(customer.shippingAddress.email, customer.email);
+  await checkout(customerId, 0, request);
+  assert.equal(state.profileSaves, 1);
+  const saved = { ...customer.shippingAddress };
+  state.saved.length = 0;
+  await checkout(customerId, 0, { ...input(), street: 'Different address', phone: '0987654321' });
+  assert.equal(customer.phone, request.phone);
+  assert.deepEqual(customer.shippingAddress, saved);
+});
+
+test('rejected checkout leaves missing profile details untouched', async t => {
+  const { customer } = harness(t);
+  customer.phone = '';
+  await assert.rejects(checkout(customerId, 0, { ...input(), items: [{ productId, quantity: 2, expectedUnitPrice: 1 }] }), { status: 409 });
+  assert.equal(customer.phone, '');
+  assert.equal(customer.shippingAddress, undefined);
+});
 test('mismatched address, revoked session, and stopped products cannot create orders', async t => {
   const { state, product } = harness(t);
   await assert.rejects(checkout(customerId, 0, { ...input(), districtCode: 9 }), { status: 400 });
@@ -92,6 +118,66 @@ test('mismatched address, revoked session, and stopped products cannot create or
   await assert.rejects(checkout(customerId, 0, input()), { status: 409 });
   assert.equal(state.saved.length, 0);
   assert.equal(product.stock, 5);
+});
+
+test('guest checkout creates an order without looking up, creating or modifying any customer and retries reserve once', async t => {
+  const { state, product } = harness(t);
+  const create = t.mock.method(Customer, 'create', () => assert.fail('Guest checkout must not create an account'));
+  const request = input();
+  const first = await checkout(null, 0, request);
+  const replay = await checkout(null, 0, request);
+  assert.deepEqual(first, replay);
+  assert.equal(state.saved.length, 1);
+  assert.equal(product.stock, 3);
+  assert.equal(state.saved[0].guestCheckout, true);
+  assert.equal(state.saved[0].customerId, null);
+  assert.equal(state.saved[0].customerSnapshot.phone, request.phone);
+  assert.equal(Customer.findOne.mock.callCount(), 0);
+  assert.equal(create.mock.callCount(), 0);
+  assert.equal(state.profileSaves, 0);
+  await assert.rejects(checkout(null, 0, { ...request, phone: '0987654321' }), { status: 409 });
+});
+
+test('guest checkout validates stock, current price and locality before creating an order', async t => {
+  const { state, product } = harness(t);
+  await assert.rejects(checkout(null, 0, { ...input(), districtCode: 9 }), { status: 400 });
+  await assert.rejects(checkout(null, 0, { ...input(), items: [{ productId, quantity: 2, expectedUnitPrice: 1 }] }), { status: 409 });
+  product.stock = 1;
+  await assert.rejects(checkout(null, 0, input()), { status: 409 });
+  assert.equal(state.saved.length, 0);
+  assert.equal(state.profileSaves, 0);
+});
+
+test('only guest orders may omit their customer relation and cannot carry an account ID', async () => {
+  const fields = { street: 'Street', city: 'City', state: 'Province', paymentType: 1, orderItems: [{ productId, quantity: 1, price: 10 }] };
+  await assert.rejects(new Order(fields).validate());
+  await new Order({ ...fields, guestCheckout: true, customerId: null }).validate();
+  await assert.rejects(new Order({ ...fields, guestCheckout: true, customerId }).validate());
+});
+
+test('public guest endpoint accepts anonymous checkout, rejects injected identity, and limits repeated requests', async t => {
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const realFetch = globalThis.fetch;
+  const { state } = harness(t);
+  const url = `http://127.0.0.1:${server.address().port}/api/v1/storefront/checkout`;
+  const send = body => realFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const request = input();
+  const first = await send(request);
+  assert.equal(first.status, 201);
+  const response = (await first.json()).data;
+  assert.deepEqual(Object.keys(response).sort(), ['_id', 'orderCode', 'orderStatus', 'totalAmount']);
+  const replay = await send(request);
+  assert.equal(replay.status, 201);
+  assert.deepEqual((await replay.json()).data, response);
+  assert.equal((await send({ ...request, customerId })).status, 400);
+  assert.equal((await send({ ...request, guestCheckout: false })).status, 400);
+  assert.equal((await send({ ...request, street: 'Changed' })).status, 409);
+  const limited = await send(request);
+  assert.equal(limited.status, 429);
+  assert.ok(limited.headers.get('retry-after'));
+  assert.equal(state.saved.length, 1);
 });
 test('customer checkout endpoint rejects anonymous/admin identities and validates authenticated requests', async t => {
   const server = app.listen(0, '127.0.0.1');

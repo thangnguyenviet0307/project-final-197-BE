@@ -15,3 +15,7 @@ export const createCheckout: RequestHandler = asyncHandler(async (req, res) => {
 export const checkoutLocations: RequestHandler = asyncHandler(async (_req, res) => {
   sendResponse(res, 200, { data: await getCheckoutLocations() });
 });
+
+export const createGuestCheckout: RequestHandler = asyncHandler(async (req, res) => {
+  sendResponse(res, 201, { data: await checkout(null, 0, checkoutSchema.parse(req.body)) });
+});

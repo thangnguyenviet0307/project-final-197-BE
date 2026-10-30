@@ -1,6 +1,9 @@
 import { Router, type Router as ExpressRouter } from "express";
 import { createCheckout, checkoutLocations } from "../../controllers/checkout.controller.js";
 import { checkoutSchema } from "../../validations/checkout.validation.js";
+import { cancelCustomerOrderController } from "../../controllers/customer-order-cancel.controller.js";
+import { cancelCustomerOrderSchema } from "../../validations/customer-order-cancel.validation.js";
+import { idParamSchema } from "../../validations/common.validation.js";
 import createHttpError from "http-errors";
 import { customerProfileSchema, shippingAddressSchema, customerOrdersQuerySchema } from "../../validations/customer-account.validation.js";
 import { cookieAuthTransport, getLoginArea } from "../../utils/auth-cookie.js";
@@ -25,6 +28,7 @@ router.get("/me", authenticateCustomer, controller.me);
 router.patch("/me", authenticateCustomer, validate({ body: customerProfileSchema }), controller.profile);
 router.patch("/shipping-address", authenticateCustomer, validate({ body: shippingAddressSchema }), controller.shippingAddress);
 router.get("/orders", authenticateCustomer, validate({ query: customerOrdersQuerySchema }), controller.orders);
+router.patch("/orders/:id/cancel", authenticateCustomer, validate({ params: idParamSchema, body: cancelCustomerOrderSchema }), cancelCustomerOrderController);
 router.get("/checkout-locations", checkoutLocations);
 router.post("/orders", authenticateCustomer, rateLimit, validate({ body: checkoutSchema }), createCheckout);
 router.post("/logout", authenticateCustomer, controller.logout);

@@ -6,6 +6,23 @@ import { assertActiveCatalog } from "../utils/catalog-reference.js";
 import { calculateOrderTotal } from "../utils/order-total.js";
 import type { IOrderItem, OrderItemInput } from "../types/orders.type.js";
 
+export async function restoreOrderStock(items: IOrderItem[], session: ClientSession) {
+  for (const item of items) {
+    const product = await Product.findById(item.productId).session(session);
+    if (!product) throw createHttpError(409, "Cannot restore a deleted product");
+    if (item.variantId) {
+      const variant = product.variants.id(item.variantId);
+      if (!variant) throw createHttpError(409, "Cannot restore a deleted variant");
+      variant.stock += item.quantity;
+      product.stock = sumVariantStock(product.variants);
+    } else {
+      if (product.variants.length) throw createHttpError(409, "Legacy order needs variant reconciliation before cancellation");
+      product.stock += item.quantity;
+    }
+    await product.save({ session });
+  }
+}
+
 export async function reserveOrderItems(items: (OrderItemInput & { expectedUnitPrice?: number })[], session: ClientSession): Promise<IOrderItem[]> {
   const merged = new Map<string, OrderItemInput>();
   const quantities = new Map<string, number>();

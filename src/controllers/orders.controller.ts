@@ -87,7 +87,7 @@ export const orderController: Record<string, RequestHandler> = {
   }),
   assignOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await assignOrder(req.user!, req.params['id'] as string, req.body.userId);
-    sendResponse(res, 200, { success: true, message: 'Order reassigned', data: order });
+    sendResponse(res, 200, { success: true, message: 'Order reassigned', data: await getOrderById(req.user!, order._id.toString()) });
   }),
   startOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
     const order = await startOrder(req.user!, req.params['id'] as string, req.body.userId);

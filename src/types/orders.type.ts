@@ -28,6 +28,9 @@ export interface IOrderItem {
 }
 
 export interface IOrder {
+  recipientName?: string;
+  recipientPhone?: string;
+  deliveryAddress?: { province: string; district: string; ward: string; provinceCode: number; districtCode: number; wardCode: number };
   plannedShippingDate?: Date;
   orderCode?: string;
   customerId: Types.ObjectId;

@@ -59,9 +59,9 @@ test('updates preserve existing content and reject stale versions; deletes requi
   const exists = t.mock.method(Categories, 'exists', () => ({ session: async () => null }));
   const result = await service.updateHeroSlide(String(slide._id), { expectedVersion: 2, title: 'Changed' });
   assert.equal(result.title, 'Changed'); assert.equal(result.description, 'Keep description'); assert.equal(result.sortOrder, 9); assert.equal(exists.mock.callCount(), 0);
-  await assert.rejects(service.updateHeroSlide(String(slide._id), { expectedVersion: 2, title: 'Overwrite' }), { status: 409 });
-  await assert.rejects(service.updateHeroSlide(String(slide._id), { expectedVersion: 3, category: id }), { status: 409 });
-  await assert.rejects(service.deleteHeroSlide(String(slide._id), 2), { status: 409 });
+  await assert.rejects(service.updateHeroSlide(String(slide._id), { expectedVersion: 2, title: 'Overwrite' }), { status: 409, businessCode: 'VERSION_CONFLICT' });
+  await assert.rejects(service.updateHeroSlide(String(slide._id), { expectedVersion: 3, category: id }), { status: 409, businessCode: 'CATEGORY_UNAVAILABLE' });
+  await assert.rejects(service.deleteHeroSlide(String(slide._id), 2), { status: 409, businessCode: 'VERSION_CONFLICT' });
   const remove = t.mock.method(HeroSlide, 'deleteOne', async filter => { assert.deepEqual(filter, { _id: String(slide._id), __v: 3 }); return { deletedCount: 1 }; });
   await service.deleteHeroSlide(String(slide._id), 3);
   assert.equal(remove.mock.callCount(), 1); assert.equal(save.mock.callCount(), 1);
@@ -94,4 +94,12 @@ test('public hero is anonymous while all management endpoints enforce admin auth
   assert.equal((await request('PATCH', '/' + id, { title: 'Changed' }, token)).status, 400);
   assert.equal((await request('PATCH', '/bad', { expectedVersion: 0, title: 'Changed' }, token)).status, 400);
   assert.equal((await request('DELETE', '/' + id, {}, token)).status, 400);
+  transaction(t);
+  const slide = new HeroSlide({ ...input, __v: 2 });
+  t.mock.method(HeroSlide, 'findById', () => ({ session: async () => slide }));
+  t.mock.method(Categories, 'exists', () => ({ session: async () => null }));
+  const stale = await request('PATCH', '/' + id, { expectedVersion: 1, title: 'Changed' }, token);
+  assert.equal(stale.status, 409); assert.equal((await stale.json()).code, 'VERSION_CONFLICT');
+  const unavailable = await request('PATCH', '/' + id, { expectedVersion: 2, category: id }, token);
+  assert.equal(unavailable.status, 409); assert.equal((await unavailable.json()).code, 'CATEGORY_UNAVAILABLE');
 });

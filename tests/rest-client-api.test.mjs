@@ -136,7 +136,7 @@ test("admin login through the proxy authenticates every API and preserves detail
   assert.equal(updated.status, 200);
   assert.equal((await updated.json()).data.orderStatus, 2);
   const rejected = await fetch(`${base}/orders/__ORDER_ID__/status`, {
-    method: 'PATCH', headers, body: JSON.stringify({ orderStatus: 3 }),
+    method: 'PATCH', headers, body: JSON.stringify({ orderStatus: 3, cancellationReason: "Customer request" }),
   });
   assert.equal(rejected.status, 200);
   assert.equal(entries.Product.stock, 5);

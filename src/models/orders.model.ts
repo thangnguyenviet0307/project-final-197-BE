@@ -21,6 +21,9 @@ const orderSchema = new Schema<IOrder>(
   {
     orderCode: { type: String, immutable: true, match: /^ORD-[A-HJ-NP-Z2-9]{6}$/ },
     customerId: { type: Schema.Types.ObjectId, ref: 'Customer', required: true },
+    recipientName: { type: String, trim: true, maxlength: 100 },
+    recipientPhone: { type: String, trim: true, maxlength: 20 },
+    deliveryAddress: { type: new Schema({ province: String, district: String, ward: String, provinceCode: Number, districtCode: Number, wardCode: Number }, { _id: false }) },
     customerSnapshot: { type: new Schema({ firstName: String, lastName: String, email: String, phone: String }, { _id: false }) },
     orderStatus: { type: Number, required: true, default: OrderStatus.Pending,
       enum: [OrderStatus.Pending, OrderStatus.Processing, OrderStatus.Rejected, OrderStatus.Completed] },

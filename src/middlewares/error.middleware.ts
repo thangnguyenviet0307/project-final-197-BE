@@ -65,7 +65,7 @@ export function errorMiddleware(
   }
 
   if (err instanceof mongoose.Error.VersionError) {
-    sendResponse(res, 409, { success: false, message: "Data changed; please retry", data: null });
+    sendResponse(res, 409, { success: false, code: "VERSION_CONFLICT", message: "Data changed; please retry", data: null });
     return;
   }
   if (err instanceof mongoose.Error.CastError) {
@@ -104,6 +104,7 @@ export function errorMiddleware(
       success: false,
       data: null,
       message: err.statusCode >= 500 ? "Internal server error" : err.message,
+      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE"].includes(err.businessCode) ? { code: err.businessCode } : {}),
       ...("authCode" in err && typeof err.authCode === "string" && /^AUTH_[A-Z_]+$/.test(err.authCode) ? { code: err.authCode } : {}),
     });
     return;

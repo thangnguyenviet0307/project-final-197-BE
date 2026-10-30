@@ -25,7 +25,8 @@ export async function getStorefrontProduct(slug: string) {
     available: product.on_sale !== false && variant.stock > 0,
     image: variant.image ?? null, images: variant.images ?? [],
   }));
-  const cheapest = variants.length ? Math.min(...variants.map(variant => variant.price)) : unitPrice(product.price, discount);
+  const cheapest = variants.reduce<(typeof variants)[number] | undefined>((current, variant) =>
+    !current || variant.price < current.price ? variant : current, undefined);
   return {
     ...metrics,
     sku: product.sku ?? null, barcode: product.barcode ?? null, currency: product.currency ?? "VND",
@@ -36,7 +37,7 @@ export async function getStorefrontProduct(slug: string) {
     description: product.description ?? "", modelYear: product.model_year ?? null,
     category: { id: String(product.category._id), name: product.category.name, slug: product.category.slug },
     brand: { id: String(product.brand._id), name: product.brand.name, slug: product.brand.slug },
-    price: cheapest, compareAtPrice: variants.length ? cheapest : product.price,
+    price: cheapest?.price ?? unitPrice(product.price, discount), compareAtPrice: cheapest?.compareAtPrice ?? product.price,
     available: product.on_sale !== false && (variants.length ? variants.some(variant => variant.available) : product.stock > 0),
     thumbnail: product.thumbnail ?? null,
     images: product.images.map(image => image.secure_url), variants,

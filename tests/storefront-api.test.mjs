@@ -26,6 +26,7 @@ test('public storefront DTO exposes availability and discounted prices but no in
   mockProduct(t, sample());
   const dto = await getStorefrontProduct('api-headphones');
   assert.equal(dto.price, 90); assert.equal(dto.available, true); assert.equal(dto.variants[0].price, 90);
+  assert.equal(dto.compareAtPrice, 120);
   assert.equal(dto.variants[0].name, 'Black / L');
   assert.equal(dto.stock, undefined); assert.equal(dto.__v, undefined);
   assert.equal(dto.currency, 'VND');
@@ -33,6 +34,17 @@ test('public storefront DTO exposes availability and discounted prices but no in
   assert.equal(dto.variants[0].stock, undefined); assert.equal(dto.variants[0].attributes, undefined);
   assert.deepEqual(dto.images, ['https://images.test/a.jpg']);
   assert.equal(JSON.stringify(dto).includes('secret/storage/id'), false);
+});
+
+test('product price and compareAtPrice come from the same cheapest variant, with a correct non-variant fallback', async t => {
+  const row = sample();
+  row.variants.push({ ...row.variants[0], _id: 'e'.repeat(24), price: 50, compare_at_price: null });
+  mockProduct(t, row);
+  let dto = await getStorefrontProduct('api-headphones');
+  assert.equal(dto.price, 45); assert.equal(dto.compareAtPrice, 50);
+  row.variants = [];
+  dto = await getStorefrontProduct('api-headphones');
+  assert.equal(dto.price, 90); assert.equal(dto.compareAtPrice, 100);
 });
 test('public storefront hides products whose category or brand is inactive/deleted', async t => {
   for (const field of ['category', 'brand']) {

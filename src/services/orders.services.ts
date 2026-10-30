@@ -1,10 +1,10 @@
+import { reserveOrderItems } from "./order-reservation.service.js";
 import { generateOrderCode, isOrderCodeCollision } from '../utils/order-code.js';
 import { escapeRegex } from '../utils/search.js';
 import { sumVariantStock } from "../utils/inventory.js";
 import createHttpError from "http-errors";
 import { type QueryFilter, Types, type ClientSession } from "mongoose";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
-import { assertActiveCatalog } from "../utils/catalog-reference.js";
 import { calculateOrderTotal } from "../utils/order-total.js";
 import { hasPermission } from "../config/rolePermissions.js";
 import { Customer } from "../models/customers.model.js";
@@ -45,7 +45,7 @@ async function resolveAssignee(actor: AuthUser, requested?: string, session?: Cl
   if (!(await query)) throw createHttpError(404, "Active user not found");
   return requested;
 }
-async function restoreStock(items: IOrderItem[], session: ClientSession) {
+export async function restoreStock(items: IOrderItem[], session: ClientSession) {
   // MongoDB transactions do not support parallel operations on the same session.
   for (const item of items) {
     const product = await Product.findById(item.productId).session(session);
@@ -106,50 +106,7 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
     if (!customer) {
       throw createHttpError(404, "Active customer not found");
     }
-    const merged = new Map<string, { productId: string; variantId?: string; quantity: number }>();
-    for (const item of input.orderItems) {
-      const productId = item.productId.toLowerCase();
-      const variantId = item.variantId?.toLowerCase();
-      const key = `${productId}:${variantId ?? ""}`;
-      const current = merged.get(key);
-      if (current) {
-        current.quantity += item.quantity;
-        if (!Number.isSafeInteger(current.quantity)) throw createHttpError(400, "Total quantity is too large");
-      }
-      else merged.set(key, { productId, quantity: item.quantity,
-        ...(variantId ? { variantId } : {}) });
-    }
-    const orderItems: IOrderItem[] = [];
-    const productQuantities = new Map<string, number>();
-    for (const item of merged.values()) {
-      const total = (productQuantities.get(item.productId) ?? 0) + item.quantity;
-      if (!Number.isSafeInteger(total)) throw createHttpError(400, "Total quantity is too large");
-      productQuantities.set(item.productId, total);
-    }
-    for (const item of merged.values()) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product || !product.is_active) throw createHttpError(404, "Active product not found");
-      if (product.on_sale === false) throw createHttpError(409, "Product is temporarily unavailable");
-      if ((productQuantities.get(item.productId) ?? 0) < (product.minimumOrderQuantity ?? 1)) {
-        throw createHttpError(400, "Quantity is below the product minimum order quantity");
-      }
-      await assertActiveCatalog(product.brand, product.category, session);
-      const variant = item.variantId ? product.variants.id(item.variantId) : null;
-      if (product.variants.length && !item.variantId) throw createHttpError(400, "Select a product variant");
-      if (item.variantId && !variant) throw createHttpError(404, "Variant not found");
-      if ((variant?.stock ?? product.stock) < item.quantity) throw createHttpError(409, "Insufficient stock");
-      if (variant) {
-        variant.stock -= item.quantity;
-        product.stock = sumVariantStock(product.variants);
-      } else product.stock -= item.quantity;
-      await product.save({ session });
-      orderItems.push({ productId: product._id, quantity: item.quantity,
-        ...(!variant && product.sku ? { sku: product.sku } : {}),
-        price: variant?.price ?? product.price, discount: product.discount, productName: product.product_name,
-        ...(variant ? { variantId: variant._id, sku: variant.sku, variantName: variant.variant_name,
-          selectedOptions: { ...variant.attributes, ...(variant.color ? { color: variant.color } : {}), ...(variant.size ? { size: variant.size } : {}) } } : {}) });
-    }
-    calculateOrderTotal(orderItems);
+    const orderItems = await reserveOrderItems(input.orderItems, session);
     const order = new Order({ ...input, orderCode: generateOrderCode(), customerId: new Types.ObjectId(input.customerId),
       customerSnapshot: { firstName: customer.firstName, lastName: customer.lastName, email: customer.email, phone: customer.phone },
       ...(userId ? { userId: new Types.ObjectId(userId) } : {}), orderItems, orderStatus: OrderStatus.Pending });
@@ -159,7 +116,7 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
 }
 export async function updateOrderStatus(actor: AuthUser, id: string, input: UpdateOrderStatusInput) {
   if (!hasPermission(actor.role, Permission.OrderUpdateStatus)) throw createHttpError(403, "Cannot update orders");
-  if (input.orderStatus === OrderStatus.Rejected && actor.role !== 'admin' && !input.cancellationReason?.trim()) throw createHttpError(400, "Enter a cancellation reason.");
+  if (input.orderStatus === OrderStatus.Rejected && !input.cancellationReason?.trim()) throw createHttpError(400, "Enter a cancellation reason.");
   return withRelationsTransaction(async (session) => {
     const order = await Order.findOne({ _id: id, ...orderWriteScope(actor) }).session(session);
     if (!order) throw createHttpError(404, "Order not found");

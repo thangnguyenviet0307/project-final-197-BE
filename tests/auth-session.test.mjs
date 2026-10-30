@@ -123,5 +123,5 @@ test("new admin-provisioned accounts must change their temporary passwords", asy
     assert.equal(await argon2.verify(input.password, "TemporaryPassword123"), true);
     return new User(input);
   });
-  await UserService.createUser({ firstName: "New", lastName: "Staff", email: "new@example.com", password: "TemporaryPassword123", role: "staff", active: true });
+  await UserService.createUser({ firstName: "New", lastName: "Staff", email: "new@example.com", password: "TemporaryPassword123", role: "staff", active: true }, { id: 'f'.repeat(24), role: 'super_admin' });
 });

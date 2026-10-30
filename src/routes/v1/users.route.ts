@@ -11,11 +11,14 @@ import {
   createUserSchema,
   getUsersQuerySchema,
   updateUserSchema,
+  transferOwnershipSchema,
 } from "../../validations/users.validation.js";
 
 const router: RouterType = Router();
 
 router.use(authenticate);
+router.post('/transfer-ownership', requirePermission(Permission.OwnershipTransfer), validate({ body: transferOwnershipSchema }), userController['transferOwnership']!);
+router.post('/:id/revoke-sessions', requirePermission(Permission.UserUpdate), validate({ params: idParamSchema }), userController['revokeSessions']!);
 
 router.get(
   "/",

@@ -235,11 +235,19 @@ export async function updateOrderDates(actor: AuthUser, id: string, input: {
     return updated;
   });
 }
-export async function updateOrderNote(actor: AuthUser, id: string, orderNote: string) {
+export async function updateOrderNote(actor: AuthUser, id: string, orderNote: string, expectedOrderNote: string) {
   if (!hasPermission(actor.role, Permission.OrderNote)) throw createHttpError(403, "Cannot edit order notes");
-  const order = await Order.findOneAndUpdate({ _id: id, ...orderWriteScope(actor), orderStatus: { $in: OPEN_ORDER_STATUSES } },
+  const scope = { _id: id, ...orderWriteScope(actor), orderStatus: { $in: OPEN_ORDER_STATUSES } };
+  // Compare and update in one MongoDB command, never a read followed by a write.
+  // Legacy orders with a missing/null note are exposed to clients as empty text.
+  const order = await Order.findOneAndUpdate({ ...scope,
+    ...(expectedOrderNote === '' ? { $or: [{ orderNote: '' }, { orderNote: null }] } : { orderNote: expectedOrderNote }),
+  },
     { $set: { orderNote } }, { returnDocument: 'after', runValidators: true });
-  if (!order) throw createHttpError(404, "Open order not found");
+  if (!order) {
+    if (!await Order.exists(scope)) throw createHttpError(404, "Open order not found");
+    throw createHttpError(409, "Order note changed; refresh and review before saving", { businessCode: 'ORDER_NOTE_CONFLICT' });
+  }
   return order;
 }
 export async function getPersonalSales(actor: AuthUser) {

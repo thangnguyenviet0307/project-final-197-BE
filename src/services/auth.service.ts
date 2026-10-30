@@ -18,7 +18,7 @@ import { sessionRevocationUpdate } from "../utils/session.js";
 
 export async function login(email: string, password: string, area: LoginArea = "admin") {
   if (area !== "admin") throw createHttpError(401, "Use customer authentication");
-  const user = await User.findOne({ email, role: { $in: ["admin", "staff"] } }).select("+password +tokenVersion");
+  const user = await User.findOne({ email, role: { $in: ["super_admin", "admin", "staff"] } }).select("+password +tokenVersion");
   // Missing active belongs to legacy accounts; explicit false/null remains disabled.
   if (!user || (user.active !== undefined && user.active !== true)) {
     throw createHttpError(401, "Email hoặc mật khẩu không chính xác");
@@ -63,9 +63,9 @@ export async function bootstrapAdmin(input: Omit<CreateUserInput, "role">, suppl
   )) throw createHttpError(403, "Bootstrap is disabled or secret is invalid");
   const password = await argon2.hash(input.password);
   return mongoose.connection.transaction(async (session) => {
-    if (await User.countDocuments({ role: { $in: ["admin", "staff"] } }).session(session)) throw createHttpError(403, "System already initialized");
+    if (await User.countDocuments({ role: { $in: ["super_admin", "admin", "staff"] } }).session(session)) throw createHttpError(403, "System already initialized");
     await SystemLock.create([{ _id: "admin-bootstrap" }], { session });
-    const user = new User({ ...input, password, role: "admin", active: true, tokenVersion: 0 });
+    const user = new User({ ...input, password, role: "super_admin", active: true, tokenVersion: 0 });
     const authUser = toAuthUser(user, true);
     const { accessToken, refreshToken } = generateTokenPair(authUser);
     user.refreshToken = hashToken(refreshToken);
@@ -82,7 +82,7 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
   const decoded = verifyRefreshToken(refreshToken);
   if (decoded.accountType !== "user" || area === "storefront") throw createHttpError(401, "Invalid administrative session");
   const user = await User.findById(decoded.userId).select("+refreshToken +tokenVersion");
-  if (!user || !["admin", "staff"].includes(user.role) || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
+  if (!user || !["super_admin", "admin", "staff"].includes(user.role) || !user.active || user.refreshToken !== hashToken(refreshToken) || (user.tokenVersion ?? 0) !== decoded.version) {
     throw createHttpError(401, "Refresh token không hợp lệ", { authCode: "AUTH_REFRESH_REVOKED" });
   }
   if (!matchesLoginArea(user.role, area)) throw createHttpError(401, "Tài khoản không tồn tại !");

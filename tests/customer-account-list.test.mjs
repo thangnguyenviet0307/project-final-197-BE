@@ -22,11 +22,11 @@ test("User list remains restricted to admin/staff and excludes legacy customer r
   t.mock.method(User, "find", filter => { seen = filter; return { sort() { return this; }, skip() { return this; }, limit() { return []; } }; });
   t.mock.method(User, "countDocuments", async () => 0);
   await UserService.getAllUsers({ page: 1, limit: 10 });
-  assert.deepEqual(seen.role, { $in: ["admin", "staff"] });
+  assert.deepEqual(seen.role, { $in: ["super_admin", "admin", "staff"] });
 });
 test("User detail/update/delete queries cannot target legacy customer documents", async t => {
-  t.mock.method(User, "findOne", async filter => { assert.deepEqual(filter.role, { $in: ["admin", "staff"] }); return null; });
+  t.mock.method(User, "findOne", async filter => { assert.deepEqual(filter.role, { $in: ["super_admin", "admin", "staff"] }); return null; });
   await assert.rejects(UserService.getUserById("a".repeat(24)), { status: 404 });
   t.mock.method(User, "findOneAndUpdate", async filter => { assert.deepEqual(filter.role, { $in: ["admin", "staff"] }); return null; });
-  await assert.rejects(UserService.updateUser("a".repeat(24), { firstName: "No" }), { status: 404 });
+  await assert.rejects(UserService.updateUser("a".repeat(24), { firstName: "No" }, { id: 'f'.repeat(24), role: 'super_admin' }), { status: 404 });
 });

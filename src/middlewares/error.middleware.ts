@@ -104,7 +104,7 @@ export function errorMiddleware(
       success: false,
       data: null,
       message: err.statusCode >= 500 ? "Internal server error" : err.message,
-      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE"].includes(err.businessCode) ? { code: err.businessCode } : {}),
+      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE", "ORDER_NOTE_CONFLICT"].includes(err.businessCode) ? { code: err.businessCode } : {}),
       ...("authCode" in err && typeof err.authCode === "string" && /^AUTH_[A-Z_]+$/.test(err.authCode) ? { code: err.authCode } : {}),
     });
     return;

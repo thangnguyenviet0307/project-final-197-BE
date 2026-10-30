@@ -54,6 +54,9 @@ export const updateOrderDatesSchema = z.strictObject({
   plannedShippingDate: z.iso.datetime({ offset: true }).pipe(z.coerce.date()).nullable().optional(),
   shippingDate: z.iso.datetime({ offset: true }).pipe(z.coerce.date()).optional(),
 }).refine(value => Object.keys(value).length > 0, { error: 'Select at least one date field' });
-export const updateOrderNoteSchema = z.strictObject({ orderNote: z.string().trim().max(2000) });
+export const updateOrderNoteSchema = z.strictObject({
+  orderNote: z.string().trim().max(2000),
+  expectedOrderNote: z.string().max(2000),
+});
 
 export const cancelCustomerOrderSchema = z.strictObject({ cancellationReason: z.string().trim().min(1).max(1000) });

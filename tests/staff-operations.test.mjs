@@ -66,7 +66,8 @@ test('staff cannot mutate another handler order despite full read access', async
   });
   t.mock.method(Order, 'findOneAndUpdate', async filter => { assert.equal(filter.userId.toString(), staffId); return null; });
   await assert.rejects(updateOrderStatus(staff, target, { orderStatus: 2 }), { status: 404 });
-  await assert.rejects(updateOrderNote(staff, target, 'Note'), { status: 404 });
+  t.mock.method(Order, 'exists', async filter => { assert.equal(filter.userId.toString(), staffId); return null; });
+  await assert.rejects(updateOrderNote(staff, target, 'Note', ''), { status: 404 });
 });
 test('personal sales always use authenticated staff ID and server monetary arithmetic', async t => {
   t.mock.method(Order, 'find', filter => {
@@ -133,6 +134,6 @@ test('staff can save notes on their own open orders and finish their assigned or
     assert.equal(filter.userId.toString(), staffId);
     return update.$set;
   });
-  assert.equal((await updateOrderNote(staff, target, 'Note')).orderNote, 'Note');
+  assert.equal((await updateOrderNote(staff, target, 'Note', '')).orderNote, 'Note');
   assert.equal((await updateOrderStatus(staff, target, { orderStatus: 4 })).orderStatus, 4);
 });

@@ -29,7 +29,7 @@ export function planCustomerMigration(users, customers) {
   const administrativeEmails = new Set();
   for (const user of users.filter(user => user.role !== "customer")) {
     const email = user.email?.trim().toLowerCase();
-    if (!["admin", "staff"].includes(user.role) || !email || administrativeEmails.has(email)) blockers.push({ userId: String(user._id), reason: "Invalid or duplicate administrative account" });
+    if (!["super_admin", "admin", "staff"].includes(user.role) || !email || administrativeEmails.has(email)) blockers.push({ userId: String(user._id), reason: "Invalid or duplicate administrative account" });
     administrativeEmails.add(email);
   }
   return { entries, blockers, unregisteredContacts: customers.filter(customer => !customer.accountEnabled && !customer.accountId).length };

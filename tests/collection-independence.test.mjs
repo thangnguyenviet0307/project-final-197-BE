@@ -56,14 +56,14 @@ test("Customer contact editing and deactivation do not update its linked User or
 test("administrative User profile editing never changes a same-email Customer", async t => {
   forbidWrites(t, Customer);
   t.mock.method(User, "exists", async filter => {
-    assert.deepEqual(filter, { email: "new-login@example.com", role: { $in: ["admin", "staff"] }, _id: { $ne: id } });
+    assert.deepEqual(filter, { email: "new-login@example.com", role: { $in: ["super_admin", "admin", "staff"] }, _id: { $ne: id } });
     return null;
   });
   t.mock.method(User, "findOneAndUpdate", async (target, update) => {
     assert.equal(target._id, id);
     return { ...shared, _id: id, role: "staff", ...update.$set };
   });
-  const result = await UserService.updateUser(id, { email: "new-login@example.com", firstName: "User only" });
+  const result = await UserService.updateUser(id, { email: "new-login@example.com", firstName: "User only" }, { id: 'f'.repeat(24), role: 'super_admin' });
   assert.equal(result.email, "new-login@example.com");
 });
 
@@ -78,7 +78,7 @@ test("disabling a User revokes only that User session without deactivating any C
     assert.equal(update.$inc.tokenVersion, 1);
     return { _id: id, active: false };
   });
-  await UserService.updateUser(id, { active: false });
+  await UserService.updateUser(id, { active: false }, { id: 'f'.repeat(24), role: 'super_admin' });
 });
 
 test("deleting a Customer checks its orders but never deletes its linked User", async t => {
@@ -93,5 +93,5 @@ test("deleting an administrative User never deletes a same-email Customer", asyn
   t.mock.method(User, "findById", () => ({ session: async () => ({ _id: id, role: "staff" }) }));
   t.mock.method(Order, "exists", () => ({ session: async () => null }));
   t.mock.method(User, "findOneAndDelete", async target => { assert.equal(target._id, id); return { _id: id }; });
-  await UserService.deleteUser(id);
+  await UserService.deleteUser(id, { id: 'f'.repeat(24), role: 'super_admin' });
 });

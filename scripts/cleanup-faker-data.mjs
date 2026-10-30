@@ -50,7 +50,7 @@ export function validateCleanup(data, selected) {
   for (const product of selected.products) {
     if (product.images?.some(image => image.public_id)) blockers.push(`Product ${id(product)} has managed image assets; remove through the supported image workflow first`);
   }
-  const activeAdmins = data.users.filter(row => row.role === "admin" && row.active !== false && !sets.users.has(id(row)));
+  const activeAdmins = data.users.filter(row => ["super_admin", "admin"].includes(row.role) && row.active !== false && !sets.users.has(id(row)));
   if (!activeAdmins.length) blockers.push("At least one active administrative account must remain");
   return blockers;
 }

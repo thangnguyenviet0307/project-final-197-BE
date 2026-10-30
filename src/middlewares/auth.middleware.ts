@@ -15,7 +15,7 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     const decoded = verifyAccessToken(header.slice(7));
     if (decoded.accountType !== "user") throw createHttpError(403, "Administrative account required");
     const user = await User.findById(decoded.userId).select("+tokenVersion");
-    if (!user || !["admin", "staff"].includes(user.role) || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
+    if (!user || !["super_admin", "admin", "staff"].includes(user.role) || !user.active || (user.tokenVersion ?? 0) !== decoded.version) {
       throw createHttpError(401, "Phiên đăng nhập không còn hợp lệ");
     }
     if (!matchesLoginArea(user.role, getLoginArea(req))) throw createHttpError(403, "Account does not belong to this area");

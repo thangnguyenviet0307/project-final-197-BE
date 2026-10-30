@@ -1,9 +1,10 @@
 import { Permission } from '../types/permissions.type.js';
 
-export type Role = 'admin' | 'staff';
+export type Role = 'super_admin' | 'admin' | 'staff';
 
 const rolePermissions: Record<Role, Permission[]> = {
-  admin: Object.values(Permission),
+  super_admin: Object.values(Permission),
+  admin: Object.values(Permission).filter(permission => permission !== Permission.OwnershipTransfer && permission !== Permission.UserManageAdmins),
   staff: [
     // Staff read all history and operate orders assigned to themselves.
     Permission.OrderView,
@@ -27,6 +28,6 @@ export function hasPermission(role: string, permission: Permission): boolean {
 }
 
 export function getPermissionsForRole(role: string): Permission[] {
-  if (role !== 'admin' && role !== 'staff') return [];
+  if (role !== 'super_admin' && role !== 'admin' && role !== 'staff') return [];
   return [...rolePermissions[role]];
 }

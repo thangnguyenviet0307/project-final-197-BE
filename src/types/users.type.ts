@@ -10,7 +10,7 @@ export interface IUser {
   password: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'staff';
+  role: 'super_admin' | 'admin' | 'staff';
   active: boolean;
   tokenVersion: number;
   mustChangePassword?: boolean;
@@ -36,7 +36,7 @@ export interface UpdateUserInput {
   active?: boolean | undefined;
 }
 export interface GetUsersQuery extends IPaginationQuery {
-  role?: "admin" | "staff" | undefined;
+  role?: "super_admin" | "admin" | "staff" | undefined;
   active?: boolean | undefined;
   sortBy?: "username" | undefined;
   sortOrder?: "asc" | "desc" | undefined;

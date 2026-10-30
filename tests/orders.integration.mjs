@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { before, after, test } from "node:test";
 import mongoose from "mongoose";
+import argon2 from "argon2";
 import Product from "../dist/models/products.model.js";
 import { Order } from "../dist/models/orders.model.js";
 import { Customer } from "../dist/models/customers.model.js";
@@ -12,7 +13,7 @@ import { User } from "../dist/models/users.model.js";
 import { UserService } from "../dist/services/users.service.js";
 import { CategoriesService } from "../dist/services/categories.service.js";
 import productService from "../dist/services/products.service.js";
-import { createOrder, updateOrderStatus } from "../dist/services/orders.services.js";
+import { createOrder, updateOrderStatus, updateOrderNote } from "../dist/services/orders.services.js";
 import { createCheckout } from "../dist/services/checkout.service.js";
 import { CheckoutRequest } from "../dist/models/checkout-requests.model.js";
 
@@ -70,6 +71,8 @@ async function order(items) {
   return result;
 }
 
+
+
 test("real transaction rolls stock back when a later order item fails", async () => {
   const entry = await product(3);
   await assert.rejects(order([item(entry, 2), { productId: String(new mongoose.Types.ObjectId()), quantity: 1 }]), { status: 404 });
@@ -113,11 +116,11 @@ test('concurrent admin deactivations leave one active administrator', async () =
   const users = [];
   for (const suffix of ['one', 'two']) {
     const user = await UserService.createUser({ email: `${suffix}@example.com`, password: 'FixturePassword123',
-      firstName: 'Fixture', lastName: suffix, role: 'admin', active: true });
+      firstName: 'Fixture', lastName: suffix, role: 'admin', active: true }, { id: 'f'.repeat(24), role: 'super_admin' });
     fixtures.users.push(user._id);
     users.push(user);
   }
-  const results = await Promise.allSettled(users.map(user => UserService.updateUser(String(user._id), { active: false })));
+  const results = await Promise.allSettled(users.map(user => UserService.updateUser(String(user._id), { active: false }, { id: 'f'.repeat(24), role: 'super_admin' })));
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
   assert.equal(await User.countDocuments({ role: 'admin', active: true }), 1);
@@ -156,7 +159,7 @@ test('concurrent category deletion and product creation cannot leave a dangling 
 
 test('order codes, phone search and staff scheduling work on MongoDB', async () => {
   const { startOrder, getOrders, updateOrderDates } = await import('../dist/services/orders.services.js');
-  const staff = await UserService.createUser({ email: 'schedule-staff@example.com', password: 'FixturePassword123', firstName: 'Schedule', lastName: 'Staff', role: 'staff', active: true });
+  const staff = await UserService.createUser({ email: 'schedule-staff@example.com', password: 'FixturePassword123', firstName: 'Schedule', lastName: 'Staff', role: 'staff', active: true }, { id: 'f'.repeat(24), role: 'super_admin' });
   fixtures.users.push(staff._id);
   const staffActor = { id: String(staff._id), role: 'staff' };
   const entry = await product(2);
@@ -236,4 +239,39 @@ test('checkout failure on a later line rolls back earlier reservations and leave
   await assert.rejects(createCheckout(String(customer._id), request), { status: 409 });
   assert.equal((await Product.findById(first._id)).stock, 3);
   assert.equal(await CheckoutRequest.countDocuments({ customerId: customer._id, requestId: request.requestId }), 0);
+});
+
+test("two real concurrent note writes cannot overwrite the same original note", async () => {
+  const entry = await product(2);
+  const created = await order([item(entry)]);
+  const results = await Promise.allSettled([
+    updateOrderNote(actor, String(created._id), 'First draft', ''),
+    updateOrderNote(actor, String(created._id), 'Second draft', ''),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  const rejected = results.find(result => result.status === 'rejected');
+  assert.equal(rejected.reason.status, 409);
+  assert.equal(rejected.reason.businessCode, 'ORDER_NOTE_CONFLICT');
+  const winner = results.find(result => result.status === 'fulfilled');
+  assert.equal((await Order.findById(created._id)).orderNote, winner.value.orderNote);
+});
+
+test("ownership transfer rolls back invalid targets and concurrent transfers preserve one owner", async () => {
+  const password = 'OwnerIntegration123';
+  const hash = await argon2.hash(password);
+  const accounts = await User.create([
+    { email: 'owner-fixture@example.com', firstName: 'Owner', lastName: 'Fixture', password: hash, role: 'super_admin', active: true },
+    { email: 'target-one@example.com', firstName: 'Target', lastName: 'One', password: hash, role: 'admin', active: true, mustChangePassword: true },
+    { email: 'target-two@example.com', firstName: 'Target', lastName: 'Two', password: hash, role: 'staff', active: true },
+  ]);
+  fixtures.users.push(...accounts.map(user => user._id));
+  const owner = { id: String(accounts[0]._id), role: 'super_admin' };
+  await assert.rejects(UserService.transferOwnership(owner, String(accounts[1]._id), password), { status: 409 });
+  assert.equal((await User.findById(owner.id)).role, 'super_admin');
+  await User.updateOne({ _id: accounts[1]._id }, { $set: { mustChangePassword: false } });
+  const results = await Promise.allSettled(accounts.slice(1).map(user => UserService.transferOwnership(owner, String(user._id), password)));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(await User.countDocuments({ role: 'super_admin' }), 1);
+  assert.equal((await User.findById(owner.id)).role, 'admin');
+  assert.equal((await User.findById(owner.id).select('+tokenVersion')).tokenVersion, 1);
 });

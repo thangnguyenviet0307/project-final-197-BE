@@ -82,7 +82,7 @@ export const orderController: Record<string, RequestHandler> = {
     sendResponse(res, 200, { success: true, data });
   }),
   updateOrderNote: asyncHandler(async (req: AuthenticatedRequest, res) => {
-    const data = await updateOrderNote(req.user!, req.params['id'] as string, req.body.orderNote);
+    const data = await updateOrderNote(req.user!, req.params['id'] as string, req.body.orderNote, req.body.expectedOrderNote);
     sendResponse(res, 200, { success: true, data });
   }),
   assignOrder: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {

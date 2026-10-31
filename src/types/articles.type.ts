@@ -13,6 +13,8 @@ export interface CreateArticleInput {
   title: string;
   slug?: string | undefined;
   category: string;
+  categoryId?: string | undefined;
+  sortOrder?: number | undefined;
   excerpt: string;
   content: string;
   imageUrl?: string | null | undefined;
@@ -29,18 +31,20 @@ export type UpdateArticleInput = { [K in keyof CreateArticleInput]?: CreateArtic
 };
 
 export interface ArticleListQuery {
+  summary?: boolean | undefined;
   page: number;
   limit: number;
   search?: string | undefined;
   type?: ArticleType | undefined;
   category?: string | undefined;
+  categoryId?: string | undefined;
   tag?: string | undefined;
   status?: ArticleStatus | undefined;
   isFeatured?: boolean | undefined;
-  sort?: "newest" | "oldest" | "popular" | undefined;
+  sort?: "newest" | "oldest" | "popular" | "display" | undefined;
 }
 
 export interface AdminArticleListQuery extends ArticleListQuery {
   status?: ArticleStatus | undefined;
-  sort?: "newest" | "oldest" | "popular" | undefined;
+  sort?: "newest" | "oldest" | "popular" | "display" | undefined;
 }

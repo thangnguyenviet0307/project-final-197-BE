@@ -109,3 +109,38 @@ test('expired locality cache fails closed on provider outage or malformed respon
   t.mock.method(globalThis, 'fetch', async () => { throw Error('Network unavailable'); });
   await assert.rejects(getCheckoutLocations(), { status: 503 });
 });
+
+test('cold locality fetch runs outside the transaction and replay bypasses provider failure', async t => {
+  const { customerId, product } = fixture(t);
+  let inTransaction = false;
+  t.mock.method(mongoose.connection, 'transaction', async callback => {
+    inTransaction = true;
+    try { return await callback({}); } finally { inTransaction = false; }
+  });
+  const now = Date.now();
+  t.mock.method(Date, 'now', () => now + 48 * 60 * 60 * 1000);
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    assert.equal(inTransaction, false, 'provider must not hold the relations lock');
+    return new Response(JSON.stringify(places), { status: 200 });
+  });
+  const request = input(String(product._id));
+  const first = await createCheckout(customerId, request);
+  assert.equal(fetchMock.mock.callCount(), 1);
+  t.mock.method(Date, 'now', () => now + 96 * 60 * 60 * 1000);
+  t.mock.method(globalThis, 'fetch', async () => { throw Error('provider unavailable'); });
+  assert.deepEqual(await createCheckout(customerId, request), first);
+  await assert.rejects(createCheckout(customerId, { ...request, street: 'Changed' }), { status: 409 });
+});
+
+test('customer eligibility is rechecked after locality preparation before reserving stock', async t => {
+  const { customerId, product, orderSaves } = fixture(t);
+  const now = Date.now();
+  t.mock.method(Date, 'now', () => now + 200 * 60 * 60 * 1000);
+  t.mock.method(globalThis, 'fetch', async () => {
+    t.mock.method(Customer, 'findOne', () => query(null));
+    return new Response(JSON.stringify(places), { status: 200 });
+  });
+  await assert.rejects(createCheckout(customerId, input(String(product._id))), { status: 403 });
+  assert.equal(product.stock, 10);
+  assert.equal(orderSaves.mock.callCount(), 0);
+});

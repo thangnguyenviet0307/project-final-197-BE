@@ -4,6 +4,7 @@ export interface CheckoutReceipt {
   customerId: Types.ObjectId | null;
   requestId: string;
   payloadHash: string;
+  reservationExpiredAt?: Date;
   result: { _id: Types.ObjectId; orderCode: string; totalAmount: number; orderStatus: number };
 }
 // Retain the receipt even if an admin deletes the rejected order. Replaying a
@@ -12,6 +13,7 @@ const schema = new Schema<CheckoutReceipt>({
   customerId: { type: Schema.Types.ObjectId, default: null },
   requestId: { type: String, required: true },
   payloadHash: { type: String, required: true, select: false },
+  reservationExpiredAt: { type: Date },
   result: { type: new Schema({
     _id: { type: Schema.Types.ObjectId, required: true },
     orderCode: { type: String, required: true },

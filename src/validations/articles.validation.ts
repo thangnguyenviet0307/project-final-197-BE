@@ -17,6 +17,8 @@ const articleFields = {
   type: articleTypeSchema,
   title: z.string().trim().min(3).max(200),
   slug: slugSchema.optional(),
+  categoryId: z.string().regex(/^[a-fA-F0-9]{24}$/).optional(),
+  sortOrder: z.int().min(0).max(10000).optional(),
   category: z.string().trim().min(1).max(80),
   excerpt: z.string().trim().min(1).max(1000),
   content: z.string().trim().min(1).max(100000),
@@ -33,6 +35,7 @@ const articleFieldsSchema = z.strictObject(articleFields);
 
 export const createArticleSchema = z.strictObject({
   ...articleFields,
+  category: articleFields.category.default(""),
   type: articleTypeSchema.default("news"),
   imageUrl: articleFields.imageUrl.default(null),
   tags: articleFields.tags.default([]),
@@ -41,6 +44,7 @@ export const createArticleSchema = z.strictObject({
   isFeatured: articleFields.isFeatured.default(false),
   seo: seoSchema.default({}),
 }).superRefine((value, context) => {
+  if (!value.categoryId && !value.category) context.addIssue({ code: "custom", path: ["category"], message: "Choose a category" });
   if (value.status === "scheduled" && (!value.publishAt || value.publishAt <= new Date())) {
     context.addIssue({ code: "custom", path: ["publishAt"], message: "Scheduled articles require a future publishAt date" });
   }
@@ -62,11 +66,14 @@ const queryBase = paginationSchema.extend({
   search: z.string().trim().min(1).max(120).optional(),
   type: articleTypeSchema.optional(),
   category: z.string().trim().min(1).max(80).optional(),
+  categoryId: z.string().regex(/^[a-fA-F0-9]{24}$/).optional(),
   tag: z.string().trim().min(1).max(40).optional(),
   isFeatured: z.enum(["true", "false"]).transform(value => value === "true").optional(),
-  sort: z.enum(["newest", "oldest", "popular"]).default("newest"),
+  sort: z.enum(["newest", "oldest", "popular", "display"]).default("newest"),
 }).strict();
-export const publicArticleQuerySchema = queryBase satisfies z.ZodType<ArticleListQuery>;
+export const publicArticleQuerySchema = queryBase.extend({
+  summary: z.enum(["true", "false"]).transform(value => value === "true").optional(),
+}) satisfies z.ZodType<ArticleListQuery>;
 export const adminArticleQuerySchema = queryBase.extend({
   status: articleStatusSchema.optional(),
 }) satisfies z.ZodType<AdminArticleListQuery>;

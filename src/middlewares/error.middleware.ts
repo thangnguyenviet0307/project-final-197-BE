@@ -46,6 +46,10 @@ export function errorMiddleware(
   _next: NextFunction,
 ): void {
   if (res.headersSent) { _next(err); return; }
+  if (hasStatusCode(err) && err.statusCode === 413 && "type" in err && err.type === "entity.too.large") {
+    sendResponse(res, 413, { success: false, message: "Dữ liệu gửi lên vượt quá dung lượng cho phép. Vui lòng rút gọn nội dung rồi thử lại.", data: null });
+    return;
+  }
   if (err instanceof SyntaxError && hasStatusCode(err) && err.statusCode === 400) {
     sendResponse(res, 400, { success: false, message: "Invalid JSON request body", data: null });
     return;
@@ -104,7 +108,7 @@ export function errorMiddleware(
       success: false,
       data: null,
       message: err.statusCode >= 500 ? "Internal server error" : err.message,
-      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE", "ORDER_NOTE_CONFLICT"].includes(err.businessCode) ? { code: err.businessCode } : {}),
+      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE", "ORDER_NOTE_CONFLICT", "CHECKOUT_RESERVATION_EXPIRED"].includes(err.businessCode) ? { code: err.businessCode } : {}),
       ...("authCode" in err && typeof err.authCode === "string" && /^AUTH_[A-Z_]+$/.test(err.authCode) ? { code: err.authCode } : {}),
     });
     return;

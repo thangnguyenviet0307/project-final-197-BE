@@ -18,6 +18,11 @@ import productService from "../dist/services/products.service.js";
 import { createOrder, updateOrderStatus, updateOrderNote } from "../dist/services/orders.services.js";
 import { createCheckout } from "../dist/services/checkout.service.js";
 import { CheckoutRequest } from "../dist/models/checkout-requests.model.js";
+import { expireGuestReservation, processGuestReservationBatch } from "../dist/services/guest-reservation.service.js";
+import { startOrder, assignOrder, deleteOrder } from "../dist/services/orders.services.js";
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 // Deliberately do not import dotenv: never fall back to the application's database.
 const uri = process.env.MONGODB_TEST_URI;
@@ -73,7 +78,14 @@ async function order(items) {
   return result;
 }
 
-
+async function guestOrder(t, stock = 3) {
+  mockLocations(t);
+  const entry = await product(stock);
+  const request = checkoutInput(entry);
+  const result = await checkout(null, 0, request);
+  fixtures.orders.push(result._id);
+  return { entry, request, result };
+}
 
 test("real transaction rolls stock back when a later order item fails", async () => {
   const entry = await product(3);
@@ -332,4 +344,158 @@ test("ownership transfer rolls back invalid targets and concurrent transfers pre
   assert.equal(await User.countDocuments({ role: 'super_admin' }), 1);
   assert.equal((await User.findById(owner.id)).role, 'admin');
   assert.equal((await User.findById(owner.id).select('+tokenVersion')).tokenVersion, 1);
+});
+
+test('orders with equal dates have stable descending ID order across page boundaries', async () => {
+  const { getOrders } = await import('../dist/services/orders.services.js');
+  const entry = await product(6);
+  const created = [];
+  for (let index = 0; index < 4; index++) created.push(await order([item(entry)]));
+  const sameDate = new Date('2026-10-31T00:00:00.000Z');
+  await Order.updateMany({ _id: { $in: created.map(value => value._id) } }, { $set: { orderDate: sameDate } });
+  const expected = created.map(value => String(value._id)).sort().reverse();
+  for (let repeat = 0; repeat < 2; repeat++) {
+    const ids = [];
+    for (let page = 1; page <= 2; page++) {
+      const result = await getOrders(actor, { page, limit: 2, dateFrom: sameDate, dateTo: sameDate });
+      ids.push(...result.data.map(value => String(value._id)));
+    }
+    assert.deepEqual(ids, expected);
+  }
+});
+
+test('core index migration is read-only by default, creates required indexes and is repeatable on a fresh database', async () => {
+  const target = `codex_index_${randomUUID().replaceAll('-', '')}`;
+  const client = new mongoose.mongo.MongoClient(uri);
+  await client.connect();
+  const database = client.db(target);
+  const run = promisify(execFile);
+  const invoke = args => run(process.execPath, ['scripts/ensure-core-indexes.mjs', '--database', target, ...args], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)), timeout: 20000, windowsHide: true,
+    env: { ...process.env, MONGODB_URI: uri },
+  });
+  try {
+    const dry = await invoke([]);
+    assert.match(dry.stdout, /"state":"missing"/);
+    assert.equal((await database.listCollections().toArray()).length, 0, 'Dry-run must not create collections or indexes');
+    await assert.rejects(invoke(['--apply', '--confirm-database', 'wrong-database']));
+    assert.equal((await database.listCollections().toArray()).length, 0);
+    const applied = await invoke(['--apply', '--confirm-database', target]);
+    assert.match(applied.stdout, /"verified":true/);
+    for (const collection of ['users', 'customers', 'products', 'orders']) {
+      assert.ok((await database.collection(collection).indexes()).some(index => index.unique), collection);
+    }
+    const repeated = await invoke(['--apply', '--confirm-database', target]);
+    assert.match(repeated.stdout, /"created":0/);
+    await database.collection('users').dropIndex('email_1');
+    await database.collection('users').createIndex({ email: 1 });
+    await assert.rejects(invoke(['--apply', '--confirm-database', target]));
+    assert.equal((await database.collection('users').indexes()).find(index => index.name === 'email_1').unique, undefined, 'Conflicts must not be dropped or replaced');
+    await database.collection('users').dropIndex('email_1');
+    await database.collection('users').insertMany([{ email: 'duplicate-fixture@example.com' }, { email: 'duplicate-fixture@example.com' }]);
+    await assert.rejects(invoke(['--apply', '--confirm-database', target]), error => {
+      assert.match(error.stderr, /"code":11000/);
+      assert.doesNotMatch(error.stderr, /duplicate-fixture@example.com/);
+      return true;
+    });
+    assert.equal(await database.collection('users').countDocuments(), 2, 'Duplicate data is never modified to force an index');
+  } finally {
+    // Only this randomly named database, created above on the explicitly provided test deployment.
+    assert.match(database.databaseName, /^codex_index_[a-f0-9]{32}$/);
+    await database.dropDatabase();
+    await client.close();
+  }
+});
+
+test('guest reservations expire after 24h, restore once and preserve expired replay after deletion', async t => {
+  const before = Date.now();
+  const { entry, request, result } = await guestOrder(t);
+  const stored = await Order.findById(result._id);
+  assert.ok(stored.reservationExpiresAt.getTime() >= before + 24 * 60 * 60 * 1000);
+  assert.ok(stored.reservationExpiresAt.getTime() <= Date.now() + 24 * 60 * 60 * 1000);
+  assert.equal(await expireGuestReservation(result._id), false);
+  const original = (await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId })).result.toObject();
+  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(Date.now() - 1) } });
+  const results = await Promise.all([expireGuestReservation(result._id), expireGuestReservation(result._id)]);
+  assert.equal(results.filter(Boolean).length, 1);
+  assert.equal((await Product.findById(entry._id)).stock, 3);
+  assert.equal((await Order.findById(result._id)).orderStatus, 3);
+  const receipt = await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId });
+  assert.ok(receipt.reservationExpiredAt);
+  assert.deepEqual(receipt.result.toObject(), original);
+  await deleteOrder(result._id);
+  await assert.rejects(checkout(null, 0, request), { status: 409, businessCode: 'CHECKOUT_RESERVATION_EXPIRED' });
+  assert.equal(await Order.countDocuments({ _id: result._id }), 0);
+  assert.equal((await Product.findById(entry._id)).stock, 3);
+});
+
+test('expired guest reservations cannot be accepted or assigned before the worker runs', async t => {
+  const { result, entry } = await guestOrder(t);
+  const staff = await User.create({ email: `staff-${randomUUID()}@example.com`, firstName: 'Fixture', lastName: 'Staff', password: 'unused', role: 'staff', active: true });
+  fixtures.users.push(staff._id);
+  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(Date.now() - 1) } });
+  await assert.rejects(startOrder(actor, result._id, String(staff._id)), { status: 409 });
+  await assert.rejects(assignOrder(actor, result._id, String(staff._id)), { status: 409 });
+  await assert.rejects(updateOrderStatus(actor, result._id, { orderStatus: 2, userId: String(staff._id) }), { status: 409 });
+  await processGuestReservationBatch();
+  assert.equal((await Order.findById(result._id)).orderStatus, 3);
+  assert.equal((await Product.findById(entry._id)).stock, 3);
+});
+
+test('accepted and legacy guest orders and customer orders are excluded from expiry', async t => {
+  const { result, entry } = await guestOrder(t);
+  const staff = await User.create({ email: `staff-${randomUUID()}@example.com`, firstName: 'Fixture', lastName: 'Staff', password: 'unused', role: 'staff', active: true });
+  fixtures.users.push(staff._id);
+  await startOrder(actor, result._id, String(staff._id));
+  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  assert.equal(await expireGuestReservation(result._id), false);
+  assert.equal((await Product.findById(entry._id)).stock, 2);
+  const legacy = await guestOrder(t);
+  await Order.updateOne({ _id: legacy.result._id }, { $unset: { reservationExpiresAt: 1 } });
+  assert.equal(await expireGuestReservation(legacy.result._id), false);
+  const contactOrder = await order([item(await product(3))]);
+  await Order.updateOne({ _id: contactOrder._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  assert.equal(await expireGuestReservation(String(contactOrder._id)), false);
+});
+
+test('failed expiration rolls back status, earlier restored lines and receipt marker', async t => {
+  const { result, entry, request } = await guestOrder(t);
+  const missing = new mongoose.Types.ObjectId();
+  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) },
+    $push: { orderItems: { productId: missing, quantity: 1, price: 25, discount: 0 } } });
+  await assert.rejects(expireGuestReservation(result._id), { status: 409 });
+  assert.equal((await Order.findById(result._id)).orderStatus, 1);
+  assert.equal((await Order.findById(result._id)).reservationExpiredAt, undefined);
+  assert.equal((await Product.findById(entry._id)).stock, 2);
+  assert.equal((await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId })).reservationExpiredAt, undefined);
+});
+
+test('expiration and manual rejection race without double stock restoration', async t => {
+  const { result, entry } = await guestOrder(t);
+  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  const results = await Promise.allSettled([
+    expireGuestReservation(result._id),
+    updateOrderStatus(actor, result._id, { orderStatus: 3, cancellationReason: 'Manual rejection fixture' }),
+  ]);
+  assert.ok(results.some(value => value.status === 'fulfilled'));
+  assert.equal((await Order.findById(result._id)).orderStatus, 3);
+  assert.equal((await Product.findById(entry._id)).stock, 3);
+  assert.equal(await expireGuestReservation(result._id), false);
+});
+
+test('missing receipt aborts expiration, and failed batch items back off without blocking healthy orders', async t => {
+  const broken = await guestOrder(t), healthy = await guestOrder(t);
+  await CheckoutRequest.deleteOne({ customerId: null, requestId: broken.request.requestId });
+  await Order.updateMany({ _id: { $in: [broken.result._id, healthy.result._id] } }, { $set: { reservationExpiresAt: new Date(0) } });
+  await assert.rejects(expireGuestReservation(broken.result._id), { status: 409 });
+  assert.equal((await Order.findById(broken.result._id)).orderStatus, 1);
+  assert.equal((await Product.findById(broken.entry._id)).stock, 2);
+  const warning = t.mock.method(console, 'error', () => {});
+  await processGuestReservationBatch();
+  assert.ok(warning.mock.callCount() >= 1);
+  const retryAt = (await Order.findById(broken.result._id)).reservationRetryAt;
+  assert.ok(retryAt > new Date());
+  assert.equal((await Order.findById(healthy.result._id)).orderStatus, 3);
+  await processGuestReservationBatch();
+  assert.equal((await Order.findById(broken.result._id)).reservationRetryAt.getTime(), retryAt.getTime());
 });

@@ -1,3 +1,5 @@
+import * as categories from "../../controllers/post-categories.controller.js";
+import { createPostCategorySchema, updatePostCategorySchema } from "../../validations/post-categories.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
 import { authenticate, requirePermission } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validate.middleware.js";
@@ -16,6 +18,7 @@ import * as controller from "../../controllers/articles.controller.js";
 
 const router: ExpressRouter = Router();
 
+router.get("/public/category-options", categories.publicList);
 router.get("/public/categories", controller.publicArticleCategories);
 router.get("/public/tags", controller.publicArticleTags);
 router.get("/public", validate({ query: publicArticleQuerySchema }), controller.publicArticles);
@@ -28,6 +31,10 @@ router.post(
 router.get("/public/:slug", validate({ params: articleSlugParamSchema }), controller.publicArticle);
 
 router.use(authenticate, requirePermission(Permission.ArticleManage));
+router.get("/category-options", categories.list);
+router.post("/category-options", validate({ body: createPostCategorySchema }), categories.create);
+router.patch("/category-options/:id", validate({ params: articleIdParamSchema, body: updatePostCategorySchema }), categories.update);
+router.delete("/category-options/:id", validate({ params: articleIdParamSchema, body: articleVersionSchema }), categories.remove);
 router.get("/stats", controller.articleStats);
 router.get("/categories", controller.adminArticleCategories);
 router.get("/tags", controller.adminArticleTags);

@@ -17,8 +17,14 @@ const upload = multer({
 export const parseProductImage: RequestHandler = (req, res, next) => {
   upload(req, res, (error: unknown) => {
     if (error instanceof multer.MulterError) {
-      next(createHttpError(error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
-        error.code === "LIMIT_FILE_SIZE" ? "Product image must not exceed 5 MB" : "Send one image in the image field"));
+      next(
+        createHttpError(
+          error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
+          error.code === "LIMIT_FILE_SIZE"
+            ? "Product image must not exceed 5 MB"
+            : "Send one image in the image field",
+        ),
+      );
       return;
     }
     next(error);

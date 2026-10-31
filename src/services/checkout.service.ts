@@ -13,6 +13,7 @@ import { resolveCheckoutAddress } from "./checkout-locations.service.js";
 
 function replay(receipt: CheckoutReceipt, hash: string) {
   if (receipt.payloadHash !== hash) throw createHttpError(409, "Request ID already used with different checkout data");
+  if (receipt.reservationExpiredAt) throw createHttpError(409, "Đơn hàng đã hết thời hạn chờ xác nhận 24 giờ và đã được hoàn tồn. Vui lòng kiểm tra giỏ hàng trước khi đặt lại.", { businessCode: "CHECKOUT_RESERVATION_EXPIRED" });
   return { _id: receipt.result._id.toString(), orderCode: receipt.result.orderCode, totalAmount: receipt.result.totalAmount, orderStatus: receipt.result.orderStatus };
 }
 
@@ -29,9 +30,10 @@ async function performCheckout(customerId: string | null, raw: CheckoutInput, to
   const input = checkoutSchema.parse(raw);
   const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
   const scope = { customerId: customerId ? new Types.ObjectId(customerId) : null, requestId: input.requestId };
+  let address: Awaited<ReturnType<typeof resolveCheckoutAddress>> | undefined;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      return await withRelationsTransaction(async session => {
+      const result = await withRelationsTransaction(async session => {
         const customer = customerId ? await Customer.findOne({ _id: customerId, isActive: true, accountEnabled: true }).select("+tokenVersion").session(session) : null;
         if (customerId && (!customer || customer.mustChangePassword || (tokenVersion !== undefined && (customer.tokenVersion ?? 0) !== tokenVersion))) {
           throw createHttpError(tokenVersion === undefined ? 403 : 401, "Enabled customer session required");
@@ -46,10 +48,13 @@ async function performCheckout(customerId: string | null, raw: CheckoutInput, to
           await new CheckoutRequest({ ...scope, payloadHash: hash, result }).save({ session });
           return { ...result, _id: result._id.toString() };
         }
-        const address = await resolveCheckoutAddress(input);
+        // Finish the read/replay pass before waiting on an external provider.
+        // The next pass rechecks session and receipts under the lock.
+        if (!address) return null;
         const orderItems = await reserveOrderItems(input.items, session);
         const order = new Order({
           customerId: scope.customerId, ...(!customerId ? { guestCheckout: true } : {}),
+          ...(!customerId ? { reservationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) } : {}),
           checkoutRequestId: input.requestId, checkoutFingerprint: hash,
           orderCode: generateOrderCode(), orderStatus: 1, paymentType: 1,
           customerSnapshot: customer ? { firstName: customer.firstName, lastName: customer.lastName, email: customer.email, phone: customer.phone }
@@ -73,6 +78,12 @@ async function performCheckout(customerId: string | null, raw: CheckoutInput, to
         await new CheckoutRequest({ ...scope, payloadHash: hash, result }).save({ session });
         return { ...result, _id: result._id.toString() };
       });
+      if (result === null) {
+        address = await resolveCheckoutAddress(input);
+        attempt--;
+        continue;
+      }
+      return result;
     } catch (error) {
       if (!isOrderCodeCollision(error)) throw error;
       if (attempt === 4) throw createHttpError(503, "Could not allocate order code; retry later");

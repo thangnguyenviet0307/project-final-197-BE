@@ -99,3 +99,35 @@ The storefront currently displays static article cards. Its fields map to
 `GET /public?type=news` or `?type=blog` when wiring the UI. The API does not
 add comments or reader accounts because those interactions are not present in
 the current FE.
+
+
+## Quản trị và danh mục (cập nhật)
+
+Collection hoạt động: `posts`, `categories_post`. Giữ nguyên URL `/api/v1/articles`.
+
+- `GET /articles/category-options`: danh sách danh mục cho Admin/Super Admin.
+- `POST /articles/category-options`: `{name, slug, description, isActive}`.
+- `PATCH /articles/category-options/:id`: các trường đổi và `expectedVersion`.
+- `DELETE /articles/category-options/:id`: body `{expectedVersion}`; trả 409 nếu có bài đang dùng.
+- `GET /articles/public/category-options`: danh mục đang bật, không cần đăng nhập.
+- Bài viết nhận `categoryId` để tham chiếu danh mục. API tương thích `category` theo tên nhưng tên phải tồn tại trong danh mục đang bật. Server gán nhãn từ danh mục, không tin nhãn gửi lên.
+- Bổ sung `sortOrder` (0-10000). Trang chủ dùng `GET /articles/public?type=news&isFeatured=true&sort=display&limit=3`. Thứ tự nhỏ trước, ngày xuất bản/ID giảm dần khi trùng thứ tự.
+- `isFeatured` chỉ là lựa chọn trang chủ; trạng thái và thời gian xuất bản vẫn quyết định có công khai không. Tắt danh mục ẩn các bài thuộc danh mục. Đổi tên danh mục cập nhật nhãn và phiên bản bài trong transaction.
+- Cập nhật/xóa bài và danh mục đều kiểm tra phiên bản; lỗi phiên bản trả 409 `VERSION_CONFLICT`. Giữ slug nếu không gửi slug. Nội dung là văn bản thuần, không phải HTML.
+- API management bị chặn với Staff/Customer; không thay quyền của các module khác.
+
+## Chuyển dữ liệu articles cũ
+
+Không tự chạy migration khi khởi động. Sao lưu và dừng các writer sử dụng phiên bản cũ trước khi chuyển dữ liệu. Script giữ nguyên `articles` làm nguồn, copy sang `posts`, tạo danh mục theo tên, giữ `_id`/slug. Không ghi đè bài đã có và dừng khi có xung đột.
+
+```powershell
+# Chỉ đọc, xem database đích, số lượng và blockers (MONGODB_URI từ môi trường/.env)
+pnpm.cmd exec node scripts/migrate-articles-to-posts.mjs
+# Chỉ chạy sau khi đã duyệt dry-run và có quyền thay đổi database đó
+pnpm.cmd exec node scripts/migrate-articles-to-posts.mjs --apply --confirm-database=TEN_DATABASE
+```
+
+Apply dùng MongoDB transaction, cần replica set. Không chạy seed/purge để chuyển bài. Script không xóa collection nguồn; trước khi migration, bài cũ trong `articles` chưa được API mới đọc từ `posts`. Việc tạo indexes được giới hạn ở các model editorial; không dùng syncIndexes diện rộng.
+# Review follow-up (2026-10-31)
+
+Public list requests may pass `summary=true` to omit `content`. The default list response and public detail remain compatible and include content. Storefront cards/catalog request summaries; full article text is fetched only by detail. This preserves existing clients while reducing long-body payloads. A synthetic 100,000-character fixture verifies over 99% fewer JSON bytes for its summary; this is not a production network benchmark.

@@ -15,6 +15,7 @@ import { Permission } from "../types/permissions.type.js";
 import type { IOrder } from "../types/orders.type.js";
 import { OrderStatus, OPEN_ORDER_STATUSES } from "../types/orders.type.js";
 import { buildPagination } from "../utils/pagination.js";
+import { assertGuestReservationActive } from "./guest-reservation.service.js";
 import type { CreateOrderInput, GetOrdersQuery, UpdateOrderStatusInput } from "../types/orders.type.js";
 
 const STATUS_TRANSITIONS: Record<number, number[]> = {
@@ -64,7 +65,7 @@ export async function getOrders(actor: AuthUser, { page, limit, orderStatus, cus
   }
   const filter: QueryFilter<IOrder> = { $and: conditions };
   const [data, total] = await Promise.all([
-    Order.find(filter).sort({ orderDate: -1 }).skip((page - 1) * limit).limit(limit)
+    Order.find(filter).sort({ orderDate: -1, _id: -1 }).skip((page - 1) * limit).limit(limit)
       .populate("customerId", "firstName lastName email phone").populate("userId", "firstName lastName role"),
     Order.countDocuments(filter),
   ]);
@@ -102,6 +103,7 @@ export async function updateOrderStatus(actor: AuthUser, id: string, input: Upda
   return withRelationsTransaction(async (session) => {
     const order = await Order.findOne({ _id: id, ...orderWriteScope(actor) }).session(session);
     if (!order) throw createHttpError(404, "Order not found");
+    if (input.orderStatus === OrderStatus.Processing) assertGuestReservationActive(order);
     if (!STATUS_TRANSITIONS[order.orderStatus]?.includes(input.orderStatus)) {
       const current = OrderStatus[order.orderStatus] ?? String(order.orderStatus);
       const requested = OrderStatus[input.orderStatus] ?? String(input.orderStatus);
@@ -151,6 +153,7 @@ export async function assignOrder(actor: AuthUser, id: string, requested: string
     if (!OPEN_ORDER_STATUSES.includes(order.orderStatus)) {
       throw createHttpError(409, "Only open orders can be reassigned");
     }
+    assertGuestReservationActive(order);
     await resolveAssignee(actor, requested, session);
     await assertOrderCapacity(requested, session, id);
     order.userId = new Types.ObjectId(requested);
@@ -168,6 +171,7 @@ export async function startOrder(actor: AuthUser, id: string, requested?: string
     const userId = await resolveAssignee(actor, requested ?? actor.id, session);
     await assertOrderCapacity(userId!, session, id);
     const filter: QueryFilter<IOrder> = { _id: id, orderStatus: OrderStatus.Pending,
+      $or: [{ guestCheckout: { $ne: true } }, { userId: { $ne: null } }, { reservationExpiresAt: null }, { reservationExpiresAt: { $gt: new Date() } }],
       ...(!canAssign(actor) ? { userId: { $in: [new Types.ObjectId(actor.id), null] } } : {}) };
     const order = await Order.findOneAndUpdate(filter,
       { $set: { userId: new Types.ObjectId(userId), orderStatus: OrderStatus.Processing } },

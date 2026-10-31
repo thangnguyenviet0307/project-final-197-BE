@@ -10,12 +10,24 @@ import { checkoutSchema } from "../validations/checkout.validation.js";
 export const createCheckout: RequestHandler = asyncHandler(async (req, res) => {
   const customer = (req as CustomerRequest).customer;
   if (!customer) throw createHttpError(401, "Customer session required");
-  sendResponse(res, 201, { data: await checkout(customer._id.toString(), customer.tokenVersion ?? 0, checkoutSchema.parse(req.body)) });
+  sendResponse(res, 201, {
+    data: await checkout(
+      customer._id.toString(),
+      customer.tokenVersion ?? 0,
+      checkoutSchema.parse(req.body),
+    ),
+  });
 });
-export const checkoutLocations: RequestHandler = asyncHandler(async (_req, res) => {
-  sendResponse(res, 200, { data: await getCheckoutLocations() });
-});
+export const checkoutLocations: RequestHandler = asyncHandler(
+  async (_req, res) => {
+    sendResponse(res, 200, { data: await getCheckoutLocations() });
+  },
+);
 
-export const createGuestCheckout: RequestHandler = asyncHandler(async (req, res) => {
-  sendResponse(res, 201, { data: await checkout(null, 0, checkoutSchema.parse(req.body)) });
-});
+export const createGuestCheckout: RequestHandler = asyncHandler(
+  async (req, res) => {
+    sendResponse(res, 201, {
+      data: await checkout(null, 0, checkoutSchema.parse(req.body)),
+    });
+  },
+);

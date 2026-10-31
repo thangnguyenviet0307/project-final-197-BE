@@ -22,10 +22,15 @@ import customerRoutes from "./routes/v1/customers.route.js";
 import userRoutes from "./routes/v1/users.route.js";
 import authRoutes from "./routes/v1/auth.route.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
+import { trustedProxyAddresses } from "./utils/trusted-proxy.js";
 
 const app: Express = express();
+app.set("trust proxy", trustedProxyAddresses());
 
 app.use(cors({ origin: (origin, callback) => callback(null, !origin || frontendOrigins().includes(origin)), credentials: true }));
+// A 100,000-character article can exceed 100 KB in UTF-8 (or JSON escapes).
+// Keep the larger, bounded budget scoped to editorial requests.
+app.use("/api/v1/articles", express.json({ limit: "1mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.resolve(process.cwd(), "public")));

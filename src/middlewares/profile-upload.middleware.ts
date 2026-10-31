@@ -17,8 +17,14 @@ const upload = multer({
 export const parseProfileUpload: RequestHandler = (req, res, next) => {
   upload(req, res, (error: unknown) => {
     if (error instanceof multer.MulterError) {
-      next(createHttpError(error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
-        error.code === "LIMIT_FILE_SIZE" ? "Avatar must not exceed 800 KB" : "Invalid profile upload"));
+      next(
+        createHttpError(
+          error.code === "LIMIT_FILE_SIZE" ? 413 : 400,
+          error.code === "LIMIT_FILE_SIZE"
+            ? "Avatar must not exceed 800 KB"
+            : "Invalid profile upload",
+        ),
+      );
       return;
     }
     next(error);

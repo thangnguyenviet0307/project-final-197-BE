@@ -27,7 +27,7 @@ export const customerAuthController: Record<"register" | "login" | "refresh" | "
     const customer = actor(req);
     sendResponse(res, 200, { data: await updateCustomerProfile(customer._id.toString(), customer.tokenVersion ?? 0, { shippingAddress: req.body }) });
   }),
-  cancelOrder: asyncHandler(async (req, res) => { await cancelCustomerOrder(actor(req)._id.toString(), req.params["id"] as string, req.body.cancellationReason); sendResponse(res, 200, { data: null }); }),
+  cancelOrder: asyncHandler(async (req, res) => { await cancelCustomerOrder(actor(req)._id.toString(), actor(req).tokenVersion ?? 0, req.params["id"] as string, req.body.cancellationReason); sendResponse(res, 200, { data: null }); }),
   orders: asyncHandler(async (req, res) => {
     const query = customerOrdersQuerySchema.parse(req.query);
     sendResponse(res, 200, await listCustomerOrders(actor(req)._id.toString(), query.page, query.limit));

@@ -19,11 +19,15 @@ const orderItemSchema = new Schema<IOrderItem>({
 
 const orderSchema = new Schema<IOrder>(
   {
-    orderCode: { type: String, immutable: true, match: /^ORD-[A-HJ-NP-Z2-9]{6}$/ },
-    customerId: { type: Schema.Types.ObjectId, ref: 'Customer', required: true },
+    guestCheckout: { type: Boolean },
+    checkoutRequestId: { type: String },
+    cancelledByCustomer: { type: Boolean },
+    checkoutFingerprint: { type: String, select: false },
     recipientName: { type: String, trim: true, maxlength: 100 },
     recipientPhone: { type: String, trim: true, maxlength: 20 },
     deliveryAddress: { type: new Schema({ province: String, district: String, ward: String, provinceCode: Number, districtCode: Number, wardCode: Number }, { _id: false }) },
+    orderCode: { type: String, immutable: true, match: /^ORD-[A-HJ-NP-Z2-9]{6}$/ },
+    customerId: { type: Schema.Types.ObjectId, ref: 'Customer', required: function () { return !this.guestCheckout; } },
     customerSnapshot: { type: new Schema({ firstName: String, lastName: String, email: String, phone: String }, { _id: false }) },
     orderStatus: { type: Number, required: true, default: OrderStatus.Pending,
       enum: [OrderStatus.Pending, OrderStatus.Processing, OrderStatus.Rejected, OrderStatus.Completed] },
@@ -51,11 +55,13 @@ const orderSchema = new Schema<IOrder>(
 );
 
 orderSchema.index({ customerId: 1, orderDate: -1 });
+orderSchema.index({ customerId: 1, checkoutRequestId: 1 }, { unique: true, partialFilterExpression: { checkoutRequestId: { $type: 'string' } } });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ orderStatus: 1, "orderItems.productId": 1 });
 orderSchema.index({ userId: 1 });
 orderSchema.index({ orderCode: 1 }, { unique: true, partialFilterExpression: { orderCode: { $type: 'string' } } });
 orderSchema.pre('validate', function () {
+  if (this.guestCheckout && this.customerId) this.invalidate('customerId', 'Guest orders cannot belong to an account');
   if (this.isNew && !this.orderCode) this.orderCode = generateOrderCode();
 });
 

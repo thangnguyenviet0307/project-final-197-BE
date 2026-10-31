@@ -40,6 +40,7 @@ function fixture(t) {
   const customerId = id(), session = {};
   const receipts = new Map();
   const product = new Product({ product_name: 'Snapshot', price: 100, discount: 10, stock: 10 });
+  t.mock.method(Order, 'findOne', () => query(null));
   const orderSaves = t.mock.method(Order.prototype, 'save', async function () { return this; });
   t.mock.method(mongoose.connection, 'transaction', callback => callback(session));
   t.mock.method(SystemLock, 'updateOne', async () => ({}));

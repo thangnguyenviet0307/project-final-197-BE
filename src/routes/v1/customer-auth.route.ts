@@ -1,7 +1,9 @@
 import { idParamSchema } from "../../validations/common.validation.js";
 import { checkoutSchema } from "../../validations/checkout.validation.js";
-import { cancelCustomerOrderSchema } from "../../validations/orders.validation.js";
 import { Router, type Router as ExpressRouter } from "express";
+import { createCheckout, checkoutLocations } from "../../controllers/checkout.controller.js";
+import { cancelCustomerOrderController } from "../../controllers/customer-order-cancel.controller.js";
+import { cancelCustomerOrderSchema } from "../../validations/customer-order-cancel.validation.js";
 import createHttpError from "http-errors";
 import { customerProfileSchema, shippingAddressSchema, customerOrdersQuerySchema } from "../../validations/customer-account.validation.js";
 import { cookieAuthTransport, getLoginArea } from "../../utils/auth-cookie.js";
@@ -25,10 +27,10 @@ router.post("/refresh", rateLimit, validate({ body: refreshSchema }), controller
 router.get("/me", authenticateCustomer, controller.me);
 router.patch("/me", authenticateCustomer, validate({ body: customerProfileSchema }), controller.profile);
 router.patch("/shipping-address", authenticateCustomer, validate({ body: shippingAddressSchema }), controller.shippingAddress);
-router.get("/checkout-locations", controller.checkoutLocations);
-router.post("/orders", authenticateCustomer, validate({ body: checkoutSchema }), controller.checkout);
-router.patch("/orders/:id/cancel", authenticateCustomer, validate({ params: idParamSchema, body: cancelCustomerOrderSchema }), controller.cancelOrder);
 router.get("/orders", authenticateCustomer, validate({ query: customerOrdersQuerySchema }), controller.orders);
+router.patch("/orders/:id/cancel", authenticateCustomer, validate({ params: idParamSchema, body: cancelCustomerOrderSchema }), cancelCustomerOrderController);
+router.get("/checkout-locations", checkoutLocations);
+router.post("/orders", authenticateCustomer, rateLimit, validate({ body: checkoutSchema }), createCheckout);
 router.post("/logout", authenticateCustomer, controller.logout);
 router.post("/change-password", authenticateCustomer, rateLimit, validate({ body: changePasswordSchema }), controller.password);
 export default router;

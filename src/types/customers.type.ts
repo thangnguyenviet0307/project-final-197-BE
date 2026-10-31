@@ -8,7 +8,7 @@ export interface IAddress {
 export interface ICustomer {
   birthDate?: string;
   gender?: "" | "male" | "female" | "other";
-  shippingAddress?: { recipientName: string; email: string; province: string; ward: string; street: string; deliveryTime: string };
+  shippingAddress?: { recipientName: string; email: string; province: string; district?: string; ward: string; street: string; deliveryTime: string };
   mustChangePassword?: boolean;
   password?: string;
   accountEnabled?: boolean;

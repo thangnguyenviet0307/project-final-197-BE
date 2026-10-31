@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
 import { once } from 'node:events';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import mongoose from 'mongoose';
+import { SystemLock } from '../dist/models/system-locks.model.js';
 import { Customer } from '../dist/models/customers.model.js';
 import { CheckoutRequest } from '../dist/models/checkout-requests.model.js';
 import { checkoutSchema } from '../dist/validations/checkout.validation.js';
@@ -28,15 +30,18 @@ test('checkout rejects guests and administrative tokens before customer lookup',
 test('customer checkout exposes only the receipt result and rejects forged identities', async t => {
   const customer = new Customer({ firstName: 'Customer', lastName: 'Name', email: 'customer@example.com', isActive: true, accountEnabled: true, tokenVersion: 0 });
   t.mock.method(Customer, 'findById', () => ({ select: async () => customer }));
+  t.mock.method(Customer, 'findOne', () => ({ select() { return this; }, session: async () => customer }));
+  t.mock.method(mongoose.connection, 'transaction', callback => callback({}));
+  t.mock.method(SystemLock, 'updateOne', async () => ({}));
   const result = { _id: 'c'.repeat(24), orderCode: 'ORD-ABC234', totalAmount: 100, orderStatus: 1 };
   t.mock.method(CheckoutRequest, 'findOne', scope => {
     assert.equal(String(scope.customerId), String(customer._id));
-    return { select: async () => ({ payloadHash: createHash('sha256').update(JSON.stringify(checkoutSchema.parse(input))).digest('hex'), result }) };
+    return { select() { return this; }, session: async () => ({ payloadHash: createHash('sha256').update(JSON.stringify(checkoutSchema.parse(input))).digest('hex'), result }) };
   });
   const token = generateAccessToken({ id: String(customer._id), tokenVersion: 0, accountType: 'customer' });
   const customerHeaders = { ...headers, Authorization: `Bearer ${token}` };
   const response = await fetch(base + '/orders', { method: 'POST', headers: customerHeaders, body: JSON.stringify(input) });
-  assert.equal(response.status, 200); assert.deepEqual((await response.json()).data, result);
+  assert.equal(response.status, 201); assert.deepEqual((await response.json()).data, result);
   const forged = await fetch(base + '/orders', { method: 'POST', headers: customerHeaders, body: JSON.stringify({ ...input, customerId: 'd'.repeat(24) }) });
   assert.equal(forged.status, 400);
 });

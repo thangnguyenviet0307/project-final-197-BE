@@ -1,7 +1,7 @@
-import { reserveOrderItems } from "./order-reservation.service.js";
+export { restoreOrderStock as restoreStock } from "./order-reservation.service.js";
+import { reserveOrderItems, restoreOrderStock as restoreStock } from "./order-reservation.service.js";
 import { generateOrderCode, isOrderCodeCollision } from '../utils/order-code.js';
 import { escapeRegex } from '../utils/search.js';
-import { sumVariantStock } from "../utils/inventory.js";
 import createHttpError from "http-errors";
 import { type QueryFilter, Types, type ClientSession } from "mongoose";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
@@ -9,11 +9,10 @@ import { calculateOrderTotal } from "../utils/order-total.js";
 import { hasPermission } from "../config/rolePermissions.js";
 import { Customer } from "../models/customers.model.js";
 import { Order } from "../models/orders.model.js";
-import Product from "../models/products.model.js";
 import { User } from "../models/users.model.js";
 import type { AuthUser } from "../types/auth.type.js";
 import { Permission } from "../types/permissions.type.js";
-import type { IOrder, IOrderItem } from "../types/orders.type.js";
+import type { IOrder } from "../types/orders.type.js";
 import { OrderStatus, OPEN_ORDER_STATUSES } from "../types/orders.type.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { CreateOrderInput, GetOrdersQuery, UpdateOrderStatusInput } from "../types/orders.type.js";
@@ -44,23 +43,6 @@ async function resolveAssignee(actor: AuthUser, requested?: string, session?: Cl
   if (session) query.session(session);
   if (!(await query)) throw createHttpError(404, "Active user not found");
   return requested;
-}
-export async function restoreStock(items: IOrderItem[], session: ClientSession) {
-  // MongoDB transactions do not support parallel operations on the same session.
-  for (const item of items) {
-    const product = await Product.findById(item.productId).session(session);
-    if (!product) throw createHttpError(409, "Cannot restore a deleted product");
-    if (item.variantId) {
-      const variant = product.variants.id(item.variantId);
-      if (!variant) throw createHttpError(409, "Cannot restore a deleted variant");
-      variant.stock += item.quantity;
-      product.stock = sumVariantStock(product.variants);
-    } else {
-      if (product.variants.length) throw createHttpError(409, "Legacy order needs variant reconciliation before cancellation");
-      product.stock += item.quantity;
-    }
-    await product.save({ session });
-  }
 }
 export async function getOrders(actor: AuthUser, { page, limit, orderStatus, customerId, userId, dateFrom, dateTo, search }: GetOrdersQuery) {
   const conditions: QueryFilter<IOrder>[] = [orderScope(actor)];

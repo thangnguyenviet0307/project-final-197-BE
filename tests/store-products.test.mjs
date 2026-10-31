@@ -33,7 +33,7 @@ test('public detail cannot read an inactive product and excludes import/internal
   mockReferences(t);
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); t.after(() => server.close());
   t.mock.method(Product, 'findOne', query => {
-    assert.deepEqual(query, { slug: 'hidden-product', is_active: true, category: { $in: ['active-id'] }, brand: { $in: ['active-id'] } });
+    assert.deepEqual(query, { slug: 'hidden-product', is_active: true, on_sale: { $ne: false }, category: { $in: ['active-id'] }, brand: { $in: ['active-id'] } });
     return { select(fields) { assert.ok(!fields.split(' ').includes('__v')); assert.ok(!fields.split(' ').includes('external_id')); return this; }, populate() { return this; }, lean: async () => null };
   });
   const base = `http://127.0.0.1:${server.address().port}/api/v1/products/public`;

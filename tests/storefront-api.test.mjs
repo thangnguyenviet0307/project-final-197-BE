@@ -20,7 +20,7 @@ const sample = () => ({ _id: 'a'.repeat(24), product_name: 'API Headphones', slu
   __v: 19, createdAt: new Date(), variants: [{ _id: 'd'.repeat(24), sku: 'BLACK', variant_name: null, color: 'Black', size: 'L', price: 100, compare_at_price: 120, stock: 100, image: null, images: [], attributes: { private: 'internal' } }] });
 function mockProduct(t, value) {
   const chain = { select(fields) { assert.ok(fields.includes('slug')); return this; }, populate(options) { assert.deepEqual(options.match, { isActive: true, isDeleted: { $ne: true } }); return this; }, lean: async () => value };
-  return t.mock.method(Product, 'findOne', filter => { assert.deepEqual(filter, { slug: 'api-headphones', is_active: true }); return chain; });
+  return t.mock.method(Product, 'findOne', filter => { assert.deepEqual(filter, { slug: 'api-headphones', is_active: true, on_sale: { $ne: false } }); return chain; });
 }
 test('public storefront DTO exposes availability and discounted prices but no inventory or storage internals', async t => {
   mockProduct(t, sample());

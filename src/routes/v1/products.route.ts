@@ -24,6 +24,8 @@ import { parseProductImage } from "../../middlewares/product-image.middleware.js
 import { storeProductView, storeProducts, storeProduct, storeMetrics, storeReviews, storeRelated, createStoreReview } from "../../controllers/store-products.controller.js";
 import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
 import { uploadProductImage, deleteProductImage } from "../../controllers/product-images.controller.js";
+import * as productNews from "../../controllers/product-news.controller.js";
+import { productNewsSchema } from "../../validations/product-news.validation.js";
 
 const router: ExpressRouter = Router();
 
@@ -36,8 +38,11 @@ router.get('/public/:slug/metrics', validate({ params: publicSlug }), storeMetri
 router.get('/public/:slug/reviews', validate({ params: publicSlug, query: paginationSchema.extend({ limit: z.coerce.number().int().min(1).max(5).default(5) }) }), storeReviews);
 router.post('/public/:slug/reviews', createAuthRateLimit(5, 15 * 60 * 1000, "Bạn đã gửi quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau."), validate({ params: publicSlug, body: storeReviewInputSchema }), createStoreReview);
 router.get('/public/:slug/related', validate({ params: publicSlug }), storeRelated);
+router.get('/public/:slug/news', validate({ params: publicSlug }), productNews.publicProductNews);
 
 router.use(authenticate);
+router.get('/:id/news', requirePermission(Permission.ArticleManage), validate({ params: productIdParamSchema }), productNews.getProductNews);
+router.patch('/:id/news', requirePermission(Permission.ProductUpdate), requirePermission(Permission.ArticleManage), validate({ params: productIdParamSchema, body: productNewsSchema }), productNews.updateProductNews);
 router.post('/import/dummyjson', requirePermission(Permission.ProductCreate), validate({ body: importDummyProductSchema }), importDummy);
 router.get('/:id/metrics', requirePermission(Permission.ProductView), validate({ params: productIdParamSchema }), productMetrics);
 router.get('/:id/reviews', requirePermission(Permission.ProductView), validate({ params: productIdParamSchema, query: paginationSchema }), productReviews);

@@ -18,6 +18,12 @@ import productService from "../dist/services/products.service.js";
 import { createOrder, updateOrderStatus, updateOrderNote } from "../dist/services/orders.services.js";
 import { createCheckout } from "../dist/services/checkout.service.js";
 import { CheckoutRequest } from "../dist/models/checkout-requests.model.js";
+import { Article } from "../dist/models/articles.model.js";
+import { PostCategory } from "../dist/models/post-categories.model.js";
+import * as productNews from "../dist/services/product-news.service.js";
+import * as storeProducts from "../dist/services/store-products.service.js";
+import { getStorefrontProduct } from "../dist/services/storefront.service.js";
+import { addStoreProductReview } from "../dist/services/product-reviews.service.js";
 import { expireGuestReservation, processGuestReservationBatch } from "../dist/services/guest-reservation.service.js";
 import { startOrder, assignOrder, deleteOrder } from "../dist/services/orders.services.js";
 import { execFile } from 'node:child_process';
@@ -498,4 +504,65 @@ test('missing receipt aborts expiration, and failed batch items back off without
   assert.equal((await Order.findById(healthy.result._id)).orderStatus, 3);
   await processGuestReservationBatch();
   assert.equal((await Order.findById(broken.result._id)).reservationRetryAt.getTime(), retryAt.getTime());
+});
+
+test('product news preserves selected order, filters publication/category and rejects stale or invalid selections', async () => {
+  const entry = await product(3);
+  const managed = await PostCategory.create({ name: 'Related news fixture', slug: `news-${randomUUID()}`, isActive: true });
+  const posts = await Article.create(['published', 'published', 'scheduled', 'scheduled', 'draft', 'published'].map((status, index) => ({
+    title: `Fixture ${index}`, slug: `news-${randomUUID()}`, category: managed.name, categoryId: managed._id,
+    type: index === 5 ? 'blog' : 'news', excerpt: 'Summary', content: 'Private long content', authorName: 'Fixture',
+    status, publishAt: status === 'scheduled' ? new Date(Date.now() + (index === 2 ? -60000 : 60000)) : null,
+    createdBy: actor.id, updatedBy: actor.id,
+  })));
+  try {
+    const articleIds = [1, 4, 0, 3, 2].map(index => String(posts[index]._id));
+    const saved = await productNews.updateProductNews(String(entry._id), { articleIds, expectedVersion: entry.__v });
+    assert.ok(saved.expectedVersion > entry.__v);
+    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [], expectedVersion: entry.__v }), { status: 409, businessCode: 'VERSION_CONFLICT' });
+    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [String(posts[5]._id)], expectedVersion: saved.expectedVersion }), { status: 400 });
+    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [String(new mongoose.Types.ObjectId())], expectedVersion: saved.expectedVersion }), { status: 400 });
+    assert.deepEqual((await productNews.getProductNews(String(entry._id))).articleIds, articleIds);
+    const visible = await productNews.publicProductNews(entry.slug);
+    assert.deepEqual(visible.map(value => String(value._id)), [1, 0, 2].map(index => String(posts[index]._id)));
+    for (const value of visible) for (const key of ['content', 'status', '__v', 'createdBy', 'updatedBy']) assert.equal(key in value, false);
+    await Article.updateOne({ _id: posts[1]._id }, { $set: { status: 'archived' } });
+    assert.equal((await productNews.publicProductNews(entry.slug)).length, 2);
+    await PostCategory.updateOne({ _id: managed._id }, { $set: { isActive: false } });
+    assert.deepEqual(await productNews.publicProductNews(entry.slug), []);
+    await PostCategory.updateOne({ _id: managed._id }, { $set: { isActive: true } });
+    await Article.deleteOne({ _id: posts[0]._id });
+    assert.deepEqual((await productNews.publicProductNews(entry.slug)).map(value => String(value._id)), [String(posts[2]._id)]);
+    await Product.updateOne({ _id: entry._id }, { $set: { on_sale: false } });
+    await assert.rejects(productNews.publicProductNews(entry.slug), { status: 404 });
+    await Product.updateOne({ _id: entry._id }, { $set: { is_active: false } });
+    await assert.rejects(productNews.publicProductNews(entry.slug), { status: 404 });
+    await productNews.updateProductNews(String(entry._id), { articleIds: [], expectedVersion: saved.expectedVersion });
+  } finally {
+    await Article.deleteMany({ _id: { $in: posts.map(value => value._id) } });
+    await PostCategory.deleteOne({ _id: managed._id });
+  }
+});
+
+test('on_sale controls all public product visibility regardless of merchandising flags', async () => {
+  const entry = await product(3);
+  entry.product_name = `Visibility-${randomUUID()}`;
+  entry.set({ is_home: true, is_hot: true, is_new: true, is_best_seller: true });
+  await entry.save();
+  assert.equal((await storeProducts.listStoreProducts({ search: entry.product_name })).pagination.total, 1);
+  const version = entry.__v, updatedAt = entry.updatedAt.getTime();
+  assert.equal((await storeProducts.recordStoreProductView(entry.slug)).count_view, 1);
+  const counted = await Product.findById(entry._id);
+  assert.equal(counted.__v, version);
+  assert.equal(counted.updatedAt.getTime(), updatedAt);
+  await Product.updateOne({ _id: entry._id }, { $set: { on_sale: false } });
+  assert.equal((await storeProducts.listStoreProducts({ search: entry.product_name })).pagination.total, 0);
+  assert.equal(await storeProducts.getStoreProduct(entry.slug), null);
+  assert.equal(await storeProducts.recordStoreProductView(entry.slug), null);
+  assert.equal(await getStorefrontProduct(entry.slug), null);
+  await assert.rejects(addStoreProductReview(String(entry._id), { rating: 5, reviewerName: 'Fixture', comment: 'Fixture' }), { status: 404 });
+  const other = await product(3);
+  assert.ok(!(await storeProducts.relatedStoreProducts(other)).some(row => String(row._id) === String(entry._id)));
+  await Product.updateOne({ _id: entry._id }, { $unset: { on_sale: 1 } });
+  assert.ok(await storeProducts.getStoreProduct(entry.slug), 'Legacy missing flag retains the existing default-on behavior');
 });

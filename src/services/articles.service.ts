@@ -12,7 +12,7 @@ import { buildPagination } from "../utils/pagination.js";
 const publicFields = "_id type title slug category excerpt content imageUrl tags authorName publishedAt publishAt isFeatured viewCount seo categoryId sortOrder createdAt updatedAt";
 const publicSummaryFields = publicFields.split(" ").filter(field => field !== "content").join(" ");
 
-async function visibleArticleFilter(now = new Date()): Promise<mongoose.QueryFilter<Record<string, unknown>>> {
+export async function visibleArticleFilter(now = new Date()): Promise<mongoose.QueryFilter<Record<string, unknown>>> {
   const active = await PostCategory.find({ isActive: true }).select("_id").lean();
   return {
     $and: [{ $or: [{ categoryId: null }, { categoryId: { $in: active.map(item => item._id) } }] }],

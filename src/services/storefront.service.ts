@@ -8,7 +8,7 @@ const activeReference = { isActive: true, isDeleted: { $ne: true } };
 const unitPrice = (price: number, discount: number) => calculateOrderTotal([{ price, discount, quantity: 1 }]);
 
 export async function getStorefrontProduct(slug: string) {
-  const product = await Product.findOne({ slug, is_active: true })
+  const product = await Product.findOne({ slug, is_active: true, on_sale: { $ne: false } })
     .select("on_sale product_name slug description model_year thumbnail images price discount stock variants category brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity")
     .populate<{ category: PublicReference | null }>({ path: "category", select: "name slug", match: activeReference })
     .populate<{ brand: PublicReference | null }>({ path: "brand", select: "name slug", match: activeReference })
@@ -45,7 +45,7 @@ export async function getStorefrontProduct(slug: string) {
 }
 
 export async function getStorefrontRecommendations(excludeSlug: string) {
-  const rows = await Product.find({ is_active: true, slug: { $ne: excludeSlug } }).select("slug").sort({ createdAt: -1, _id: -1 }).limit(12).lean();
+  const rows = await Product.find({ is_active: true, on_sale: { $ne: false }, slug: { $ne: excludeSlug } }).select("slug").sort({ createdAt: -1, _id: -1 }).limit(12).lean();
   const products = await Promise.all(rows.map(row => getStorefrontProduct(row.slug)));
   return products.filter((product): product is NonNullable<typeof product> => product !== null);
 }

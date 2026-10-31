@@ -3,14 +3,14 @@ import { hasUpdateFields, paginationSchema, UPDATE_REQUIRED_MESSAGE } from "./co
 import type { AdminArticleListQuery, ArticleListQuery, CreateArticleInput, UpdateArticleInput } from "../types/articles.type.js";
 
 const slugSchema = z.string().trim().min(1).max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/i).transform(value => value.toLowerCase());
-const imageUrlSchema = z.string().trim().max(2048).url().refine(value => /^https?:\/\//i.test(value), "HTTP(S) image URL required").nullable();
+const imageUrlSchema = z.string().trim().max(2048).check(z.url()).refine(value => /^https?:\/\//i.test(value), "HTTP(S) image URL required").nullable();
 const articleTypeSchema = z.enum(["news", "blog"]);
 const articleStatusSchema = z.enum(["draft", "scheduled", "published", "archived"]);
 const seoSchema = z.strictObject({
   title: z.string().trim().max(70).optional(),
   description: z.string().trim().max(160).optional(),
   keywords: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
-  canonicalUrl: z.string().trim().max(2048).url().refine(value => /^https?:\/\//i.test(value), "HTTP(S) URL required").nullable().optional(),
+  canonicalUrl: z.string().trim().max(2048).check(z.url()).refine(value => /^https?:\/\//i.test(value), "HTTP(S) URL required").nullable().optional(),
 });
 
 const articleFields = {

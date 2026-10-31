@@ -15,7 +15,7 @@ export const checkoutSchema = z.strictObject({
     productId: objectId,
     variantId: objectId.optional(),
     quantity: z.int().min(1).max(100000),
-    expectedUnitPrice: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER / 100),
+    expectedUnitPrice: z.number().min(0).max(Number.MAX_SAFE_INTEGER / 100),
   })).min(1).max(100).superRefine((items, ctx) => {
     const keys = new Set<string>();
     items.forEach((item, index) => {

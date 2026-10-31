@@ -170,7 +170,7 @@ test("refresh rotation uses an atomic hash comparison and rejects token reuse", 
   });
   const result = await refresh(token);
   assert.notEqual(result.refreshToken, token);
-  await assert.rejects(refresh(token), { status: 401 });
+  await assert.rejects(refresh(token), { status: 409, authCode: "AUTH_REFRESH_CONFLICT" });
 });
 
 test("logout clears the refresh token and increments session version", async (t) => {
@@ -241,4 +241,18 @@ test('order code collisions retry the entire transaction and allocate a new code
   assert.equal(attempts.length, 2);
   assert.match(result.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
   assert.equal(result.orderItems[0].quantity, 1);
+});
+
+test('stopped or exhausted products cannot reserve inventory or create an order', async t => {
+  transactionHarness(t);
+  const product = new Product({ product_name: 'Stopped', price: 100, stock: 5, on_sale: false });
+  t.mock.method(Product, 'findById', () => ({ session: async () => product }));
+  const save = t.mock.method(product, 'save', async () => product);
+  const orderSave = t.mock.method(Order.prototype, 'save', async function () { return this; });
+  const request = input([{ productId: String(product._id), quantity: 1 }]);
+  await assert.rejects(createOrder(actor, request), { status: 409 });
+  assert.equal(product.stock, 5);
+  product.on_sale = true; product.stock = 0;
+  await assert.rejects(createOrder(actor, request), { status: 409 });
+  assert.equal(save.mock.callCount(), 0); assert.equal(orderSave.mock.callCount(), 0);
 });

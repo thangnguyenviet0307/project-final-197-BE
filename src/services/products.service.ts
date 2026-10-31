@@ -4,7 +4,7 @@ import { sumVariantStock } from "../utils/inventory.js";
 import { buildPagination } from "../utils/pagination.js";
 import createHttpError from "http-errors";
 import { Order } from "../models/orders.model.js";
-import { buildProductQuery, buildProductSort } from "../utils/product-query.js";
+import { buildProductSearchQuery, discountedPricePageIds, buildProductSort } from "../utils/product-query.js";
 import Product from "../models/products.model.js";
 import { buildSlug } from "../helpers/buildSlug.helper.js";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
@@ -107,11 +107,13 @@ const getAllProducts = async (
 ) => {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 10;
-  const query = buildProductQuery(filters);
+  const query = await buildProductSearchQuery(filters);
+  const priceIds = filters.sortBy === 'price' ? await discountedPricePageIds(query, filters, page, limit) : null;
   const [data, total] = await Promise.all([
-    Product.find(query).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
+    priceIds ? Product.find({ $and: [query, { _id: { $in: priceIds } }] }).populate("brand category").lean() : Product.find(query).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
     Product.countDocuments(query),
   ]);
+  if (priceIds) { const positions = new Map(priceIds.map((id, index) => [String(id), index])); data.sort((a, b) => positions.get(String(a._id))! - positions.get(String(b._id))!); }
   return { data, pagination: buildPagination(page, limit, total) };
 };
 

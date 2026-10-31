@@ -10,10 +10,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const resources = {
   "/api/v1/brands": "BRAND_ID", "/api/v1/categories": "CATEGORY_ID",
   "/api/v1/customers": "CUSTOMER_ID", "/api/v1/products": "PRODUCT_ID",
-  "/api/v1/orders": "ORDER_ID",
+  "/api/v1/orders": "ORDER_ID", "/api/v1/articles": "ARTICLE_ID",
 };
 const savedIds = new Set([...Object.values(resources), "VARIANT_ID", "USER_ID", "STAFF_USER_ID", "CUSTOMER_2_ID", "CUSTOMER_3_ID", "PARENT_CATEGORY_ID"]);
-const proxyVersion = "3";
+const proxyVersion = "4";
 
 function resolveSavedIds(value, values) {
   return value.replace(/__([A-Z][A-Z0-9_]*)__/g, (_match, key) => {
@@ -72,7 +72,7 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
       requestUrl = resolveSavedIds(requestUrl, values);
       const url = new URL(requestUrl, target);
       // A blank detail ID must never become a valid collection route.
-      if (/^\/api\/v1\/(brands|categories|products|customers|orders|users)\/$/.test(url.pathname)) {
+      if (/^\/api\/v1\/(brands|categories|products|customers|orders|articles|users)\/$/.test(url.pathname)) {
         throw new Error("Detail ID is empty. Select a valid ID in REST_CLIENT/.env; use the Get All request to list resources.");
       }
       if (/\{\{|%7b%7b/i.test(requestUrl)) throw new Error("Unresolved request variable in URL. Check the request variables and saved IDs.");
@@ -161,6 +161,7 @@ export function createRestClientProxy({ targetUrl = "http://127.0.0.1:5000", env
                 const customerSlot = path === "/api/v1/customers" && ["CUSTOMER_2_ID", "CUSTOMER_3_ID"].includes(selectedId) ? selectedId : resources[path];
                 values[customerSlot] = data._id;
               }
+              if (path === "/api/v1/articles" && typeof data?.slug === "string") values.ARTICLE_SLUG = data.slug;
               if (path === "/api/v1/products" && typeof data?.variants?.[0]?._id === "string") values.VARIANT_ID = data.variants[0]._id;
               if (path === "/api/v1/users" && data?.role === "staff" && typeof data._id === "string") values.STAFF_USER_ID = data._id;
             }

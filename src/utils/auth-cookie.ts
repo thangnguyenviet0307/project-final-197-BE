@@ -39,18 +39,18 @@ export const cookieAuthTransport: RequestHandler = (req, _res, next) => {
   try {
     const area = getLoginArea(req);
     if (req.get("X-Auth-Transport") !== "cookie") {
-      if (req.get("Origin") && req.path === "/refresh") throw createHttpError(403, "Browser refresh requires cookie transport");
+      if (req.get("Origin") && req.path === "/refresh") throw createHttpError(403, "Browser refresh requires cookie transport", { authCode: "AUTH_TRANSPORT_REQUIRED" });
       return next();
     }
     const origin = req.get("Origin");
-    if (!origin || !frontendOrigins().includes(origin)) throw createHttpError(403, "Untrusted authentication origin");
+    if (!origin || !frontendOrigins().includes(origin)) throw createHttpError(403, "Untrusted authentication origin", { authCode: "AUTH_ORIGIN_REJECTED" });
     if (!area) throw createHttpError(400, "Browser authentication requires a login area");
     if (req.path === "/refresh") {
       const name = cookieName(area ?? "admin");
       const raw = req.headers.cookie?.split(";").map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
-      if (!raw) throw createHttpError(401, "Your session has expired. Please sign in again.");
+      if (!raw) throw createHttpError(401, "Your session has expired. Please sign in again.", { authCode: "AUTH_REFRESH_COOKIE_MISSING" });
       try { req.body = { refreshToken: decodeURIComponent(raw) }; }
-      catch { throw createHttpError(400, "Invalid authentication cookie"); }
+      catch { throw createHttpError(400, "Invalid authentication cookie", { authCode: "AUTH_REFRESH_COOKIE_INVALID" }); }
     }
     next();
   } catch (error) { next(error); }

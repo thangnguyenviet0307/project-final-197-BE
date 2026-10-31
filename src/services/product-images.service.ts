@@ -1,3 +1,5 @@
+import { enqueueImageCleanup } from "./image-cleanup.service.js";
+import { withRelationsTransaction } from "../utils/relations-transaction.js";
 import { randomUUID } from "node:crypto";
 import createHttpError from "http-errors";
 import { configureCloudinary } from "../config/cloudinary.js";
@@ -45,25 +47,37 @@ export async function addProductImage(id: string, file?: Express.Multer.File) {
   } catch (error) {
     // Do not leave a newly uploaded asset behind when MongoDB rejects the write.
     if (uploaded.public_id) {
-      try { await storage.uploader.destroy(uploaded.public_id, { resource_type: "image", invalidate: true }); }
-      catch { console.error("Failed to clean up unlinked product image", { publicId: uploaded.public_id }); }
+      let pending = false;
+      try {
+        const result: { result?: string } = await storage.uploader.destroy(uploaded.public_id, { resource_type: "image", invalidate: true });
+        pending = result.result !== 'ok' && result.result !== 'not found';
+      } catch { pending = true; }
+      if (pending) {
+        try { await enqueueImageCleanup([uploaded.public_id]); }
+        catch { console.error("Unable to persist cleanup of unlinked uploaded image"); }
+      }
     }
     throw error;
   }
 }
 
 export async function removeProductImage(id: string, publicId: string) {
-  const product = await Product.findById(id);
-  if (!product) throw createHttpError(404, 'Product not found');
-  const image = product.images.find(item => item.public_id === publicId);
-  if (!image) throw createHttpError(404, 'Gallery image not found');
-  if (product.variants.some(variant => variant.image === image.secure_url || variant.images.includes(image.secure_url))) {
-    throw createHttpError(409, 'Remove this image from variants before deleting it from the gallery');
-  }
   const storage = configureCloudinary();
-  product.images.splice(product.images.indexOf(image), 1);
-  if (product.thumbnail === image.secure_url) product.thumbnail = product.images[0]?.secure_url ?? null;
-  await product.save();
+  const product = await withRelationsTransaction(async session => {
+    const product = await Product.findById(id, null, { session });
+    if (!product) throw createHttpError(404, 'Product not found');
+    const image = product.images.find(item => item.public_id === publicId);
+    if (!image) throw createHttpError(404, 'Gallery image not found');
+    if (product.variants.some(variant => variant.image === image.secure_url || variant.images.includes(image.secure_url))) {
+      throw createHttpError(409, 'Remove this image from variants before deleting it from the gallery');
+    }
+    // Persist the cleanup task with the unlink, so a storage outage cannot orphan the asset.
+    await enqueueImageCleanup([publicId], session);
+    product.images.splice(product.images.indexOf(image), 1);
+    if (product.thumbnail === image.secure_url) product.thumbnail = product.images[0]?.secure_url ?? null;
+    await product.save({ session });
+    return product;
+  });
   let cleanupPending = false;
   try {
     const result: { result?: string } = await storage.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });

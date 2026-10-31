@@ -20,7 +20,7 @@ export class BrandService {
   // 1. Lấy tất cả thương hiệu chưa bị xóa
   static async getAll() {
     return BrandModel.find({
-      isDeleted: false,
+      isDeleted: { $ne: true },
     }).sort({ createdAt: -1 });
   }
 
@@ -32,7 +32,7 @@ export class BrandService {
 
     return BrandModel.findOne({
       _id: id,
-      isDeleted: false,
+      isDeleted: { $ne: true },
     });
   }
 
@@ -72,7 +72,7 @@ export class BrandService {
     }
 
     return withRelationsTransaction(async (session) => BrandModel.findOneAndUpdate(
-      { _id: id, isDeleted: false },
+      { _id: id, isDeleted: { $ne: true } },
       { $set: updateData },
       {
         returnDocument: 'after',
@@ -82,7 +82,7 @@ export class BrandService {
     ));
   }
 
-  // 5. Xóa mềm thương hiệu
+  // 5. Permanently delete an unreferenced brand
   static async delete(id: string) {
     if (!mongoose.isValidObjectId(id)) {
       return null;
@@ -90,16 +90,7 @@ export class BrandService {
 
     return withRelationsTransaction(async (session) => {
       if (await Product.exists({ brand: id }).session(session)) throw createHttpError(409, 'Cannot delete a brand referenced by products');
-      return BrandModel.findOneAndUpdate(
-        { _id: id, isDeleted: false },
-        {
-          $set: {
-            isDeleted: true,
-            deletedAt: new Date(),
-          },
-        },
-        { returnDocument: 'after', session }
-      );
+      return BrandModel.findByIdAndDelete(id, { session });
     });
   }
 }

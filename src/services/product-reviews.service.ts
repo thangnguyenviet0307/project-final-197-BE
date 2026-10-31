@@ -49,7 +49,7 @@ export async function addStoreProductReview(product: string, input: z.infer<type
 async function saveReview(product: string, input: z.infer<typeof storeReviewInputSchema>, source: "admin" | "storefront") {
   return withRelationsTransaction(async session => {
     if (source === "storefront") {
-      const current = await Product.findOne({ _id: product, is_active: true, on_sale: { $ne: false } }).session(session);
+      const current = await Product.findOne({ _id: product, is_active: true }).session(session);
       if (!current) throw createHttpError(404, "Product not found");
       await assertActiveCatalog(String(current.brand), String(current.category), session);
     } else if (!(await Product.exists({ _id: product }).session(session))) throw createHttpError(404, "Product not found");

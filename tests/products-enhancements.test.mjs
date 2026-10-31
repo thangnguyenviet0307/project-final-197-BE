@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, beforeEach } from 'node:test';
+import mongoose from 'mongoose';
+import { SystemLock } from '../dist/models/system-locks.model.js';
+import { ImageCleanupJob } from '../dist/models/image-cleanup-jobs.model.js';
 import { v2 as cloudinary } from 'cloudinary';
 import Product from '../dist/models/products.model.js';
 import productService from '../dist/services/products.service.js';
 import { getProductsQuerySchema } from '../dist/validations/products.validation.js';
-import { buildProductQuery, buildProductSort } from '../dist/utils/product-query.js';
+import { buildProductQuery, buildProductSort, effectivePriceExpression } from '../dist/utils/product-query.js';
 import { addProductImage, removeProductImage, validateProductImage } from '../dist/services/product-images.service.js';
 
+beforeEach(t => {
+  t.mock.method(mongoose.connection, 'transaction', async work => work({}));
+  t.mock.method(SystemLock, 'updateOne', async () => ({}));
+  t.mock.method(ImageCleanupJob, 'bulkWrite', async () => ({}));
+});
 const id = 'a'.repeat(24);
 process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
 process.env.CLOUDINARY_API_KEY = 'test-key';
@@ -18,7 +26,7 @@ test('product query validates range, sort fields and catalog references', () => 
   }
   const parsed = getProductsQuerySchema.parse({ search: ' Case.* ', category: id, brand: id, minPrice: '0', maxPrice: '100', sortBy: 'price', sortOrder: 'asc', sku: 'abc-1', color: 'red', size: 'XL' });
   const query = buildProductQuery(parsed);
-  assert.deepEqual(query.price, { $gte: 0, $lte: 100 });
+  assert.deepEqual(query.$expr, { $and: [{ $gte: [effectivePriceExpression, 0] }, { $lte: [effectivePriceExpression, 100] }] });
   assert.equal(query.product_name.$regex, 'Case\\.\\*');
   assert.equal(query.category, id);
   assert.equal(query.variants.$elemMatch.sku, 'ABC-1');
@@ -125,4 +133,28 @@ test('variant stock updates retain an existing thumbnail and clear compare-at pr
   assert.equal(product.thumbnail, 'https://images.test/variant.png');
   await productService.updateProduct(String(product._id), { expectedVersion: 0, thumbnail: null, variants: [{ _id: variantId, sku: 'CASE-1', price: 100, stock: 4 }] });
   assert.equal(product.thumbnail, null);
+});
+
+test('image deletion refuses to unlink when its durable cleanup task cannot be saved', async t => {
+  const product = galleryProduct();
+  t.mock.method(Product, 'findById', async () => product);
+  const save = t.mock.method(product, 'save', async () => product);
+  t.mock.method(ImageCleanupJob, 'bulkWrite', async () => { throw new Error('Queue unavailable'); });
+  const destroy = t.mock.method(cloudinary.uploader, 'destroy', async () => ({ result: 'ok' }));
+  await assert.rejects(removeProductImage(id, 'folder/one'), /Queue unavailable/);
+  assert.equal(product.images.length, 2);
+  assert.equal(save.mock.callCount(), 0); assert.equal(destroy.mock.callCount(), 0);
+});
+
+test('a failed upload save queues storage cleanup when immediate compensation fails', async t => {
+  const product = galleryProduct();
+  t.mock.method(Product, 'findById', async () => product);
+  t.mock.method(product, 'save', async () => { throw new Error('Version conflict'); });
+  t.mock.method(cloudinary.uploader, 'upload_stream', (_options, callback) => ({ end() { callback(null, { public_id: 'folder/pending', secure_url: 'https://images.test/pending.png' }); } }));
+  t.mock.method(cloudinary.uploader, 'destroy', async () => { throw new Error('Storage unavailable'); });
+  const queue = t.mock.method(ImageCleanupJob, 'bulkWrite', async operations => {
+    assert.equal(operations[0].updateOne.filter.publicId, 'folder/pending'); return {};
+  });
+  await assert.rejects(addProductImage(id, { mimetype: 'image/png', buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) }), /Version conflict/);
+  assert.equal(queue.mock.callCount(), 1);
 });

@@ -1,19 +1,17 @@
 import { generateOrderCode, isOrderCodeCollision } from '../utils/order-code.js';
 import { escapeRegex } from '../utils/search.js';
-import { sumVariantStock } from "../utils/inventory.js";
 import createHttpError from "http-errors";
 import { type QueryFilter, Types, type ClientSession } from "mongoose";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
-import { assertActiveCatalog } from "../utils/catalog-reference.js";
+import { reserveOrderItems, restoreOrderStock as restoreStock } from "./order-reservation.service.js";
 import { calculateOrderTotal } from "../utils/order-total.js";
 import { hasPermission } from "../config/rolePermissions.js";
 import { Customer } from "../models/customers.model.js";
 import { Order } from "../models/orders.model.js";
-import Product from "../models/products.model.js";
 import { User } from "../models/users.model.js";
 import type { AuthUser } from "../types/auth.type.js";
 import { Permission } from "../types/permissions.type.js";
-import type { IOrder, IOrderItem } from "../types/orders.type.js";
+import type { IOrder } from "../types/orders.type.js";
 import { OrderStatus, OPEN_ORDER_STATUSES } from "../types/orders.type.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { CreateOrderInput, GetOrdersQuery, UpdateOrderStatusInput } from "../types/orders.type.js";
@@ -44,23 +42,6 @@ async function resolveAssignee(actor: AuthUser, requested?: string, session?: Cl
   if (session) query.session(session);
   if (!(await query)) throw createHttpError(404, "Active user not found");
   return requested;
-}
-async function restoreStock(items: IOrderItem[], session: ClientSession) {
-  // MongoDB transactions do not support parallel operations on the same session.
-  for (const item of items) {
-    const product = await Product.findById(item.productId).session(session);
-    if (!product) throw createHttpError(409, "Cannot restore a deleted product");
-    if (item.variantId) {
-      const variant = product.variants.id(item.variantId);
-      if (!variant) throw createHttpError(409, "Cannot restore a deleted variant");
-      variant.stock += item.quantity;
-      product.stock = sumVariantStock(product.variants);
-    } else {
-      if (product.variants.length) throw createHttpError(409, "Legacy order needs variant reconciliation before cancellation");
-      product.stock += item.quantity;
-    }
-    await product.save({ session });
-  }
 }
 export async function getOrders(actor: AuthUser, { page, limit, orderStatus, customerId, userId, dateFrom, dateTo, search }: GetOrdersQuery) {
   const conditions: QueryFilter<IOrder>[] = [orderScope(actor)];
@@ -106,49 +87,7 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
     if (!customer) {
       throw createHttpError(404, "Active customer not found");
     }
-    const merged = new Map<string, { productId: string; variantId?: string; quantity: number }>();
-    for (const item of input.orderItems) {
-      const productId = item.productId.toLowerCase();
-      const variantId = item.variantId?.toLowerCase();
-      const key = `${productId}:${variantId ?? ""}`;
-      const current = merged.get(key);
-      if (current) {
-        current.quantity += item.quantity;
-        if (!Number.isSafeInteger(current.quantity)) throw createHttpError(400, "Total quantity is too large");
-      }
-      else merged.set(key, { productId, quantity: item.quantity,
-        ...(variantId ? { variantId } : {}) });
-    }
-    const orderItems: IOrderItem[] = [];
-    const productQuantities = new Map<string, number>();
-    for (const item of merged.values()) {
-      const total = (productQuantities.get(item.productId) ?? 0) + item.quantity;
-      if (!Number.isSafeInteger(total)) throw createHttpError(400, "Total quantity is too large");
-      productQuantities.set(item.productId, total);
-    }
-    for (const item of merged.values()) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product || !product.is_active) throw createHttpError(404, "Active product not found");
-      if ((productQuantities.get(item.productId) ?? 0) < (product.minimumOrderQuantity ?? 1)) {
-        throw createHttpError(400, "Quantity is below the product minimum order quantity");
-      }
-      await assertActiveCatalog(product.brand, product.category, session);
-      const variant = item.variantId ? product.variants.id(item.variantId) : null;
-      if (product.variants.length && !item.variantId) throw createHttpError(400, "Select a product variant");
-      if (item.variantId && !variant) throw createHttpError(404, "Variant not found");
-      if ((variant?.stock ?? product.stock) < item.quantity) throw createHttpError(409, "Insufficient stock");
-      if (variant) {
-        variant.stock -= item.quantity;
-        product.stock = sumVariantStock(product.variants);
-      } else product.stock -= item.quantity;
-      await product.save({ session });
-      orderItems.push({ productId: product._id, quantity: item.quantity,
-        ...(!variant && product.sku ? { sku: product.sku } : {}),
-        price: variant?.price ?? product.price, discount: product.discount, productName: product.product_name,
-        ...(variant ? { variantId: variant._id, sku: variant.sku, variantName: variant.variant_name,
-          selectedOptions: { ...variant.attributes, ...(variant.color ? { color: variant.color } : {}), ...(variant.size ? { size: variant.size } : {}) } } : {}) });
-    }
-    calculateOrderTotal(orderItems);
+    const orderItems = await reserveOrderItems(input.orderItems, session);
     const order = new Order({ ...input, orderCode: generateOrderCode(), customerId: new Types.ObjectId(input.customerId),
       customerSnapshot: { firstName: customer.firstName, lastName: customer.lastName, email: customer.email, phone: customer.phone },
       ...(userId ? { userId: new Types.ObjectId(userId) } : {}), orderItems, orderStatus: OrderStatus.Pending });

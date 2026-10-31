@@ -9,6 +9,7 @@ const customerSchema = new Schema<ICustomer>(
       recipientName: { type: String, trim: true, maxlength: 100 },
       email: { type: String, trim: true, lowercase: true },
       province: { type: String, trim: true, maxlength: 100 },
+      district: { type: String, trim: true, maxlength: 100 },
       ward: { type: String, trim: true, maxlength: 100 },
       street: { type: String, trim: true, maxlength: 255 },
       deliveryTime: { type: String, trim: true, maxlength: 255, default: "" },

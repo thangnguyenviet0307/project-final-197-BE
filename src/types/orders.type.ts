@@ -28,9 +28,16 @@ export interface IOrderItem {
 }
 
 export interface IOrder {
+  guestCheckout?: boolean;
+  cancelledByCustomer?: boolean;
+  checkoutRequestId?: string;
+  checkoutFingerprint?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  deliveryAddress?: { province: string; district: string; ward: string; provinceCode: number; districtCode: number; wardCode: number };
   plannedShippingDate?: Date;
   orderCode?: string;
-  customerId: Types.ObjectId;
+  customerId: Types.ObjectId | null;
   customerSnapshot?: { firstName: string; lastName: string; email: string; phone: string };
   orderStatus: OrderStatus;
   orderDate: Date;

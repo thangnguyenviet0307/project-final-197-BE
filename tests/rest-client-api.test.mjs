@@ -89,7 +89,7 @@ test("admin login through the proxy authenticates every API and preserves detail
     const headers = { "x-rest-client-auth": "primary" };
     const list = await fetch(`${base}/${resource}?page=1&limit=10`, { headers });
     assert.equal(list.status, 200, `${resource} list authentication failed`);
-    assert.equal(list.headers.get("x-rest-client-proxy-version"), "3");
+    assert.equal(list.headers.get("x-rest-client-proxy-version"), "4");
     assert.ok(Array.isArray((await list.json()).data));
     // A standard Authorization header also works when the request goes directly
     // to the backend; custom proxy headers alone are not authentication.

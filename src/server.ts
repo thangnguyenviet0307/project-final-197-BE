@@ -1,4 +1,5 @@
 import { Article } from "./models/articles.model.js";
+import { WarrantyRequest, StorePolicy } from "./models/support.model.js";
 import { PostCategory } from "./models/post-categories.model.js";
 import dotenv from "dotenv";
 dotenv.config();
@@ -24,6 +25,8 @@ const startServer = async (): Promise<void> => {
   await connectDatabase();
   await CheckoutRequest.init();
   await CheckoutRequest.createIndexes();
+  await Promise.all([WarrantyRequest.init(), StorePolicy.init()]);
+  await WarrantyRequest.createIndexes();
   // Scope index creation to the new editorial collections; never sync/drop unrelated indexes.
   await Promise.all([Article.init(), PostCategory.init()]);
   await Promise.all([Article.createIndexes(), PostCategory.createIndexes()]);

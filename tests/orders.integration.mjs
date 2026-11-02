@@ -36,7 +36,11 @@ const uri = process.env.MONGODB_TEST_URI;
 if (!uri) throw new Error("Set MONGODB_TEST_URI to a dedicated replica-set test deployment");
 const dbName = `codex_test_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
 const actor = { id: String(new mongoose.Types.ObjectId()), role: "admin" };
-const fixtures = { products: [], orders: [], customers: [], users: [], categories: [] };
+const fixtures = { products: [], orders: [], customers: [], users: [], categories: [], contacts: [] };
+let guestPhoneSequence = 0;
+function guestIdentity() {
+  return { email: `guest-${randomUUID()}@example.com`, phone: `09${String(++guestPhoneSequence).padStart(8, '0')}` };
+}
 let customer;
 let brand;
 let category;
@@ -60,7 +64,7 @@ after(async () => {
     await Order.deleteMany({ customerId: { $in: fixtures.customers } });
     await CheckoutRequest.deleteMany({ $or: [{ customerId: { $in: fixtures.customers } }, { "result._id": { $in: fixtures.orders } }] });
     await Product.deleteMany({ _id: { $in: fixtures.products } });
-    await GuestContacts.deleteMany({ email: "guest-fixture@example.com" });
+    await GuestContacts.deleteMany({ _id: { $in: fixtures.contacts } });
     await Customer.deleteMany({ _id: { $in: fixtures.customers } });
     await User.deleteMany({ _id: { $in: fixtures.users } });
     await Categories.deleteMany({ _id: { $in: fixtures.categories } });
@@ -89,9 +93,11 @@ async function order(items) {
 async function guestOrder(t, stock = 3) {
   mockLocations(t);
   const entry = await product(stock);
-  const request = checkoutInput(entry);
+  const request = { ...checkoutInput(entry), ...guestIdentity() };
   const result = await checkout(null, 0, request);
   fixtures.orders.push(result._id);
+  const stored = await Order.findById(result._id).select("contactCustomerId");
+  fixtures.contacts.push(stored.contactCustomerId);
   return { entry, request, result };
 }
 
@@ -233,25 +239,62 @@ test("guest concurrent retries reserve once without creating customers and faile
   const customerCount = await Customer.countDocuments();
   const first = await product(5);
   const second = await product(1);
-  const payload = { requestId: randomUUID(), email: "guest-fixture@example.com", recipientName: 'Guest recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
+  const payload = { requestId: randomUUID(), ...guestIdentity(), recipientName: 'Guest recipient', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
   const results = await Promise.all([checkout(null, 0, payload), checkout(null, 0, payload)]);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   assert.equal(results[0]._id, results[1]._id);
   const stored = await Order.findById(results[0]._id);
   assert.equal(stored.guestCheckout, true);
   assert.equal(stored.customerId, null);
+  fixtures.contacts.push(stored.contactCustomerId);
   const contact = await GuestContacts.findById(stored.contactCustomerId);
+  assert.notEqual(contact._id.toString(), customer._id.toString());
   assert.equal(contact.email, payload.email);
   assert.equal(contact.recipientName, payload.recipientName);
   assert.equal(await GuestContacts.countDocuments({ email: payload.email }), 1);
   assert.equal(stored.recipientPhone, payload.phone);
   assert.equal((await Product.findById(first._id)).stock, 3);
   const failedRequest = randomUUID();
-  await assert.rejects(checkout(null, 0, { ...payload, requestId: failedRequest, items: [{ ...item(first, 1), expectedUnitPrice: 25 }, { ...item(second, 2), expectedUnitPrice: 25 }] }), { status: 409 });
+  const failedIdentity = guestIdentity();
+  await assert.rejects(checkout(null, 0, { ...payload, ...failedIdentity, requestId: failedRequest, items: [{ ...item(first, 1), expectedUnitPrice: 25 }, { ...item(second, 2), expectedUnitPrice: 25 }] }), { status: 409 });
   assert.equal((await Product.findById(first._id)).stock, 3);
   assert.equal((await Product.findById(second._id)).stock, 1);
   assert.equal(await Order.countDocuments({ checkoutRequestId: failedRequest }), 0);
   assert.equal(await Customer.countDocuments(), customerCount);
+  assert.equal(await GuestContacts.exists({ email: failedIdentity.email }), null);
+  assert.equal(await GuestContacts.countDocuments({ email: payload.email }), 1);
+});
+
+test("guest phone match preserves the registered email and never changes login identity or private order ownership", async t => {
+  mockLocations(t);
+  const identity = guestIdentity();
+  const buyer = await Customer.create({ firstName: 'Existing', lastName: 'Account', email: `account-${randomUUID()}@example.com`, phone: identity.phone, accountEnabled: true, tokenVersion: 7 });
+  fixtures.customers.push(buyer._id);
+  const customerCount = await Customer.countDocuments();
+  const entry = await product(5);
+  const payload = { ...checkoutInput(entry), ...identity };
+  const results = await Promise.all([checkout(null, 0, payload), checkout(null, 0, payload)]);
+  assert.equal(results[0]._id, results[1]._id);
+  fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
+  const stored = await Order.findById(results[0]._id);
+  fixtures.contacts.push(stored.contactCustomerId);
+  const contact = await GuestContacts.findById(stored.contactCustomerId);
+  assert.equal(String(contact._id), String(buyer._id));
+  assert.equal(contact.email, buyer.email);
+  assert.notEqual(contact.email, payload.email);
+  assert.equal(contact.phone, buyer.phone);
+  assert.equal(contact.recipientName, payload.recipientName);
+  assert.equal(stored.customerId, null);
+  assert.equal(stored.guestCheckout, true);
+  assert.equal(await Order.countDocuments({ customerId: buyer._id }), 0);
+  assert.equal(await Order.countDocuments({ contactCustomerId: buyer._id }), 1);
+  assert.equal(await Customer.countDocuments(), customerCount);
+  const unchanged = await Customer.findById(buyer._id).select('+tokenVersion');
+  assert.equal(unchanged.email, buyer.email);
+  assert.equal(unchanged.phone, buyer.phone);
+  assert.equal(unchanged.firstName, buyer.firstName);
+  assert.equal(unchanged.tokenVersion, 7);
+  assert.equal((await Product.findById(entry._id)).stock, 4);
 });
 
 test("concurrent customer cancellations restore stock once and restoration errors roll back the status", async () => {

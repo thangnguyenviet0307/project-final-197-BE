@@ -14,12 +14,12 @@ import { validateProductImage } from "./product-images.service.js";
 import { enqueueImageCleanup } from "./image-cleanup.service.js";
 
 const policyId = "store-policy";
-const blankContent: PolicyContent = { warranty: "", returns: "", shipping: "", payment: "", support: "" };
+const blankContent: PolicyContent = { warranty: "", returns: "", shipping: "", payment: "", support: "", privacy: "" };
 export const versionConflict = () => createHttpError(409, "Dữ liệu đã thay đổi. Hãy tải lại và kiểm tra trước khi lưu.", { businessCode: "VERSION_CONFLICT" });
 export async function getPolicy(admin = false) {
   const policy = await StorePolicy.findById(policyId).lean();
-  if (admin) return policy ?? { content: blankContent, publishedAt: null, __v: 0 };
-  return policy?.publishedContent ? { content: policy.publishedContent, publishedAt: policy.publishedAt } : null;
+  if (admin) return policy ? { ...policy, content: { ...blankContent, ...policy.content } } : { content: blankContent, publishedAt: null, __v: 0 };
+  return policy?.publishedContent ? { content: { ...blankContent, ...policy.publishedContent }, publishedAt: policy.publishedAt } : null;
 }
 export async function savePolicy(input: { content: PolicyContent; expectedVersion: number; publish: boolean }) {
   const { content, expectedVersion, publish } = input;

@@ -15,7 +15,7 @@ import * as service from '../dist/services/support.service.js';
 
 const id = 'a'.repeat(24), other = 'b'.repeat(24);
 const input = { requestId: '559d78a4-b73d-4d64-9665-381bf1273be8', orderId: id, itemIndex: 0, description: 'Sản phẩm không hoạt động.' };
-const content = { warranty: 'Bảo hành theo sản phẩm', returns: 'Điều kiện đổi trả', shipping: 'Giao hàng', payment: 'COD', support: 'Liên hệ cửa hàng' };
+const content = { warranty: 'Bảo hành theo sản phẩm', returns: 'Điều kiện đổi trả', shipping: 'Giao hàng', payment: 'COD', support: 'Liên hệ cửa hàng', privacy: 'Bảo mật thông tin' };
 const actor = { id, role: 'staff' };
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
 
@@ -23,6 +23,7 @@ test('support inputs reject forged identity, missing publication content, invali
   assert.equal(createWarrantySchema.safeParse(input).success, true);
   for (const extra of [{ customerId: other }, { status: 'resolved' }, { itemIndex: -1 }, { orderId: 'bad' }, { description: 'x'.repeat(3001) }]) assert.equal(createWarrantySchema.safeParse({ ...input, ...extra }).success, false);
   assert.equal(savePolicySchema.safeParse({ content, expectedVersion: 0, publish: true }).success, true);
+  assert.equal(savePolicySchema.safeParse({ content: { ...content, privacy: '' }, expectedVersion: 0, publish: true }).success, false);
   assert.equal(savePolicySchema.safeParse({ content: { ...content, warranty: '' }, expectedVersion: 0, publish: true }).success, false);
   assert.equal(savePolicySchema.safeParse({ content: { ...content, warranty: '' }, expectedVersion: 0, publish: false }).success, true);
   assert.equal(updateWarrantySchema.safeParse({ status: 'resolved', note: ' ', expectedVersion: 0 }).success, false);
@@ -34,6 +35,15 @@ test('public policy contains only the last published snapshot; draft is private'
   t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => ({ content: { ...content, warranty: 'SECRET DRAFT' }, publishedContent: content, publishedAt: 'date', __v: 8 }) }));
   assert.deepEqual(await service.getPolicy(), { content, publishedAt: 'date' });
   assert.equal((await service.getPolicy(true)).__v, 8);
+});
+test('legacy policy reads add an empty privacy section without writing or altering published fields', async t => {
+  const { privacy, ...legacyContent } = content;
+  t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => ({ content: legacyContent, publishedContent: legacyContent, publishedAt: 'date', __v: 8 }) }));
+  const write = t.mock.method(StorePolicy, 'findOneAndUpdate', async () => { throw new Error('Read must not write'); });
+  assert.deepEqual((await service.getPolicy()).content, { ...legacyContent, privacy: '' });
+  const admin = await service.getPolicy(true);
+  assert.equal(admin.__v, 8); assert.equal(admin.content.privacy, ''); assert.equal(admin.content.shipping, content.shipping);
+  assert.equal(write.mock.callCount(), 0);
 });
 test('unpublished policy returns null and draft writes never touch public content', async t => {
   t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => null }));

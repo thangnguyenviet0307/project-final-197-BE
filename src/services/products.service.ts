@@ -15,6 +15,13 @@ import { ProductReview } from "../models/product-reviews.model.js";
 import type { ProductVariantInput, ProductInput, UpdateProductInput, GetProductsQuery } from "../types/products.type.js";
 export type { ProductVariantInput, ProductInput } from "../types/products.type.js";
 
+const exclusiveBadgeFields = ["is_best_seller", "is_new", "is_hot"] as const;
+function normalizeBadgeSelection<T extends Partial<Record<typeof exclusiveBadgeFields[number], boolean | undefined>>>(input: T): T {
+  const selected = exclusiveBadgeFields.filter(field => input[field] === true);
+  if (selected.length > 1) throw createHttpError(400, "Chỉ được chọn một nhãn Best Seller, New hoặc Hot.");
+  return selected.length ? { ...input, ...Object.fromEntries(exclusiveBadgeFields.map(field => [field, field === selected[0]])) } : input;
+}
+
 const normalizeVariant = (
   variant: ProductVariantInput,
   fallbackPrice: number,
@@ -175,6 +182,7 @@ function lowestVariantPrice(variants: ProductVariantInput[]): number | undefined
 }
 
 export const createProductInSession = async (payload: ProductInput, session: ClientSession) => {
+  payload = normalizeBadgeSelection(payload);
   await assertActiveCatalog(payload.brand, payload.category, session);
   const name = payload.product_name?.trim();
 
@@ -225,7 +233,7 @@ const updateProduct = async (
   const existing = await Product.findById(id).session(session);
 
   if (!existing) return null;
-  const { expectedVersion, ...fields } = payload;
+  const { expectedVersion, ...fields } = normalizeBadgeSelection(payload);
   await ensureProductSku(payload.sku === undefined ? existing.sku : payload.sku, payload.variants ?? existing.variants, id);
   if ((payload.variants !== undefined || payload.stock !== undefined) && expectedVersion === undefined) {
     throw createHttpError(400, "Read the product version before updating inventory or variants");

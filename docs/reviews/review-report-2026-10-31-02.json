@@ -1,0 +1,1781 @@
+{
+  "templateVersion": "1.0.0",
+  "reportMeta": {
+    "projectName": "Project Final 197 — Tái review sau sửa lỗi · lượt 02",
+    "reviewedAt": "2026-10-31T17:33:00.645+07:00",
+    "reviewer": "Codex · Technical Reviewer",
+    "isExample": false,
+    "repositories": [
+      {
+        "name": "Backend",
+        "path": "project-final-197-BE",
+        "branch": "main",
+        "commit": "7fbb32b4e5cff67ccb92f6cb8303c089579ef08d",
+        "dirty": true,
+        "notes": "Source hiện tại gồm các thay đổi chưa commit; HEAD không mô tả toàn bộ working tree."
+      },
+      {
+        "name": "Frontend",
+        "path": "project-final-197-FE",
+        "branch": "main",
+        "commit": "bff5e35b98ce2e3ef721e44a6196429001fca91d",
+        "dirty": true,
+        "notes": "Có thay đổi editorial/footer/draft từ phiên trước."
+      }
+    ],
+    "branch": "main",
+    "commit": null,
+    "scope": [
+      "Hai repo liền kề: Backend API và Frontend SPA có Storefront + Admin/Staff. Single-vendor phụ kiện công nghệ.",
+      "BE: app/server → routes/v1 → auth/permission/validation middleware → controllers → services → Mongoose models → MongoDB replica set.",
+      "FE: router/layout/pages → features hooks/services/schemas/types → Axios; TanStack Query giữ server state, Zustand giữ auth/cart.",
+      "Role: Super Admin > Admin > Staff. Customer là account type trong customers, không phải User role; Guest mua COD. Staff chỉ ghi đơn được giao và tồn kho qua API riêng.",
+      "Ngoài Dashboard/Brands/Categories/Products/Orders/Users/Profile còn có Customers, Hero, Cart/Checkout và Articles/Post categories.",
+      "Chỉ review và tạo report/template. Không sửa ứng dụng, cài package, commit, seed, migration, database hoặc deploy.",
+      "Tái kiểm chứng 12 phát hiện của báo cáo đầu ngày, đọc các bản sửa mới; kiểm thêm pending checkout fail-closed, ownership rate limit và guest reservation 24 giờ.",
+      "Middleware đang mở trong IDE được đọc trực tiếp: validate, upload, error, authentication và response helper. validate shadow query của Express 5 theo từng request; error.handler chỉ re-export middleware, không có hai bộ xử lý độc lập."
+    ],
+    "limitations": [
+      "Chỉ review và tạo artifact trong docs/reviews. Không sửa source ứng dụng, package/dependency, database, seed/migration, commit hoặc deploy.",
+      "Review rộng có trọng điểm, không audit từng dòng. Kiểm các bản sửa cũ và các luồng mới theo coverage, không khẳng định đã sửa hết mọi lỗi có thể xảy ra.",
+      "Đã chạy unit/typecheck/lint/contract/build. Không chạy integration ghi DB trong lượt review chỉ đọc này; kết quả integration 19 test của phiên cũ không chứng nhận worker guest expiry và code mới.",
+      "Hai probe dùng component AdminArticlesPage thật và jsdom, mock service/query để điều khiển thứ tự response và refetch error; không có HTTP, provider hay database. Probe đạt nghĩa tái hiện lỗi hiện tại, không phải lỗi đã sửa.",
+      "Chưa có browser tool để kiểm trực quan desktop/mobile/print, hành vi mạng/cookie thực hoặc hosting; jsdom không thay thế trình duyệt thật.",
+      "Không đọc .env, credential/token/connection string hoặc dữ liệu cá nhân. Chỉ nêu tên biến cấu hình và fixture giả lập.",
+      "Chưa kiểm index và TRUST_PROXY_CIDRS của production, số instance, header sanitization, Cloudinary hoặc locality upstream thực. Schema/tool có sẵn không chứng minh đã apply.",
+      "Hai repo vẫn có thay đổi chưa commit; HEAD giữ nguyên nhưng source khác báo cáo cũ. Không chứng nhận bản release sạch. Test/build có tạo dist/tsbuildinfo/cache theo script có sẵn."
+    ]
+  },
+  "overview": {
+    "summary": "Đã kiểm lại các bản sửa: 10/12 mục báo cáo cũ đã được xử lý ở code; 2 mục index/proxy đã có cơ chế hỗ trợ nhưng còn cần nghiệm thu môi trường thật. Phát hiện thêm 2 lỗi P2 mất draft bài viết, đã tái hiện bằng component thật trong jsdom. Không thấy P0 hay P1 đã xác nhận trong phạm vi. Không thể khẳng định không còn lỗi chỉ từ unit/build đạt.",
+    "demoReadiness": "Lõi COD/quản trị và các bản sửa trước có tiến bộ rõ. Cần xử lý hai đường mất draft, nghiệm thu index/proxy và chạy integration/staging cho guest reservation 24 giờ trước khi coi là sẵn sàng demo ổn định. Không đưa phần trăm hoặc điểm chất lượng.",
+    "strengths": [
+      "F-001 cũ: useValidListPage chỉ phục hồi page từ response thành công, đã settled, không placeholder; được gắn ở danh sách bài viết/public/sản phẩm và có test.",
+      "F-002/F-003 cũ: post-category dùng ArticleEditorDialog và dirty tracking riêng; search article remount theo applied URL, giữ draft qua refetch.",
+      "F-004/F-010 cũ: detail đã gọi useRecordArticleView theo location.key và useArticleHead có cleanup. Đây là raw visit/SPA metadata, không unique reader hoặc SSR.",
+      "F-006/F-008 cũ: locality fetch ngoài relations transaction sau pass replay; pass sau kiểm session/receipt lại; admin order sort thêm _id.",
+      "F-009/F-011/F-012 cũ: VND formatter tối đa 2 số lẻ; FE list gửi summary=true và BE bỏ content có opt-in; docs frontend được viết lại theo trạng thái hiện hành.",
+      "Middleware: parseAsync body/query/params, query được shadow cho Express 5; unknown errors không trả stack; upload giữ limit/MIME/magic bytes và không lưu ảnh Product ở ổ đĩa tạm.",
+      "Pending checkout phân biệt empty/pending/invalid/unavailable, không ghi đè request khác và chỉ clear đúng requestId. Ownership transfer có account/IP rate limit sau xác thực và permission.",
+      "Guest mới có reservationExpiresAt 24 giờ; worker conditional transition/restore/receipt cùng transaction, batch20/backoff và loại đơn đã nhận/Customer/legacy không deadline. Có integration scenarios trong source, chưa chạy lại lượt này.",
+      "BE 305 test và FE 531 test đạt; contract 31 request, typecheck/build đạt. Các test này không bao phủ hai interleaving editor mới đã tái hiện."
+    ],
+    "blockers": [
+      "R02-001: request Sửa cũ trả muộn có thể thay thế editor tạo mới đang dirty mà không hỏi bỏ thay đổi.",
+      "R02-002: refetch danh mục lỗi làm ArticleForm unmount; khi query phục hồi, draft khởi tạo lại và mất input.",
+      "R02-003/R02-004: index production và proxy/multi-instance policy chưa có bằng chứng nghiệm thu thực.",
+      "Worker giữ kho guest 24 giờ và pending recovery cần integration/staging theo phiên bản mới; chưa chạy DB/browser ở lượt này."
+    ],
+    "stack": [
+      {
+        "layer": "BE",
+        "technology": "Node.js ESM, Express 5, TypeScript strict, Zod 4, JWT, Argon2; hỗ trợ bcrypt cũ.",
+        "evidence": [
+          {
+            "file": "BE/package.json",
+            "line": null,
+            "symbol": "dependencies/scripts",
+            "description": "Dải dependency khai báo, không audit từng phiên bản cài."
+          },
+          {
+            "file": "BE/tsconfig.json",
+            "line": null,
+            "symbol": "compilerOptions",
+            "description": "strict và các kiểm tra kiểu."
+          }
+        ]
+      },
+      {
+        "layer": "DB",
+        "technology": "MongoDB/Mongoose 9, transaction replica set/sharded cluster; variants embedded và Order snapshots.",
+        "evidence": [
+          {
+            "file": "BE/src/config/database.ts",
+            "line": null,
+            "symbol": "connectDatabase",
+            "description": "Kiểm topology transaction."
+          },
+          {
+            "file": "BE/src/models/orders.model.ts",
+            "line": null,
+            "symbol": "Order",
+            "description": "Snapshot/enum/index khai báo."
+          }
+        ]
+      },
+      {
+        "layer": "FE",
+        "technology": "React 19, Vite 8, React Router 7, TanStack Query 5, Zustand 5, Axios, React Hook Form, Tailwind 4, strict TypeScript.",
+        "evidence": [
+          {
+            "file": "FE/package.json",
+            "line": null,
+            "symbol": "dependencies",
+            "description": "Stack khai báo."
+          },
+          {
+            "file": "FE/src/router/routes.tsx",
+            "line": null,
+            "symbol": "routes",
+            "description": "Hai khu vực, lazy route, guard và 404."
+          }
+        ]
+      },
+      {
+        "layer": "Deployment",
+        "technology": "Hướng dẫn Render BE/Vercel FE; base URL public, SPA rewrite, CORS/cookie có cấu hình; runtime chưa kiểm.",
+        "evidence": [
+          {
+            "file": "BE/build.sh",
+            "line": null,
+            "symbol": "build",
+            "description": "pnpm frozen-lockfile + build."
+          },
+          {
+            "file": "FE/vercel.json",
+            "line": null,
+            "symbol": "rewrites",
+            "description": "Rewrite SPA."
+          },
+          {
+            "file": "FE/src/services/api-base-url.ts",
+            "line": null,
+            "symbol": "resolveApiBaseUrl",
+            "description": "Chỉ đồng nhất loopback, không sửa domain production."
+          }
+        ]
+      }
+    ]
+  },
+  "coverage": [
+    {
+      "id": "C02-001",
+      "module": "F-001 cũ · Pagination",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/hooks/use-valid-list-page.ts",
+        "FE/src/pages/admin/articles.tsx",
+        "FE/src/pages/admin/products/index.tsx",
+        "FE/tests/review-list-page.test.tsx"
+      ],
+      "notes": "Đã xử lý ở code/test: settled successful non-placeholder response mới replace page URL, giữ filter."
+    },
+    {
+      "id": "C02-002",
+      "module": "F-002 cũ · Post category draft",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/pages/admin/post-categories.tsx",
+        "FE/src/features/articles/components/category-form.tsx",
+        "FE/tests/post-category-navigation.test.tsx"
+      ],
+      "notes": "Đã xử lý close/navigation/unload bằng ArticleEditorDialog riêng phiên. Không nhầm với hai mất draft Article mới nêu."
+    },
+    {
+      "id": "C02-003",
+      "module": "F-003 cũ · Article search URL",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/pages/admin/articles.tsx",
+        "FE/src/pages/storefront/articles/index.tsx",
+        "FE/tests/article-search-navigation.test.tsx"
+      ],
+      "notes": "Đã thêm key theo applied search/type; tests navigation/refetch đạt."
+    },
+    {
+      "id": "C02-004",
+      "module": "F-004 cũ · Article views",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/features/storefront/hooks/use-record-article-view.ts",
+        "FE/src/pages/storefront/articles/detail.tsx",
+        "FE/tests/article-detail-effects.test.tsx"
+      ],
+      "notes": "Đã nối POST view, location.key và ref guard; không tự retry."
+    },
+    {
+      "id": "C02-005",
+      "module": "F-005 cũ · Index runtime",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/config/database.ts",
+        "BE/scripts/ensure-core-indexes.mjs",
+        "BE/src/models/orders.model.ts"
+      ],
+      "notes": "Công cụ có sẵn; trạng thái production chưa xác nhận. Theo dõi R02-003 thay vì kết luận thiếu index."
+    },
+    {
+      "id": "C02-006",
+      "module": "F-006 cũ · Locality transaction",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/services/checkout.service.ts",
+        "BE/tests/checkout.test.mjs"
+      ],
+      "notes": "Đã fetch sau pass transaction replay kết thúc, pass sau recheck receipt/session trước reserve; unit test đạt."
+    },
+    {
+      "id": "C02-007",
+      "module": "F-007 cũ · Proxy config",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/utils/trusted-proxy.ts",
+        "BE/tests/trusted-proxy.test.mjs"
+      ],
+      "notes": "Đã thêm explicit CIDR và test. Runtime/multi-instance vẫn cần nghiệm thu R02-004."
+    },
+    {
+      "id": "C02-008",
+      "module": "F-008 cũ · Order sort",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/services/orders.services.ts"
+      ],
+      "notes": "Đã sort orderDate rồi _id cùng chiều; offset vẫn có thể shift khi insert mới theo bản chất."
+    },
+    {
+      "id": "C02-009",
+      "module": "F-009 cũ · VND display",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/features/storefront/utils/format-price.ts",
+        "FE/src/features/products/types/products.ts"
+      ],
+      "notes": "Card/detail dùng tối đa 2 chữ số lẻ; helper half-up không thay đổi."
+    },
+    {
+      "id": "C02-010",
+      "module": "F-010 cũ · Article SEO",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/src/features/storefront/hooks/use-article-head.ts",
+        "FE/tests/article-detail-effects.test.tsx"
+      ],
+      "notes": "Đã nối title/description/canonical, cleanup; không tuyên bố SSR."
+    },
+    {
+      "id": "C02-011",
+      "module": "F-011 cũ · Article payload",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/services/articles.service.ts",
+        "FE/src/features/storefront/services/articles.service.ts",
+        "BE/tests/articles.test.mjs"
+      ],
+      "notes": "Đã opt-in summary=true bỏ content; default DTO tương thích, test đạt."
+    },
+    {
+      "id": "C02-012",
+      "module": "F-012 cũ · Frontend docs",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "FE/docs/frontend-structure.md"
+      ],
+      "notes": "Đã viết lại theo trạng thái mới; không giữ mô tả chưa checkout/giỏ chỉ RAM."
+    },
+    {
+      "id": "C02-013",
+      "module": "Middleware/response/upload",
+      "layer": "BE",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/middlewares/validate.middleware.ts",
+        "BE/src/middlewares/error.middleware.ts",
+        "BE/src/middlewares/error.handler.ts",
+        "BE/src/middlewares/profile-upload.middleware.ts",
+        "BE/src/middlewares/product-image.middleware.ts",
+        "BE/src/helpers/response.helper.ts"
+      ],
+      "notes": "Đọc bản refactor hiện tại; parseAsync + query shadow; error centralized; multer callback/limit. Không thấy lỗi xác nhận trong đoạn khảo sát."
+    },
+    {
+      "id": "C02-014",
+      "module": "Guest reservation/pending storage/ownership",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "BE/src/services/guest-reservation.service.ts",
+        "BE/src/services/checkout.service.ts",
+        "BE/src/services/orders.services.ts",
+        "BE/src/routes/v1/users.route.ts",
+        "FE/src/features/checkout/hooks/use-checkout-form.ts",
+        "FE/src/features/checkout/utils/pending-checkout.ts",
+        "BE/tests/orders.integration.mjs"
+      ],
+      "notes": "Đọc logic mới và test definitions; unit/storage/limiter đạt. Không chạy integration DB, không xác nhận worker thật."
+    },
+    {
+      "id": "C02-015",
+      "module": "Các module còn lại",
+      "layer": "Integration",
+      "status": "sampled",
+      "paths": [
+        "BE/src/services/users.service.ts",
+        "BE/src/services/product-images.service.ts",
+        "FE/src/pages/storefront/products/detail.tsx",
+        "FE/src/features/products/utils/product-description.ts"
+      ],
+      "notes": "Đối chiếu lại các phần liên quan và baseline kiến trúc. Không đọc lại toàn bộ mọi CRUD/UI/cart journal hoặc mọi test."
+    },
+    {
+      "id": "C02-016",
+      "module": "Browser/production database",
+      "layer": "Deployment",
+      "status": "not_reviewed",
+      "paths": [],
+      "notes": "Không truy cập runtime; không load test, Cloudinary/locality thật, cookie/visual/mobile/PDF."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R02-001",
+      "title": "Response Sửa trả muộn thay thế bài mới đang nhập mà không xác nhận",
+      "severity": "P2",
+      "verificationStatus": "confirmed",
+      "module": "Article editor async loading",
+      "layer": "FE",
+      "evidence": [
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 40,
+          "symbol": "edit",
+          "description": "Sau await getArticle luôn setEditing, không generation token/abort hoặc đối chiếu editor hiện tại."
+        },
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 42,
+          "symbol": "Thêm bài viết",
+          "description": "Nút Thêm vẫn enabled khi loadingEditor; có thể mở editor mới trong lúc request Sửa chờ."
+        },
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 54,
+          "symbol": "ArticleEditorDialog key",
+          "description": "Thay editing đổi key, unmount editor dirty; guard chỉ xử lý close/navigation, không chặn setEditing này."
+        },
+        {
+          "file": "BE/docs/reviews/review-probes-2026-10-31-02.test.tsx",
+          "line": 33,
+          "symbol": "late edit response probe",
+          "description": "Probe đã chạy trên component thật, xác nhận draft mới bị thay bằng Stored article fixture."
+        }
+      ],
+      "preconditions": [
+        "Admin bấm Sửa một bài, GET detail còn pending do mạng chậm.",
+        "Trong lúc đó bấm Thêm bài viết và nhập draft mới."
+      ],
+      "reproductionSteps": [
+        "Giữ promise getArticle chưa resolve.",
+        "Bấm Sửa rồi Thêm bài viết; nhập tiêu đề mới.",
+        "Resolve response Sửa cũ.",
+        "Tiêu đề chuyển sang bài cũ, không xuất hiện hộp Bỏ các thay đổi chưa lưu."
+      ],
+      "expectedBehavior": "Request cũ không được thay editor hiện tại. Chỉ áp response nếu vẫn thuộc thao tác mở editor đang có hiệu lực.",
+      "actualBehavior": "Probe tái hiện draft mới bị mất, thay bằng bài trả về từ request trước; chưa gửi save và không có discard confirmation.",
+      "impact": "Mất nội dung đang soạn và có nguy cơ người dùng tiếp tục sửa nhầm bài cũ.",
+      "recommendation": "Dùng generation/request token hoặc AbortController và bỏ response cũ sau khi mở/đóng editor khác; cân nhắc disable Thêm khi đang tải detail. Không để setEditing từ request cũ bypass dirty guard.",
+      "verificationMethod": "Đã tái hiện bằng Vitest/jsdom với AdminArticlesPage thật, mocked delayed service; probe đạt xác nhận hành vi lỗi. Không browser/network thật."
+    },
+    {
+      "id": "R02-002",
+      "title": "Lỗi refetch danh mục làm unmount form và mất draft bài viết",
+      "severity": "P2",
+      "verificationStatus": "confirmed",
+      "module": "Article editor auxiliary query",
+      "layer": "FE",
+      "evidence": [
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 55,
+          "symbol": "categories render branch",
+          "description": "categories.isError được ưu tiên trước ArticleForm, kể cả đang có dữ liệu cached/draft."
+        },
+        {
+          "file": "FE/src/features/articles/components/article-form.tsx",
+          "line": 23,
+          "symbol": "initial/draft state",
+          "description": "Form giữ draft local; sau unmount/mount lại sẽ khởi tạo từ article hoặc giá trị trống."
+        },
+        {
+          "file": "FE/src/features/articles/hooks/use-articles.ts",
+          "line": 5,
+          "symbol": "usePostCategories",
+          "description": "Query có thể refetch khi focus/reconnect/mutation invalidation."
+        },
+        {
+          "file": "BE/docs/reviews/review-probes-2026-10-31-02.test.tsx",
+          "line": 47,
+          "symbol": "auxiliary category error probe",
+          "description": "Probe chuyển query sang isError trong lúc dirty, rồi hồi phục; input bị reset về rỗng."
+        }
+      ],
+      "preconditions": [
+        "Form bài viết đã mở, danh mục đã tải thành công và người dùng có draft.",
+        "Refetch danh mục thất bại trong lúc soạn bài, sau đó thành công lại."
+      ],
+      "reproductionSteps": [
+        "Mở Thêm bài viết, nhập tiêu đề.",
+        "Cho category query chuyển isError=true nhưng vẫn có cached data.",
+        "Form biến mất, hiện thông báo lỗi tải danh mục.",
+        "Cho query phục hồi; form mount lại và tiêu đề trở về rỗng."
+      ],
+      "expectedBehavior": "Lỗi query phụ không được tháo editor dirty hoặc làm mất input; giữ form và cached choices, hiển thị lỗi retry không phá draft.",
+      "actualBehavior": "Probe tái hiện input đã nhập bị reset khi query phục hồi; không có discard confirmation.",
+      "impact": "Mất nội dung không cần thao tác đóng; dễ xảy ra khi focus/reconnect hoặc đổi mạng khi soạn bài dài.",
+      "recommendation": "Giữ ArticleForm mounted suốt phiên editor. Chỉ dùng màn loading/error thay thế khi chưa khởi tạo editor; refetch error hiển thị song song, giữ draft và original expectedVersion. Cho phép retry danh mục mà không remount form.",
+      "verificationMethod": "Đã tái hiện bằng component thật/jsdom, điều khiển trạng thái query qua mock reactive; không HTTP/DB/browser thật."
+    },
+    {
+      "id": "R02-003",
+      "title": "Index production, kể cả index truy vấn guest expiry mới, chưa được nghiệm thu",
+      "severity": "P1",
+      "verificationStatus": "risk",
+      "module": "Production index acceptance",
+      "layer": "Deployment",
+      "evidence": [
+        {
+          "file": "BE/src/config/database.ts",
+          "line": 16,
+          "symbol": "connectDatabase",
+          "description": "Production vẫn autoIndex=false."
+        },
+        {
+          "file": "BE/src/server.ts",
+          "line": 26,
+          "symbol": "startServer",
+          "description": "Khởi tạo index receipt/editorial, không tự migrate toàn bộ core."
+        },
+        {
+          "file": "BE/src/models/orders.model.ts",
+          "line": 63,
+          "symbol": "guest expiration index",
+          "description": "Có index thường cho truy vấn guest/orderStatus/reservationExpiresAt."
+        },
+        {
+          "file": "BE/scripts/ensure-core-indexes.mjs",
+          "line": null,
+          "symbol": "ensureCoreIndexes",
+          "description": "Công cụ dry-run/apply đã có, nhưng code tồn tại không chứng minh đã chạy production."
+        }
+      ],
+      "preconditions": [
+        "DB production mới/nâng cấp chưa có đủ index theo model."
+      ],
+      "reproductionSteps": [
+        "Audit chỉ đọc getIndexes hoặc dry-run tool bằng tên DB đúng trên môi trường có quyền.",
+        "So key/options unique/sparse/partial với source, gồm index guest expiry.",
+        "Ghi bằng chứng; chỉ apply sau phê duyệt vận hành."
+      ],
+      "expectedBehavior": "Các ràng buộc unique và index truy vấn tồn tại thật trước traffic.",
+      "actualBehavior": "Lượt này không kết nối DB; không có bằng chứng để xác nhận hiện diện hoặc thiếu. Cơ chế explicit migration đã có.",
+      "impact": "Nếu điều kiện xảy ra, unique không được cưỡng chế hoặc worker/query chậm.",
+      "recommendation": "Giữ audit/apply có xác nhận tên DB; không drop conflict/syncIndexes rộng hoặc sửa dữ liệu trùng tự động. Đây là nghiệm thu môi trường, không đề nghị thêm migration startup.",
+      "verificationMethod": "Static config/model/tool, production chưa truy cập; không phải lỗi đã xác nhận."
+    },
+    {
+      "id": "R02-004",
+      "title": "Proxy và hạn mức nhiều instance vẫn cần bằng chứng runtime",
+      "severity": "P2",
+      "verificationStatus": "risk",
+      "module": "Proxy and rate-limit acceptance",
+      "layer": "Deployment",
+      "evidence": [
+        {
+          "file": "BE/src/app.ts",
+          "line": 28,
+          "symbol": "trust proxy",
+          "description": "Đã gắn explicit trustedProxyAddresses, mặc định fail-closed."
+        },
+        {
+          "file": "BE/src/utils/trusted-proxy.ts",
+          "line": null,
+          "symbol": "trustedProxyAddresses",
+          "description": "Chỉ IP/CIDR tường minh; reject blanket trust."
+        },
+        {
+          "file": "BE/src/middlewares/auth-rate-limit.middleware.ts",
+          "line": 11,
+          "symbol": "createAuthRateLimit",
+          "description": "Map riêng từng process."
+        },
+        {
+          "file": "BE/src/routes/v1/users.route.ts",
+          "line": 22,
+          "symbol": "ownershipAccountLimit/ownershipIpLimit",
+          "description": "Có giới hạn actor/IP trước password verification, sau authentication/permission."
+        }
+      ],
+      "preconditions": [
+        "Hosting sau proxy có forwarded headers hoặc có nhiều API instance."
+      ],
+      "reproductionSteps": [
+        "Kiểm peer topology và header sanitization tại staging.",
+        "Hai client thử login/guest checkout/transfer; kiểm req.ip an toàn và Retry-After.",
+        "Nếu nhiều instance, xác minh gateway/shared policy thay vì suy từ limiter RAM."
+      ],
+      "expectedBehavior": "Tin đúng proxy hạ tầng, gắn hạn mức đúng client và policy giữa instance.",
+      "actualBehavior": "Cấu hình và tests proxy mới đã có; chưa biết giá trị triển khai hoặc topology thật. Per-process là giới hạn được ghi rõ.",
+      "impact": "Nếu cấu hình không phù hợp có thể chung IP hạn mức hoặc tổng hạn mức tăng theo số instance.",
+      "recommendation": "Nghiệm thu TRUST_PROXY_CIDRS và số instance trên staging. Chỉ thêm gateway/shared limiter khi cần; không mặc định thêm Redis.",
+      "verificationMethod": "Source + tests proxy/ownership mặc định đạt; hosting/browser chưa thử."
+    }
+  ],
+  "featureMatrix": [
+    {
+      "id": "M-001",
+      "module": "Dashboard",
+      "fe": "API statistics/recent/low stock; Staff PersonalSales.",
+      "be": "GET products/statistics, orders, orders/personal-sales.",
+      "database": "Product counts; Completed Orders theo actor.",
+      "integration": "products/orders query và invalidation.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "FE/src/pages/admin/dashboard/page.tsx",
+          "line": null,
+          "symbol": "DashboardPage",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-002",
+      "module": "Brands",
+      "fe": "Admin CRUD, Staff đọc; tìm trên list đã tải.",
+      "be": "/brands CRUD protected; /brands/public projection.",
+      "database": "Brand, chặn xóa khi Product tham chiếu.",
+      "integration": "Method/service khớp; invalidate catalog.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/brands.service.ts",
+          "line": null,
+          "symbol": "BrandService",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-003",
+      "module": "Categories",
+      "fe": "CRUD/cây/departments menu.",
+      "be": "/categories; parent/cycle/reference checks.",
+      "database": "Categories có icon/parent/active.",
+      "integration": "Icon dùng category/hero fallback, không mặc định upload.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/models/categories.model.ts",
+          "line": null,
+          "symbol": "Categories",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-004",
+      "module": "Products & variants",
+      "fe": "CRUD/detail/gallery/variant; inventory editor riêng.",
+      "be": "POST/PUT/DELETE products; PATCH inventory; public catalog.",
+      "database": "Embedded variants, unique SKU/slug khai báo, optimistic concurrency.",
+      "integration": "Metadata/inventory tách; public Product shape khác legacy DTO.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Pagination cũ đã xử lý; index/runtime còn R02-003."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/order-reservation.service.ts",
+          "line": null,
+          "symbol": "reserveOrderItems",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-005",
+      "module": "Orders",
+      "fe": "Start/assign/status/dates/note; customer history/cancel.",
+      "be": "1→2/3, 2→3/4; max 5 open; scope handler.",
+      "database": "Snapshots; conditional update/stock restore.",
+      "integration": "expectedOrderNote, cancellationReason; ownership từ session.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Stable sort đã sửa; guest expiry mới cần integration phiên bản mới."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/orders.services.ts",
+          "line": null,
+          "symbol": "updateOrderStatus",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-006",
+      "module": "Users",
+      "fe": "List/create/reset/revoke/transfer guards.",
+      "be": "Target role scope, last admin và owner protection.",
+      "database": "User độc lập Customer; public projection bỏ secrets.",
+      "integration": "Kiểm quyền ở server, không chỉ ẩn nút.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/users.service.ts",
+          "line": null,
+          "symbol": "UserService",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-007",
+      "module": "Profile",
+      "fe": "Profile/password/address forms.",
+      "be": "Admin /auth/me multipart; Customer /customer-auth/me JSON.",
+      "database": "Avatar Admin data URI, shippingAddress embedded.",
+      "integration": "Không ghi đè snapshot đơn; validation từng lớp.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/profile.service.ts",
+          "line": null,
+          "symbol": "updateProfile",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-008",
+      "module": "Customers / membership",
+      "fe": "Đăng ký/login/profile; Admin danh sách khách tự đăng ký.",
+      "be": "Customer auth độc lập User; Admin không tạo Customer.",
+      "database": "customers riêng; không link qua email/phone.",
+      "integration": "Cookie/marker/token accountType riêng.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/middlewares/customer-auth.middleware.ts",
+          "line": null,
+          "symbol": "authenticateCustomer",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-009",
+      "module": "Cart",
+      "fe": "Zustand/storage/journal theo identity.",
+      "be": "Không server cart; giá/kho kiểm ở checkout.",
+      "database": "Không cart MongoDB theo phạm vi.",
+      "integration": "SessionVersion chặn đáp ứng cũ đổi giỏ khác.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "FE/src/stores/cart.store.ts",
+          "line": null,
+          "symbol": "useCartStore",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-010",
+      "module": "Checkout COD",
+      "fe": "Form/pending request/recovery cùng payload.",
+      "be": "POST customer-auth/orders hoặc storefront/checkout.",
+      "database": "Order+reservation+receipt transaction; guest không tạo account.",
+      "integration": "expectedUnitPrice kiểm giá; tổng/snapshot server.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Pending storage đã fail-closed; guest có deadline 24h; cần test rollback/race trên replica set phiên bản mới."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/checkout.service.ts",
+          "line": null,
+          "symbol": "performCheckout",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-011",
+      "module": "Product reviews",
+      "fe": "Guest form, reviews/distribution/metrics.",
+      "be": "Public POST có strict schema/limiter.",
+      "database": "ProductReview có source, contact select:false.",
+      "integration": "Không gắn verified purchase giả.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/product-reviews.service.ts",
+          "line": null,
+          "symbol": "saveReview",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-012",
+      "module": "Hero / homepage",
+      "fe": "API hero; Home/New/Featured, Best Seller/news.",
+      "be": "Public slides và Admin CRUD expectedVersion.",
+      "database": "Hero-category; Product flags thủ công.",
+      "integration": "Invalidation/catalog sync; không fake sales ranking.",
+      "status": "implemented",
+      "remainingIssues": [
+        "Triển khai có trong source; chưa nghiệm thu end-to-end/browser trong lượt này."
+      ],
+      "evidence": [
+        {
+          "file": "FE/src/features/hero-slides/hooks/use-hero-slides.ts",
+          "line": null,
+          "symbol": "Hero queries/mutations",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-013",
+      "module": "News / Blog",
+      "fe": "Admin/editor/category và public list/detail plain text.",
+      "be": "ArticleManage, scheduling/due visibility, versioned CRUD.",
+      "database": "posts/categories_post; rename tăng post version.",
+      "integration": "/articles URL giữ ổn định dù đổi collection.",
+      "status": "partial",
+      "remainingIssues": [
+        "View/SEO/summary/search cũ đã nối; hai mất draft mới R02-001/002."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/articles.service.ts",
+          "line": null,
+          "symbol": "listPublicArticles",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-014",
+      "module": "Contact / newsletter",
+      "fe": "Preview rõ; newsletter disabled.",
+      "be": "Chưa thấy API gửi/lưu trong route khảo sát.",
+      "database": "Chưa thấy contact/subscription model.",
+      "integration": "Không giả gửi thành công.",
+      "status": "partial",
+      "remainingIssues": [
+        "Preview được ghi rõ; API gửi thật vẫn không thuộc lõi COD nếu chưa có yêu cầu."
+      ],
+      "evidence": [
+        {
+          "file": "FE/src/layout/storefront/store-footer.tsx",
+          "line": null,
+          "symbol": "StoreFooter",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-015",
+      "module": "Online payment / vouchers",
+      "fe": "COD duy nhất.",
+      "be": "paymentMethod literal cod; chưa thấy payment webhook.",
+      "database": "Chưa thấy payment/voucher lifecycle.",
+      "integration": "OrderStatus không chứng minh đã thu tiền.",
+      "status": "not_found",
+      "remainingIssues": [
+        "Chưa tìm thấy triển khai, vẫn là mở rộng; không coi là lỗi COD."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/validations/checkout.validation.ts",
+          "line": null,
+          "symbol": "checkoutSchema",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M-016",
+      "module": "Deployment",
+      "fe": "VITE_API_BASE_URL; SPA rewrite.",
+      "be": "Render build/start pnpm; CORS/cookie config.",
+      "database": "Topology check; index migration explicit.",
+      "integration": "Config không chứng minh runtime; domain/cookie phải thử.",
+      "status": "unverified",
+      "remainingIssues": [
+        "R02-003 index thực và R02-004 proxy/multi-instance chưa nghiệm thu."
+      ],
+      "evidence": [
+        {
+          "file": "FE/vercel.json",
+          "line": null,
+          "symbol": "rewrites",
+          "description": "Điểm vào module đã đối chiếu; không chứng nhận mọi nhánh hoặc runtime."
+        }
+      ]
+    },
+    {
+      "id": "M02-GUEST",
+      "module": "Guest reservation 24h",
+      "fe": "Chính sách 24h hiển thị trước gửi và sau xác nhận; expired receipt 409 giữ cart.",
+      "be": "Worker mỗi phút batch20, conditional expire/restore/receipt; acceptance chặn overdue trước worker.",
+      "database": "reservationExpiresAt/ExpiredAt/RetryAt; receipt giữ marker sau xóa đơn; index thường khai báo.",
+      "integration": "Server start/stop worker; CHECKOUT_RESERVATION_EXPIRED allowlist về FE.",
+      "status": "unverified",
+      "remainingIssues": [
+        "Đã đọc code và integration cases, chưa chạy DB/worker thật trong lượt này.",
+        "Không tự backfill hoặc expire guest lịch sử thiếu deadline."
+      ],
+      "evidence": [
+        {
+          "file": "BE/src/services/guest-reservation.service.ts",
+          "line": null,
+          "symbol": "expireGuestReservation/processGuestReservationBatch",
+          "description": "Transition, restore và receipt trong relations transaction."
+        }
+      ]
+    }
+  ],
+  "missingFeatures": [
+    {
+      "id": "D02-001",
+      "title": "Giữ draft Article trước late response và category refetch error",
+      "priority": "core",
+      "currentState": "Hai lỗi R02-001/002 đã tái hiện, dù close/navigation guard đã có.",
+      "evidence": [
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 40,
+          "symbol": "edit",
+          "description": "Sau await getArticle luôn setEditing, không generation token/abort hoặc đối chiếu editor hiện tại."
+        },
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 42,
+          "symbol": "Thêm bài viết",
+          "description": "Nút Thêm vẫn enabled khi loadingEditor; có thể mở editor mới trong lúc request Sửa chờ."
+        },
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 54,
+          "symbol": "ArticleEditorDialog key",
+          "description": "Thay editing đổi key, unmount editor dirty; guard chỉ xử lý close/navigation, không chặn setEditing này."
+        },
+        {
+          "file": "BE/docs/reviews/review-probes-2026-10-31-02.test.tsx",
+          "line": 33,
+          "symbol": "late edit response probe",
+          "description": "Probe đã chạy trên component thật, xác nhận draft mới bị thay bằng Stored article fixture."
+        },
+        {
+          "file": "FE/src/pages/admin/articles.tsx",
+          "line": 55,
+          "symbol": "categories render branch",
+          "description": "categories.isError được ưu tiên trước ArticleForm, kể cả đang có dữ liệu cached/draft."
+        },
+        {
+          "file": "FE/src/features/articles/components/article-form.tsx",
+          "line": 23,
+          "symbol": "initial/draft state",
+          "description": "Form giữ draft local; sau unmount/mount lại sẽ khởi tạo từ article hoặc giá trị trống."
+        },
+        {
+          "file": "FE/src/features/articles/hooks/use-articles.ts",
+          "line": 5,
+          "symbol": "usePostCategories",
+          "description": "Query có thể refetch khi focus/reconnect/mutation invalidation."
+        },
+        {
+          "file": "BE/docs/reviews/review-probes-2026-10-31-02.test.tsx",
+          "line": 47,
+          "symbol": "auxiliary category error probe",
+          "description": "Probe chuyển query sang isError trong lúc dirty, rồi hồi phục; input bị reset về rỗng."
+        }
+      ],
+      "rationale": "Ổn định khi demo ngoài happy path.",
+      "minimumScope": "Chặn stale edit response và giữ form mounted qua lỗi query phụ; không cần autosave phức tạp.",
+      "affectedLayers": [
+        "FE"
+      ],
+      "difficulty": "medium",
+      "estimatedEffort": "0,5–1,5 ngày gồm regression interleaving",
+      "assumptions": [
+        "Một người quen code, 6 giờ/ngày, gồm regression test."
+      ],
+      "dependencies": [
+        "Chốt UX giữ draft khi history đổi."
+      ],
+      "acceptanceCriteria": [
+        "Response Sửa cũ không thay editor mới.",
+        "Category refetch lỗi/phục hồi giữ từng field và expectedVersion.",
+        "Sau sửa, đổi probe thành regression kỳ vọng giữ draft."
+      ]
+    },
+    {
+      "id": "D02-002",
+      "title": "Nghiệm thu index/proxy và worker mới",
+      "priority": "core",
+      "currentState": "Có code/tool/tests; runtime chưa được kiểm lượt này.",
+      "evidence": [
+        {
+          "file": "BE/src/config/database.ts",
+          "line": 16,
+          "symbol": "connectDatabase",
+          "description": "Production vẫn autoIndex=false."
+        },
+        {
+          "file": "BE/src/server.ts",
+          "line": 26,
+          "symbol": "startServer",
+          "description": "Khởi tạo index receipt/editorial, không tự migrate toàn bộ core."
+        },
+        {
+          "file": "BE/src/models/orders.model.ts",
+          "line": 63,
+          "symbol": "guest expiration index",
+          "description": "Có index thường cho truy vấn guest/orderStatus/reservationExpiresAt."
+        },
+        {
+          "file": "BE/scripts/ensure-core-indexes.mjs",
+          "line": null,
+          "symbol": "ensureCoreIndexes",
+          "description": "Công cụ dry-run/apply đã có, nhưng code tồn tại không chứng minh đã chạy production."
+        },
+        {
+          "file": "BE/src/app.ts",
+          "line": 28,
+          "symbol": "trust proxy",
+          "description": "Đã gắn explicit trustedProxyAddresses, mặc định fail-closed."
+        },
+        {
+          "file": "BE/src/utils/trusted-proxy.ts",
+          "line": null,
+          "symbol": "trustedProxyAddresses",
+          "description": "Chỉ IP/CIDR tường minh; reject blanket trust."
+        },
+        {
+          "file": "BE/src/middlewares/auth-rate-limit.middleware.ts",
+          "line": 11,
+          "symbol": "createAuthRateLimit",
+          "description": "Map riêng từng process."
+        },
+        {
+          "file": "BE/src/routes/v1/users.route.ts",
+          "line": 22,
+          "symbol": "ownershipAccountLimit/ownershipIpLimit",
+          "description": "Có giới hạn actor/IP trước password verification, sau authentication/permission."
+        }
+      ],
+      "rationale": "Tránh lỗi môi trường khi demo.",
+      "minimumScope": "Audit read-only và staging có quyền; integration DB test riêng cho expiry/pending/cancel; không production migration tự động.",
+      "affectedLayers": [
+        "BE",
+        "FE",
+        "DB",
+        "Deployment"
+      ],
+      "difficulty": "medium",
+      "estimatedEffort": "1–2 ngày",
+      "assumptions": [
+        "Có staging/quyền; không tính chờ phê duyệt."
+      ],
+      "dependencies": [
+        "Chủ môi trường cấp quyền và chốt version."
+      ],
+      "acceptanceCriteria": [
+        "Index core và expiry-query index được xác nhận thật.",
+        "Proxy/header và limiter đúng topology.",
+        "Expiry vs accept/cancel không hoàn hai lần; lỗi restore rollback."
+      ]
+    },
+    {
+      "id": "D02-003",
+      "title": "Khôi phục mật khẩu Customer nếu phạm vi yêu cầu",
+      "priority": "recommended",
+      "currentState": "Chưa thấy forgot/reset Customer; Admin recovery hướng dẫn liên hệ.",
+      "evidence": [
+        {
+          "file": "BE/src/routes/v1/customer-auth.route.ts",
+          "line": null,
+          "symbol": "customer-auth routes",
+          "description": "Không thấy public forgot/reset trong route đã đọc."
+        }
+      ],
+      "rationale": "Giúp khách quay lại; không bắt buộc demo COD.",
+      "minimumScope": "Reset token hash/ngắn hạn/một lần; kênh gửi thật, không lộ email tồn tại.",
+      "affectedLayers": [
+        "BE",
+        "FE",
+        "DB"
+      ],
+      "difficulty": "medium",
+      "estimatedEffort": "2–4 ngày",
+      "assumptions": [
+        "Có kênh gửi test, không tài khoản thật."
+      ],
+      "dependencies": [
+        "Kênh gửi và rate limit được chốt."
+      ],
+      "acceptanceCriteria": [
+        "Hết hạn/reuse bị từ chối.",
+        "Đổi mật khẩu revoke session; response không enumerate email."
+      ]
+    },
+    {
+      "id": "D02-004",
+      "title": "Contact thật khi rubric yêu cầu hỗ trợ",
+      "priority": "recommended",
+      "currentState": "Form hiện chỉ preview/validate, không API gửi.",
+      "evidence": [
+        {
+          "file": "FE/src/pages/storefront/contact/index.tsx",
+          "line": null,
+          "symbol": "handleSubmit",
+          "description": "Kiểm tra local và thông báo chưa khả dụng."
+        }
+      ],
+      "rationale": "Không coi preview có nhãn là lỗi; chỉ mở rộng nếu cần.",
+      "minimumScope": "POST strict+limiter, lưu yêu cầu và list Admin tối thiểu.",
+      "affectedLayers": [
+        "BE",
+        "FE",
+        "DB"
+      ],
+      "difficulty": "medium",
+      "estimatedEffort": "1,5–3 ngày",
+      "assumptions": [
+        "Không email automation/SLA/ticket workflow."
+      ],
+      "dependencies": [
+        "Chốt scope và quyền đọc."
+      ],
+      "acceptanceCriteria": [
+        "Gửi hợp lệ tạo record test.",
+        "Guest/Staff không đọc list nội bộ; lỗi giữ draft."
+      ]
+    },
+    {
+      "id": "D02-005",
+      "title": "Online payment / refund",
+      "priority": "later",
+      "currentState": "Checkout chỉ COD.",
+      "evidence": [
+        {
+          "file": "BE/src/models/orders.model.ts",
+          "line": null,
+          "symbol": "paymentType",
+          "description": "COD là phương thức, không vòng đời thanh toán online."
+        }
+      ],
+      "rationale": "Chỉ làm sau lõi ổn; không bắt buộc.",
+      "minimumScope": "Một cổng sandbox, payment record, signature verify, idempotent webhook.",
+      "affectedLayers": [
+        "BE",
+        "FE",
+        "DB"
+      ],
+      "difficulty": "high",
+      "estimatedEffort": "5–8 ngày",
+      "assumptions": [
+        "Sandbox sẵn, không tiền thật."
+      ],
+      "dependencies": [
+        "Chốt payment/order state riêng."
+      ],
+      "acceptanceCriteria": [
+        "Webhook lặp/đảo thứ tự không thu/hoàn hai lần.",
+        "Redirect FE không tự xác nhận đã trả tiền."
+      ]
+    },
+    {
+      "id": "D02-006",
+      "title": "Voucher hoặc nhiều địa chỉ",
+      "priority": "later",
+      "currentState": "Chưa thấy voucher; Customer có một shippingAddress.",
+      "evidence": [
+        {
+          "file": "BE/src/models/customers.model.ts",
+          "line": null,
+          "symbol": "shippingAddress",
+          "description": "Một object địa chỉ embedded hiện tại."
+        }
+      ],
+      "rationale": "Tăng tiện ích sau nghiệm thu, không bắt buộc mọi tính năng e-commerce.",
+      "minimumScope": "Làm từng tính năng: một discount server-side hoặc address list owner-scoped.",
+      "affectedLayers": [
+        "BE",
+        "FE",
+        "DB"
+      ],
+      "difficulty": "medium",
+      "estimatedEffort": "Voucher 3–5 ngày; địa chỉ 2–3 ngày",
+      "assumptions": [
+        "Một người quen code; không làm đồng thời gần bảo vệ."
+      ],
+      "dependencies": [
+        "Luật cộng dồn/lượt dùng hoặc mặc định địa chỉ rõ."
+      ],
+      "acceptanceCriteria": [
+        "Voucher không vượt lượt khi đồng thời.",
+        "Địa chỉ không truy cập chéo, không đổi snapshot đơn cũ."
+      ]
+    }
+  ],
+  "actionPlan": [
+    {
+      "id": "A02-001",
+      "title": "Sửa hai đường unmount/replace Article editor",
+      "priority": "P2",
+      "timing": "Trước demo · 0,5–1,5 ngày",
+      "dependsOn": [],
+      "scope": [
+        "R02-001/002, giữ nguyên contract/backend."
+      ],
+      "deliverables": [
+        "Request generation/cancel và form mounted độc lập trạng thái refetch."
+      ],
+      "acceptanceCriteria": [
+        "Giữ draft trong hai kịch bản probe; close/navigation/save/conflict cũ vẫn đúng."
+      ]
+    },
+    {
+      "id": "A02-002",
+      "title": "Nghiệm thu index và proxy môi trường demo",
+      "priority": "P1",
+      "timing": "Trước traffic/demo · 0,5–1 ngày, tùy quyền",
+      "dependsOn": [],
+      "scope": [
+        "R02-003/004, audit read-only trước."
+      ],
+      "deliverables": [
+        "Biên bản index/key/options và trusted peer/header topology."
+      ],
+      "acceptanceCriteria": [
+        "Không suy DB từ model; không apply production chưa duyệt."
+      ]
+    },
+    {
+      "id": "A02-003",
+      "title": "Chạy integration DB riêng cho logic reservation mới",
+      "priority": "P2",
+      "timing": "Sau chốt source · 0,5–1 ngày",
+      "dependsOn": [
+        "A02-001"
+      ],
+      "scope": [
+        "Expiry24h, accept/cancel/worker đồng thời, rollback/receipt/backoff."
+      ],
+      "deliverables": [
+        "Kết quả integration phiên bản hiện tại, không tái sử dụng số test cũ."
+      ],
+      "acceptanceCriteria": [
+        "Hoàn tồn đúng một lần, không expire đơn đã nhận/Customer/legacy, replay expired không tạo đơn."
+      ]
+    },
+    {
+      "id": "A02-004",
+      "title": "Smoke test browser/staging theo checklist",
+      "priority": "P2",
+      "timing": "Trước bảo vệ · 0,5–1 ngày",
+      "dependsOn": [
+        "A02-001",
+        "A02-002",
+        "A02-003"
+      ],
+      "scope": [
+        "Cookie/F5/mobile/keyboard/mạng lỗi và pending storage."
+      ],
+      "deliverables": [
+        "Kết quả manual có mong đợi và evidence."
+      ],
+      "acceptanceCriteria": [
+        "Không khẳng định visual hoặc E2E chỉ từ jsdom/build."
+      ]
+    },
+    {
+      "id": "A02-005",
+      "title": "Chốt working tree thành phiên bản demo có thể tái tạo",
+      "priority": "P3",
+      "timing": "Sau nghiệm thu · 0,5 ngày",
+      "dependsOn": [
+        "A02-004"
+      ],
+      "scope": [
+        "Hai repo, dependencies/scripts, cấu hình không secret."
+      ],
+      "deliverables": [
+        "Commit/snapshot do người dùng quyết định và biên bản còn giới hạn."
+      ],
+      "acceptanceCriteria": [
+        "Phân biệt HEAD với dirty source; không tự commit changes có sẵn."
+      ]
+    }
+  ],
+  "manualTests": [
+    {
+      "id": "T-001",
+      "actor": "Guest",
+      "scenario": "Catalog/filter nhiều lựa chọn",
+      "steps": [
+        "Chọn nhiều brand/category, sort; Back/Forward."
+      ],
+      "expectedBehavior": "OR trong nhóm, AND giữa nhóm; sort trước pagination; URL/state đúng.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-002",
+      "actor": "Guest",
+      "scenario": "Filter draft count và hủy",
+      "steps": [
+        "Đổi draft, đợi count, hủy, mở lại, áp 0 kết quả."
+      ],
+      "expectedBehavior": "Hủy không apply; server total đúng; loading/error không cho confirm; 0 hợp lệ.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-003",
+      "actor": "Guest",
+      "scenario": "Availability",
+      "steps": [
+        "Thử inactive/stopped/stock0 và brand/category inactive."
+      ],
+      "expectedBehavior": "Inactive ẩn; stopped/hết kho xem được nhưng order bị chặn cả server.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-004",
+      "actor": "Customer",
+      "scenario": "Register/injection",
+      "steps": [
+        "Dữ liệu giả hợp lệ; thêm role/accountEnabled."
+      ],
+      "expectedBehavior": "Một Customer không User; field lạ 400, duplicate email 409.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-005",
+      "actor": "Admin/Customer",
+      "scenario": "Cùng email, phiên độc lập",
+      "steps": [
+        "Login hai khu vực, thử token chéo."
+      ],
+      "expectedBehavior": "Tách collection/cookie/marker; không truy cập chéo accountType.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-006",
+      "actor": "Customer",
+      "scenario": "Refresh conflict/reuse",
+      "steps": [
+        "Hai refresh tranh nhau, dùng token cũ."
+      ],
+      "expectedBehavior": "409 retry một lần bằng cookie mới; revoked/reused 401.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-007",
+      "actor": "Customer",
+      "scenario": "Bootstrap mạng lỗi/logout",
+      "steps": [
+        "F5 có cookie; 503/network/429; phục hồi; logout rồi dùng access cũ."
+      ],
+      "expectedBehavior": "Lỗi tạm giữ retry; logout revoke; token cũ bị từ chối.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-008",
+      "actor": "Guest/Customer",
+      "scenario": "Variant qua refetch",
+      "steps": [
+        "Chọn variant; variant bị xóa; refetch."
+      ],
+      "expectedBehavior": "Còn thì giữ; mất thì chọn lại, không fallback sai giá.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-009",
+      "actor": "Guest/Customer",
+      "scenario": "Giỏ đa tab/danh tính",
+      "steps": [
+        "Đổi quantity/variant hai tab; đổi account/logout."
+      ],
+      "expectedBehavior": "Không trộn giỏ; journal không mất cập nhật, scope đúng.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-010",
+      "actor": "Guest/Customer",
+      "scenario": "Storage unavailable",
+      "steps": [
+        "Chặn storage; sửa giỏ; thử checkout."
+      ],
+      "expectedBehavior": "Không crash; không POST nếu không lưu được pending mới; giới hạn recovery rõ.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-011",
+      "actor": "Customer",
+      "scenario": "Checkout COD chọn một phần giỏ",
+      "steps": [
+        "Đặt các dòng đã chọn, dữ liệu nhận đúng."
+      ],
+      "expectedBehavior": "Một Pending/COD; tổng server/snapshot đúng; chỉ consume lượng mua.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-012",
+      "actor": "Guest",
+      "scenario": "Guest checkout",
+      "steps": [
+        "Đặt COD rồi login."
+      ],
+      "expectedBehavior": "Có mã cần lưu, không tạo/link Customer, không đưa vào account history.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-013",
+      "actor": "Guest/Customer",
+      "scenario": "Giá cũ/payload giả",
+      "steps": [
+        "Gửi giá cũ, total/customerId giả, quantity âm/item trùng."
+      ],
+      "expectedBehavior": "Giá cũ 409; field/quantity/item sai 400; không tạo/reserve.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-014",
+      "actor": "Hai người mua",
+      "scenario": "Tranh kho cuối",
+      "steps": [
+        "Chỉ trên DB test được phép: stock1, hai checkout."
+      ],
+      "expectedBehavior": "Một thắng; stock không âm; transaction không dang dở; không làm trên production.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-015",
+      "actor": "Customer",
+      "scenario": "Mất response/replay",
+      "steps": [
+        "Ngắt response sau commit, reload và phục hồi."
+      ],
+      "expectedBehavior": "Cùng requestId/body, không reserve/create/consume hai lần.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-016",
+      "actor": "Customer/Staff",
+      "scenario": "Cancel vs Start",
+      "steps": [
+        "Hủy Pending cùng lúc nhận đơn, sau đó hủy lại."
+      ],
+      "expectedBehavior": "Một transition thắng; hoàn kho một lần, trạng thái không mâu thuẫn.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-017",
+      "actor": "Customer",
+      "scenario": "Order khác chủ",
+      "steps": [
+        "A dùng ID đơn B hủy và thêm identity/status giả."
+      ],
+      "expectedBehavior": "404/validation; không sửa đơn B; lý do bắt buộc.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-018",
+      "actor": "Staff",
+      "scenario": "Quyền và capacity",
+      "steps": [
+        "Sửa giá/xóa catalog/manage users/articles; nhận đơn thứ6."
+      ],
+      "expectedBehavior": "403 server; thứ6 conflict, chỉ ghi đơn được giao.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-019",
+      "actor": "Hai Staff",
+      "scenario": "Claim/note conflict",
+      "steps": [
+        "Claim chung đơn; note cùng baseline."
+      ],
+      "expectedBehavior": "Một claim; note thua 409 ORDER_NOTE_CONFLICT, draft/baseline giữ.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-020",
+      "actor": "Admin/Staff",
+      "scenario": "Inventory version",
+      "steps": [
+        "Hai tab cùng __v; save A rồi B; chèn price."
+      ],
+      "expectedBehavior": "Stale409 giữ input, không nâng version tự động; price bị từ chối.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-021",
+      "actor": "Admin",
+      "scenario": "Xóa cuối trang",
+      "steps": [
+        "11 bài limit10, page2 xóa cuối; lặp với product không Order."
+      ],
+      "expectedBehavior": "Về trang hợp lệ; không Trang2/1. Bản sửa hiện tại phải giữ page hợp lệ.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-022",
+      "actor": "Admin",
+      "scenario": "Draft category/article",
+      "steps": [
+        "Đổi input rồi đóng/Escape, chọn ở lại/bỏ."
+      ],
+      "expectedBehavior": "Confirm dirty, ở lại giữ input, guard riêng; category guard hiện đã có và cần kiểm hồi quy.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-023",
+      "actor": "Admin/Reader",
+      "scenario": "Search URL",
+      "steps": [
+        "Search A; history B; chuyển news/blog."
+      ],
+      "expectedBehavior": "Input/query áp dụng đúng; không giữ query đã bị xóa.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-024",
+      "actor": "Admin",
+      "scenario": "Reference/cycle",
+      "steps": [
+        "Xóa brand/category có Product, Product có Order; parent tạo vòng."
+      ],
+      "expectedBehavior": "Chặn conflict/validation; không orphan hoặc xóa lịch sử để xóa catalog.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-025",
+      "actor": "Super Admin",
+      "scenario": "Transfer ownership",
+      "steps": [
+        "Password sai/target inactive-temp; sau đó hợp lệ."
+      ],
+      "expectedBehavior": "Sai không đổi DB; đúng đổi cả hai role/revoke atomically.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-026",
+      "actor": "Admin",
+      "scenario": "Upload/cleanup",
+      "steps": [
+        "Ảnh hợp lệ/MIME giả/>5MB/ảnh thứ9; xóa ảnh variant dùng."
+      ],
+      "expectedBehavior": "Validation rõ; cap8; reference guard; cleanup giữ retry khi provider lỗi.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-027",
+      "actor": "Admin/Reader",
+      "scenario": "Publication/version",
+      "steps": [
+        "Draft/scheduled/published/archived; rename category; stale edit."
+      ],
+      "expectedBehavior": "Public đúng due/active; conflict giữ draft; title-only giữ slug.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-028",
+      "actor": "Reader",
+      "scenario": "Bài dài/XSS",
+      "steps": [
+        "Unicode hợp budget; article plain text script; mô tả HTML độc hại."
+      ],
+      "expectedBehavior": "Budget đúng; article text; description sanitizer; không thực thi mã.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-029",
+      "actor": "Reader",
+      "scenario": "View/SEO",
+      "steps": [
+        "Mở A→B, xem network/head."
+      ],
+      "expectedBehavior": "Chỉ ghi đạt nếu đã nối thật; không suy ra từ schema.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-030",
+      "actor": "Guest",
+      "scenario": "Footer/contact/newsletter",
+      "steps": [
+        "Bấm link; đọc preview; thử newsletter."
+      ],
+      "expectedBehavior": "Route thật; contact chỉ kiểm thông tin; newsletter disabled; không giả gửi.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-031",
+      "actor": "Staging",
+      "scenario": "Deep links/cookie/IP",
+      "steps": [
+        "F5 URL store/admin/account; origin lạ/cookie blocked; hai client."
+      ],
+      "expectedBehavior": "SPA guard/rewrite đúng; cookie flags và chẩn đoán an toàn; IP limiter đúng.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-032",
+      "actor": "Tester",
+      "scenario": "Visual/accessibility",
+      "steps": [
+        "360px/desktop/zoom200%, Tab/Enter/Escape, ảnh lỗi, API empty/error."
+      ],
+      "expectedBehavior": "Không tràn nặng, focus/label rõ, loading/empty/retry dễ hiểu.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-33",
+      "actor": "Admin",
+      "scenario": "Late edit response khi đang tạo mới",
+      "steps": [
+        "Bấm Sửa, giữ request pending.",
+        "Bấm Thêm và nhập draft.",
+        "Cho response Sửa cũ về."
+      ],
+      "expectedBehavior": "Không đổi editor/draft hiện tại; không bypass dirty guard. Probe hiện tái hiện ngược kỳ vọng.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-34",
+      "actor": "Admin",
+      "scenario": "Category refetch error trong lúc soạn",
+      "steps": [
+        "Mở bài, nhập draft.",
+        "Cho query danh mục lỗi rồi phục hồi."
+      ],
+      "expectedBehavior": "Form không unmount và không reset draft/version. Probe hiện tái hiện lỗi.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-35",
+      "actor": "Worker/Staff",
+      "scenario": "Expiry guest vs accept/cancel",
+      "steps": [
+        "Chỉ DB test riêng: guest overdue24h, chạy worker và accept/cancel đồng thời."
+      ],
+      "expectedBehavior": "Một transition thắng; hoàn tồn đúng một lần; acceptance không nhận overdue chưa handler.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-36",
+      "actor": "Worker",
+      "scenario": "Loại trừ đơn không thuộc expiry",
+      "steps": [
+        "Guest đã nhận/Processing; Customer; guest lịch sử thiếu deadline."
+      ],
+      "expectedBehavior": "Không bị expiry worker thay đổi hoặc hoàn stock.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-37",
+      "actor": "Worker",
+      "scenario": "Expiry rollback/backoff/receipt",
+      "steps": [
+        "Thiếu variant/receipt rồi thử expire; chạy batch có một đơn lỗi và một đơn tốt.",
+        "Xóa đơn expired và replay request."
+      ],
+      "expectedBehavior": "Lỗi rollback status/kho/receipt; backoff không đói batch; replay expired409 không tạo/reserve lại.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-38",
+      "actor": "Super Admin",
+      "scenario": "Rate limit ownership theo actor và IP",
+      "steps": [
+        "Thử vượt 5/actor/15 phút và 20/IP, cả request unauthorized."
+      ],
+      "expectedBehavior": "Auth/permission trước limiter, passwordverify sau; 429/Retry-After đúng; nhiều instance cần shared policy.",
+      "status": "not_run"
+    },
+    {
+      "id": "T02-39",
+      "actor": "Guest/Customer",
+      "scenario": "Pending storage malformed/unavailable",
+      "steps": [
+        "Lưu request chưa rõ; làm storage unreadable hoặc hỏng JSON.",
+        "Retry storage; thử thay request khác và clear ID khác."
+      ],
+      "expectedBehavior": "Block request mới, giữ dữ liệu cũ, chỉ restore request gốc/clear matching; scope danh tính không trộn.",
+      "status": "not_run"
+    }
+  ],
+  "checks": [
+    {
+      "id": "K02-001",
+      "repository": "Backend",
+      "command": "pnpm.cmd typecheck",
+      "status": "passed",
+      "summary": "tsc --noEmit đạt.",
+      "scope": "Kiểm kiểu, không DB.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-002",
+      "repository": "Backend",
+      "command": "pnpm.cmd test",
+      "status": "passed",
+      "summary": "305 test đạt, 0 fail/skip.",
+      "scope": "Node test + tsc, nhiều mocks; không orders.integration.mjs.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-003",
+      "repository": "Frontend",
+      "command": "pnpm.cmd typecheck",
+      "status": "passed",
+      "summary": "Typecheck src/test đạt.",
+      "scope": "Không đảm bảo tất cả interleaving runtime.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-004",
+      "repository": "Frontend",
+      "command": "pnpm.cmd lint",
+      "status": "passed_with_warnings",
+      "summary": "0 error, 1 warning react-refresh/only-export-components tại route-fallback.tsx:6:17.",
+      "scope": "Cảnh báo có sẵn.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-005",
+      "repository": "Frontend",
+      "command": "pnpm.cmd test; pnpm.cmd test --reporter=dot",
+      "status": "passed",
+      "summary": "531 test / 71 file đạt. Chạy lại reporter dot để ghi nhận summary chính xác.",
+      "scope": "Bộ test mặc định chưa bao phủ hai lỗi editor mới.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-006",
+      "repository": "Frontend",
+      "command": "pnpm.cmd test:contracts",
+      "status": "passed",
+      "summary": "31 service requests hợp schema BE.",
+      "scope": "Không HTTP/DB hoặc mọi response.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-007",
+      "repository": "Frontend",
+      "command": "pnpm.cmd build",
+      "status": "passed",
+      "summary": "TypeScript/Vite build đạt, 4397 module transformed.",
+      "scope": "Không phải deployment acceptance.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-008",
+      "repository": "Review UI probes (chạy từ FE)",
+      "command": "pnpm.cmd exec vitest run --config ../project-final-197-BE/docs/reviews/review-probes-2026-10-31-02.config.mjs",
+      "status": "passed",
+      "summary": "2/2 probe đạt: đã tái hiện hai lỗi mất draft trên component thật.",
+      "scope": "Pass xác nhận hành vi lỗi đang tồn tại, không phải regression đã sửa; jsdom/mock services, không DB. Hai lần cấu hình đầu chưa chạy test (discovery/cache path), đã chỉnh report config và chạy thành công.",
+      "executedAt": "2026-10-31T17:33:00.645+07:00"
+    },
+    {
+      "id": "K02-009",
+      "repository": "Backend integration",
+      "command": "pnpm.cmd test:integration:local",
+      "status": "not_run",
+      "summary": "Không chạy trong lượt review chỉ đọc; không dùng số19 cũ để chứng nhận guest expiry mới.",
+      "scope": "Cần DB test riêng và nghiệm thu worker/rollback/concurrency.",
+      "executedAt": null
+    },
+    {
+      "id": "K02-010",
+      "repository": "Report kit",
+      "command": "pnpm.cmd exec node docs/reviews/verify-review-report.mjs --data docs/reviews/review-report-2026-10-31-02.json",
+      "status": "passed",
+      "summary": "55 assertions đạt: schema subset, ID/enum, chống ghi đè, JSON/XSS an toàn, thống kê và DOM filter/reset/details/print events, dữ liệu rỗng/dài.",
+      "scope": "Giữ template/schema/renderer 1.0.0; không visual browser.",
+      "executedAt": "2026-10-31T10:33:53.097Z"
+    }
+  ],
+  "topPriorities": [
+    {
+      "id": "P02-001",
+      "title": "Loại stale response khi mở editor bài viết.",
+      "rationale": "Đã tái hiện request Sửa cũ thay draft mới; cần request identity/cancel, không chỉ close guard.",
+      "findingIds": [
+        "R02-001"
+      ]
+    },
+    {
+      "id": "P02-002",
+      "title": "Giữ ArticleForm mounted qua lỗi query danh mục.",
+      "rationale": "Lỗi mạng phụ không được làm mất nội dung đang nhập; giữ draft/version và retry song song.",
+      "findingIds": [
+        "R02-002"
+      ]
+    },
+    {
+      "id": "P02-003",
+      "title": "Lưu bằng chứng index và proxy của môi trường demo.",
+      "rationale": "Có tool/config chưa đồng nghĩa production đã đúng; audit read-only, apply chỉ khi có phê duyệt.",
+      "findingIds": [
+        "R02-003",
+        "R02-004"
+      ]
+    },
+    {
+      "id": "P02-004",
+      "title": "Nghiệm thu transaction guest expiry và pending recovery phiên bản mới.",
+      "rationale": "Unit/build không chứng minh hoàn tồn/receipt đúng khi worker/accept/cancel đồng thời; cần replica set test riêng.",
+      "findingIds": []
+    },
+    {
+      "id": "P02-005",
+      "title": "Chạy smoke browser rồi chốt phiên bản hai repo.",
+      "rationale": "Thử F5/cookie/mạng lỗi/mobile/keyboard; ghi kết quả thật trước khi kết luận demo sẵn sàng.",
+      "findingIds": []
+    }
+  ]
+}

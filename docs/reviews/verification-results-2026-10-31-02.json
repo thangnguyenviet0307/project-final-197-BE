@@ -1,0 +1,46 @@
+{
+  "verifiedAt": "2026-10-31T10:34:28.037Z",
+  "templateVersion": "1.0.0",
+  "report": "review-report-2026-10-31-02.json",
+  "applicationChecks": {
+    "backendTests": 305,
+    "frontendTests": 531,
+    "frontendTestFiles": 71,
+    "contracts": 31,
+    "typechecks": "passed both",
+    "lint": "0 errors, 1 pre-existing warning",
+    "build": "passed"
+  },
+  "reviewProbes": {
+    "passed": 2,
+    "meaning": "Passing probes reproduce two current draft-loss defects, not fixed behavior",
+    "databaseOrNetworkUsed": false
+  },
+  "reportKit": {
+    "passed": true,
+    "assertions": 55,
+    "fixedTemplateOutputMatches": true,
+    "oldReportsAndTemplateUnchanged": true
+  },
+  "limitations": {
+    "visualBrowser": "not run",
+    "databaseIntegration": "not run in this review",
+    "productionIndexAndProxy": "unverified"
+  },
+  "counts": {
+    "confirmed": 2,
+    "risk": 2,
+    "P0": 0,
+    "P1": 1,
+    "P2": 3,
+    "P3": 0
+  },
+  "manualTests": 39,
+  "featureModules": 17,
+  "files": {
+    "review-report-2026-10-31-02.json": "e7bbb86289476b203e8967c6ae187c62acb43fb94d69490cb556439bec7d864b",
+    "review-report-2026-10-31-02.html": "df62973dde1142cdb582cda29a48acd8f4aa01af488dfce54b8b197a6f31c9f8",
+    "review-probes-2026-10-31-02.test.tsx": "5f38c898a423813d34e25c8a4c4ded37e765c7401e06e7a8eff88d65085e5b76",
+    "review-probes-2026-10-31-02.config.mjs": "5888ce4c8792fb9add68b56db0f05b1de2152be362fe0c536369f10479f28aeb"
+  }
+}

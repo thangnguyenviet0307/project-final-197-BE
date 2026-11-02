@@ -4,6 +4,15 @@ import { asyncHandler } from "../utils/async-handler.util.js";
 import { assertFound } from "../utils/assert-found.js";
 import { sendResponse } from "../helpers/response.helper.js";
 import { getStorefrontProduct, getStorefrontRecommendations } from "../services/storefront.service.js";
+import { aboutPageContent, faqPageContent } from "../services/storefront-content.service.js";
+
+export const getAboutPageContent: RequestHandler = (_req, res) => {
+  sendResponse(res, 200, { data: aboutPageContent });
+};
+
+export const getFAQPageContent: RequestHandler = (_req, res) => {
+  sendResponse(res, 200, { data: faqPageContent });
+};
 
 export const getProductBySlug: RequestHandler = asyncHandler(async (req, res) => {
   const product = await getStorefrontProduct(String(req.params["slug"]));

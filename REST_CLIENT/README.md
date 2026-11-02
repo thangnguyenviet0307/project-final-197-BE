@@ -32,6 +32,8 @@ Thứ tự thuận tiện: tạo brand → category → product → customer →
 
 `articles.http` cần một tài khoản Admin. Gửi request **Create draft article** để proxy tự lưu `ARTICLE_ID` và `ARTICLE_SLUG`; ID được dùng ở các request quản trị, còn slug dùng để kiểm tra endpoint public sau khi xuất bản. Sau mỗi lần cập nhật, lấy `__v` mới từ response/GET detail và cập nhật `expectedVersion` ở request tiếp theo; version cũ trả `409`. Bài nháp không xuất hiện công khai cho đến khi chuyển status sang `published`. Chỉ gửi request Delete cho bài test.
 
+`storefront-pages.http` chứa hai request công khai, chỉ đọc cho nội dung trang giới thiệu và FAQ. Không cần đăng nhập hoặc tạo dữ liệu trong database; xem hợp đồng tại [storefront-pages-api.md](../docs/storefront-pages-api.md).
+
 All HTTP files read IDs through `{{$dotenv BRAND_ID}}` and corresponding entries in `.env`. The proxy retains support for old placeholders. Keep variable references so new resources update their selected IDs automatically; parent categories use PARENT_CATEGORY_ID separately.
 
 Các bước update/delete và test lỗi phải được gửi riêng, theo trạng thái hiện tại. Đơn Completed không thể hủy; muốn test hoàn kho, tạo đơn mới rồi chuyển Rejected. Sản phẩm đã có đơn hàng không thể xóa. Chỉ chạy request xóa trên dữ liệu test của bạn; không dùng Send All Requests trên dữ liệu thật.

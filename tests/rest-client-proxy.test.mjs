@@ -239,7 +239,11 @@ test("all HTTP files use the local proxy and have parseable JSON bodies without 
     const source = await readFile(join("REST_CLIENT", file), "utf8");
     assert.match(source, /@baseUrl = http:\/\/127\.0\.0\.1:5001\/api\/v1/);
     assert.doesNotMatch(source, /Bearer eyJ/);
-    assert.match(source, /x-rest-client-auth: primary/);
+    if (/^@public = true$/m.test(source)) {
+      assert.doesNotMatch(source, /x-rest-client-auth:/i, `${file}: public requests should not send authentication`);
+    } else {
+      assert.match(source, /x-rest-client-auth: primary/);
+    }
     assert.doesNotMatch(source, /Authorization: Bearer \{\{(?:token|staffToken)\}\}/);
     for (const block of source.split(/^###.*$/m)) {
       if (block.includes("x-rest-client-auth: primary")) {

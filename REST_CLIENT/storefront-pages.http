@@ -1,0 +1,10 @@
+@baseUrl = http://127.0.0.1:5001/api/v1/storefront/pages
+@public = true
+
+### Nội dung trang giới thiệu công khai (không yêu cầu xác thực)
+GET {{baseUrl}}/about
+Accept: application/json
+
+### Nội dung trang FAQ công khai (không yêu cầu xác thực)
+GET {{baseUrl}}/faq
+Accept: application/json

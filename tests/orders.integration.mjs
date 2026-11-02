@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import argon2 from "argon2";
 import Product from "../dist/models/products.model.js";
 import { Order } from "../dist/models/orders.model.js";
+import { GuestContacts } from "../dist/models/guest-contacts.model.js";
 import { Customer } from "../dist/models/customers.model.js";
 import { BrandModel } from "../dist/models/brands.model.js";
 import { Categories } from "../dist/models/categories.model.js";
@@ -42,7 +43,7 @@ let category;
 before(async () => { try {
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 5000 });
   assert.equal(mongoose.connection.name, dbName);
-  await Promise.all([Product.init(), Order.init(), Customer.init(), BrandModel.init(), Categories.init(), SystemLock.init(), User.init(), CheckoutRequest.init()]);
+  await Promise.all([Product.init(), Order.init(), Customer.init(), GuestContacts.init(), BrandModel.init(), Categories.init(), SystemLock.init(), User.init(), CheckoutRequest.init()]);
   brand = await BrandModel.create({ name: 'Fixture brand', slug: 'fixture-brand' });
   category = await Categories.create({ name: 'Fixture category', slug: 'fixture-category' });
   customer = await Customer.create({ firstName: "Fixture", lastName: "Customer",
@@ -59,6 +60,7 @@ after(async () => {
     await Order.deleteMany({ customerId: { $in: fixtures.customers } });
     await CheckoutRequest.deleteMany({ $or: [{ customerId: { $in: fixtures.customers } }, { "result._id": { $in: fixtures.orders } }] });
     await Product.deleteMany({ _id: { $in: fixtures.products } });
+    await GuestContacts.deleteMany({ email: "guest-fixture@example.com" });
     await Customer.deleteMany({ _id: { $in: fixtures.customers } });
     await User.deleteMany({ _id: { $in: fixtures.users } });
     await Categories.deleteMany({ _id: { $in: fixtures.categories } });
@@ -210,12 +212,12 @@ test("stale editor cannot overwrite stock reserved after its preflight read", as
 });
 
 test("checkout concurrent retries reserve once and failed multi-line orders roll back", async t => {
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', districts: [{ code: 2, name: 'District', wards: [{ code: 3, name: 'Ward' }] }] }] }));
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }] }));
   const buyer = await Customer.create({ firstName: 'Checkout', lastName: 'Fixture', email: `checkout-${randomUUID()}@example.com`, accountEnabled: true });
   fixtures.customers.push(buyer._id);
   const first = await product(5);
   const second = await product(1);
-  const payload = { requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
+  const payload = { requestId: randomUUID(), email: "guest-fixture@example.com", recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
   const results = await Promise.all([checkout(String(buyer._id), 0, payload), checkout(String(buyer._id), 0, payload)]);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   assert.equal(results[0]._id, results[1]._id);
@@ -227,17 +229,21 @@ test("checkout concurrent retries reserve once and failed multi-line orders roll
 });
 
 test("guest concurrent retries reserve once without creating customers and failed orders roll back", async t => {
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', districts: [{ code: 2, name: 'District', wards: [{ code: 3, name: 'Ward' }] }] }] }));
+  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }] }));
   const customerCount = await Customer.countDocuments();
   const first = await product(5);
   const second = await product(1);
-  const payload = { requestId: randomUUID(), recipientName: 'Guest recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
+  const payload = { requestId: randomUUID(), email: "guest-fixture@example.com", recipientName: 'Guest recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
   const results = await Promise.all([checkout(null, 0, payload), checkout(null, 0, payload)]);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   assert.equal(results[0]._id, results[1]._id);
   const stored = await Order.findById(results[0]._id);
   assert.equal(stored.guestCheckout, true);
   assert.equal(stored.customerId, null);
+  const contact = await GuestContacts.findById(stored.contactCustomerId);
+  assert.equal(contact.email, payload.email);
+  assert.equal(contact.recipientName, payload.recipientName);
+  assert.equal(await GuestContacts.countDocuments({ email: payload.email }), 1);
   assert.equal(stored.recipientPhone, payload.phone);
   assert.equal((await Product.findById(first._id)).stock, 3);
   const failedRequest = randomUUID();
@@ -282,11 +288,11 @@ test("purchase snapshots survive product and variant metadata changes", async ()
 });
 
 function checkoutInput(entry, requestId = randomUUID()) {
-  return { requestId, recipientName: 'Recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3,
+  return { requestId, email: "guest-fixture@example.com", recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3,
     street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(entry), expectedUnitPrice: 25 }] };
 }
 function mockLocations(t) {
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify([{ code: 1, name: 'Province', districts: [{ code: 2, name: 'District', wards: [{ code: 3, name: 'Ward' }] }] }])));
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify([{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }])));
 }
 test('concurrent identical checkouts commit one order and reserve stock once, even after order deletion', async t => {
   mockLocations(t);

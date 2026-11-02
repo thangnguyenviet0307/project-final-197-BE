@@ -145,13 +145,24 @@ test("shipping address saves without phone or identity document and rejects extr
   const { customer } = await fixtures(t);
   const token = generateAccessToken({ id: String(customer._id), tokenVersion: 0, accountType: "customer" });
   const headers = { "Content-Type": "application/json", "X-Login-Area": "storefront", Authorization: `Bearer ${token}` };
-  const address = { recipientName: "Recipient", email: "recipient@example.com", province: "City", ward: "Ward", street: "123 Road", deliveryTime: "Morning" };
+  const networkFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', async (url, ...args) => {
+    if (String(url).startsWith('https://provinces.open-api.vn/')) {
+      assert.equal(String(url), 'https://provinces.open-api.vn/api/v2/?depth=2');
+      return new Response(JSON.stringify([{ code: 79, name: 'City', wards: [{ code: 4, name: 'Ward' }] }]));
+    }
+    return networkFetch(url, ...args);
+  });
+  const address = { addressVersion: 2, provinceCode: 79, wardCode: 4, district: "", recipientName: "Recipient", email: "recipient@example.com", province: "City", ward: "Ward", street: "123 Road", deliveryTime: "Morning" };
   for (const change of [{ province: "" }, { email: "bad" }, { phone: "0901234567" }, { identityNumber: "123" }, { customerId: String(customer._id) }]) {
     assert.equal((await fetch(base + "/customer-auth/shipping-address", { method: "PATCH", headers, body: JSON.stringify({ ...address, ...change }) })).status, 400);
   }
   const response = await fetch(base + "/customer-auth/shipping-address", { method: "PATCH", headers, body: JSON.stringify(address) });
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).data.shippingAddress, address);
+  const saved = (await response.json()).data;
+  assert.deepEqual(saved.shippingAddress, address);
+  assert.deepEqual(saved.address, { street: '123 Road', city: 'Ward', state: 'City' });
+  assert.equal((await fetch(base + '/customer-auth/shipping-address', { method: 'PATCH', headers, body: JSON.stringify({ ...address, wardCode: 999 }) })).status, 400);
 });
 
 test("customer orders enforce ownership, pagination, snapshots and response allowlist", async t => {

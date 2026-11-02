@@ -8,13 +8,27 @@ export interface IAddress {
 export interface ICustomer {
   birthDate?: string;
   gender?: "" | "male" | "female" | "other";
-  shippingAddress?: { recipientName: string; email: string; province: string; district?: string; ward: string; street: string; deliveryTime: string };
+  shippingAddress?: {
+    recipientName: string;
+    email: string;
+    province: string;
+    district?: string;
+    ward: string;
+    street: string;
+    deliveryTime: string;
+    addressVersion?: 2;
+    provinceCode?: number;
+    wardCode?: number;
+  };
   mustChangePassword?: boolean;
   password?: string;
   accountEnabled?: boolean;
   tokenVersion?: number;
   refreshToken?: string | null;
-  personalEmail?: string; location?: string; bio?: string; avatar?: string;
+  personalEmail?: string;
+  location?: string;
+  bio?: string;
+  avatar?: string;
   firstName: string;
   lastName: string;
   email: string;

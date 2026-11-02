@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { once } from 'node:events';
 import mongoose from 'mongoose';
 import { checkoutSchema } from '../dist/validations/checkout.validation.js';
 import { CheckoutRequest } from '../dist/models/checkout-requests.model.js';
 import { checkout } from '../dist/services/checkout.service.js';
 import { SystemLock } from '../dist/models/system-locks.model.js';
+import { GuestContacts } from '../dist/models/guest-contacts.model.js';
 import { Customer } from '../dist/models/customers.model.js';
 import Product from '../dist/models/products.model.js';
 import { Order } from '../dist/models/orders.model.js';
@@ -18,12 +19,15 @@ import app from '../dist/app.js';
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
 const customerId = String(new mongoose.Types.ObjectId());
 const productId = String(new mongoose.Types.ObjectId());
-const input = () => checkoutSchema.parse({ requestId: randomUUID(), recipientName: 'Người nhận', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: '12 Đường A', note: 'Giao buổi sáng', paymentMethod: 'cod', items: [{ productId, quantity: 2, expectedUnitPrice: 90 }] });
-const locations = [{ code: 1, name: 'Tỉnh A', districts: [{ code: 2, name: 'Huyện B', wards: [{ code: 3, name: 'Xã C' }] }] }];
+const input = () => checkoutSchema.parse({ requestId: randomUUID(), recipientName: 'Người nhận', phone: '0901234567', email: 'guest@example.com', addressVersion: 2, provinceCode: 1, wardCode: 3, street: '12 Đường A', note: 'Giao buổi sáng', paymentMethod: 'cod', items: [{ productId, quantity: 2, expectedUnitPrice: 90 }] });
+const locations = [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }];
 function harness(t) {
   const receipts = new Map();
   t.mock.method(CheckoutRequest, 'findOne', scope => ({ select() { return this; }, session: async () => receipts.get(`${scope.customerId}:${scope.requestId}`) ?? null }));
   t.mock.method(CheckoutRequest.prototype, 'save', async function () { receipts.set(`${this.customerId}:${this.requestId}`, this); return this; });
+  t.mock.method(Customer, 'find', () => ({ select() { return this; }, limit() { return this; }, session: async () => [] }));
+  t.mock.method(GuestContacts, 'find', () => ({ limit() { return this; }, session: async () => [] }));
+  t.mock.method(GuestContacts, 'findOneAndUpdate', async (filter, update) => new GuestContacts({ _id: filter._id, ...update.$setOnInsert, ...update.$set }));
   const state = { saved: [], aborted: 0, profileSaves: 0 };
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => locations }));
   t.mock.method(SystemLock, 'updateOne', async () => ({}));
@@ -48,13 +52,13 @@ test('locality requests are coalesced/cached and upstream failures fail closed',
   const [a, b] = await Promise.all([fresh.getCheckoutLocations(), fresh.getCheckoutLocations()]);
   assert.deepEqual(a, b);
   assert.equal(fetchMock.mock.callCount(), 1);
-  await assert.rejects(fresh.resolveCheckoutAddress(1, 99, 3), { status: 400 });
+  await assert.rejects(fresh.resolveCheckoutAddress({ addressVersion: 2, provinceCode: 1, wardCode: 999 }), { status: 400 });
   assert.equal(fetchMock.mock.callCount(), 1);
   fetchMock.mock.mockImplementation(async () => { throw new Error('Offline'); });
   const offline = await import('../dist/services/checkout-locations.service.js?offline-test');
   await assert.rejects(offline.getCheckoutLocations(), { status: 503 });
 });
-test('checkout creates an unassigned pending COD order and preserves existing contact phone', async t => {
+test('checkout creates an unassigned pending COD order and updates saved contact phone', async t => {
   const { state, product, customer } = harness(t);
   const result = await checkout(customerId, 0, input());
   assert.equal(result.totalAmount, 180);
@@ -65,8 +69,8 @@ test('checkout creates an unassigned pending COD order and preserves existing co
   assert.equal(String(state.saved[0].customerId), customerId);
   assert.equal(state.saved[0].recipientName, 'Người nhận');
   assert.equal(state.saved[0].recipientPhone, '0901234567');
-  assert.equal(customer.phone, '0999999999');
-  assert.equal(state.saved[0].city, 'Xã C, Huyện B');
+  assert.equal(customer.phone, '0901234567');
+  assert.equal(state.saved[0].city, 'Ward');
   assert.equal(state.saved[0].orderItems[0].price, 100);
 });
 test('replaying the same request returns the original order and reserves stock once; changed payload conflicts', async t => {
@@ -89,22 +93,33 @@ test('price changes and stock conflicts abort without creating an order', async 
   assert.equal(state.aborted, 2);
 });
 
-test('checkout completes missing phone/address once and preserves saved details', async t => {
+test('checkout synchronizes phone and both address representations on new orders only', async t => {
   const { customer, state } = harness(t);
   customer.phone = '';
   const request = input();
   await checkout(customerId, 0, request);
   assert.equal(customer.phone, request.phone);
   assert.equal(customer.shippingAddress.street, request.street);
-  assert.equal(customer.shippingAddress.district, locations[0].districts[0].name);
+  assert.equal(customer.shippingAddress.district, '');
   assert.equal(customer.shippingAddress.email, customer.email);
+  assert.equal(customer.shippingAddress.addressVersion, 2);
+  assert.deepEqual(customer.address, { street: request.street, city: locations[0].wards[0].name, state: locations[0].name });
+  const originalOrder = state.saved[0];
   await checkout(customerId, 0, request);
   assert.equal(state.profileSaves, 1);
   const saved = { ...customer.shippingAddress };
   state.saved.length = 0;
   await checkout(customerId, 0, { ...input(), street: 'Different address', phone: '0987654321' });
-  assert.equal(customer.phone, request.phone);
-  assert.deepEqual(customer.shippingAddress, saved);
+  assert.equal(customer.phone, '0987654321');
+  assert.equal(customer.shippingAddress.street, 'Different address');
+  assert.equal(customer.address.street, 'Different address');
+  assert.equal(saved.street, request.street);
+  assert.equal(state.profileSaves, 2);
+  assert.equal(originalOrder.street, request.street);
+  const latestAddress = { ...customer.shippingAddress };
+  await checkout(customerId, 0, request);
+  assert.deepEqual(customer.shippingAddress, latestAddress);
+  assert.equal(state.profileSaves, 2);
 });
 
 test('rejected checkout leaves missing profile details untouched', async t => {
@@ -116,7 +131,7 @@ test('rejected checkout leaves missing profile details untouched', async t => {
 });
 test('mismatched address, revoked session, and stopped products cannot create orders', async t => {
   const { state, product } = harness(t);
-  await assert.rejects(checkout(customerId, 0, { ...input(), districtCode: 9 }), { status: 400 });
+  await assert.rejects(checkout(customerId, 0, { ...input(), wardCode: 999 }), { status: 400 });
   await assert.rejects(checkout(customerId, 1, input()), { status: 401 });
   product.on_sale = false;
   await assert.rejects(checkout(customerId, 0, input()), { status: 409 });
@@ -124,7 +139,7 @@ test('mismatched address, revoked session, and stopped products cannot create or
   assert.equal(product.stock, 5);
 });
 
-test('guest checkout creates an order without looking up, creating or modifying any customer and retries reserve once', async t => {
+test('guest checkout creates an order with a CRM contact, without creating or modifying a login account and retries reserve once', async t => {
   const { state, product } = harness(t);
   const create = t.mock.method(Customer, 'create', () => assert.fail('Guest checkout must not create an account'));
   const request = input();
@@ -135,6 +150,9 @@ test('guest checkout creates an order without looking up, creating or modifying 
   assert.equal(product.stock, 3);
   assert.equal(state.saved[0].guestCheckout, true);
   assert.equal(state.saved[0].customerId, null);
+  assert.ok(state.saved[0].contactCustomerId);
+  assert.equal(GuestContacts.findOneAndUpdate.mock.callCount(), 1);
+  assert.equal(state.saved[0].customerSnapshot.email, request.email);
   assert.equal(state.saved[0].customerSnapshot.phone, request.phone);
   assert.equal(Customer.findOne.mock.callCount(), 0);
   assert.equal(create.mock.callCount(), 0);
@@ -144,7 +162,7 @@ test('guest checkout creates an order without looking up, creating or modifying 
 
 test('guest checkout validates stock, current price and locality before creating an order', async t => {
   const { state, product } = harness(t);
-  await assert.rejects(checkout(null, 0, { ...input(), districtCode: 9 }), { status: 400 });
+  await assert.rejects(checkout(null, 0, { ...input(), wardCode: 999 }), { status: 400 });
   await assert.rejects(checkout(null, 0, { ...input(), items: [{ productId, quantity: 2, expectedUnitPrice: 1 }] }), { status: 409 });
   product.stock = 1;
   await assert.rejects(checkout(null, 0, input()), { status: 409 });
@@ -207,4 +225,18 @@ test('guest receipt survives deleted orders and replay ignores an offline locali
   assert.equal(state.saved.length, 0);
   assert.equal(product.stock, 3);
   assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('new guest orders require email but old committed receipts replay without it', async t => {
+  harness(t);
+  const request = input();
+  delete request.email;
+  await assert.rejects(checkout(null, 0, request), { status: 400 });
+  assert.equal(GuestContacts.findOneAndUpdate.mock.callCount(), 0);
+  const result = { _id: new mongoose.Types.ObjectId(), orderCode: 'ORD-ABC234', totalAmount: 180, orderStatus: 1 };
+  CheckoutRequest.findOne.mock.mockImplementation(() => ({ select() { return this; }, session: async () => ({
+    payloadHash: createHash('sha256').update(JSON.stringify(checkoutSchema.parse(request))).digest('hex'), result,
+  }) }));
+  assert.deepEqual(await checkout(null, 0, request), { ...result, _id: String(result._id) });
+  assert.equal(GuestContacts.findOneAndUpdate.mock.callCount(), 0);
 });

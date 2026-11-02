@@ -49,7 +49,11 @@ export async function getOrders(actor: AuthUser, { page, limit, orderStatus, cus
   const conditions: QueryFilter<IOrder>[] = [orderScope(actor)];
   if (dateFrom || dateTo) conditions.push({ orderDate: { ...(dateFrom ? { $gte: dateFrom } : {}), ...(dateTo ? { $lte: dateTo } : {}) } });
   if (orderStatus) conditions.push({ orderStatus });
-  if (customerId) conditions.push({ customerId });
+  if (customerId) {
+    const account = await Customer.findById(customerId).select('email');
+    conditions.push({ $or: [{ customerId }, { contactCustomerId: new Types.ObjectId(customerId) },
+      ...(account?.email ? [{ guestCheckout: true, 'customerSnapshot.email': account.email }] : [])] });
+  }
   if (userId) conditions.push({ userId });
   if (search?.trim()) {
     const term = search.trim();

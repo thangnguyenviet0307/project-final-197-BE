@@ -33,6 +33,7 @@ test("admin login through the proxy authenticates every API and preserves detail
     Customer: new Customer({ firstName: "Fixture", lastName: "Customer", email: 'fixture@example.com', phone: '0123456789' }),
     Order: new Order({ orderStatus: 1 }),
   };
+  t.mock.method(Customer, "aggregate", async () => [{ data: [entries.Customer.toObject()], total: [{ count: 1 }] }]);
   const queried = new Set();
   entries.Product.brand = entries.Brand._id;
   entries.Product.category = entries.Categories._id;
@@ -51,6 +52,7 @@ test("admin login through the proxy authenticates every API and preserves detail
       Object.assign(entries.Order, this.getUpdate().$set);
       return entries.Order;
     }
+    if (model === "GuestContact") return null;
     const entry = entries[model];
     assert.ok(entry, `Unexpected database model ${model}`);
     return this.op === "find" ? [entry] : entry;

@@ -10,6 +10,7 @@ import { connectDatabase } from "./config/database.js";
 import { validateEnvironment } from "./config/environment.js";
 import mongoose from "mongoose";
 import { CheckoutRequest } from "./models/checkout-requests.model.js";
+import { GuestContacts } from './models/guest-contacts.model.js';
 
 const PORT = Number(process.env["PORT"] || 5000);
 
@@ -24,6 +25,8 @@ const startServer = async (): Promise<void> => {
   await connectDatabase();
   await CheckoutRequest.init();
   await CheckoutRequest.createIndexes();
+  await GuestContacts.init();
+  await GuestContacts.createIndexes();
   // Scope index creation to the new editorial collections; never sync/drop unrelated indexes.
   await Promise.all([Article.init(), PostCategory.init()]);
   await Promise.all([Article.createIndexes(), PostCategory.createIndexes()]);

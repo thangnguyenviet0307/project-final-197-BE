@@ -83,7 +83,7 @@ test("disabling a User revokes only that User session without deactivating any C
 
 test("deleting a Customer checks its orders but never deletes its linked User", async t => {
   mockTransaction(t); forbidWrites(t, User);
-  t.mock.method(Order, "exists", filter => { assert.deepEqual(filter, { customerId: contactId }); return { session: async () => null }; });
+  t.mock.method(Order, "exists", filter => { assert.deepEqual(filter, { $or: [{ customerId: contactId }, { contactCustomerId: contactId }] }); return { session: async () => null }; });
   t.mock.method(Customer, "findByIdAndDelete", async target => { assert.equal(target, contactId); return { _id: contactId, accountId: id }; });
   await deleteCustomer(contactId);
 });

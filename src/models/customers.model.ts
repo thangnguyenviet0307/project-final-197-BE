@@ -1,19 +1,37 @@
-import { Schema, model } from 'mongoose';
-import type { ICustomer } from '../types/customers.type.js';
+import { Schema, model } from "mongoose";
+import type { ICustomer } from "../types/customers.type.js";
 
 const customerSchema = new Schema<ICustomer>(
   {
     birthDate: { type: String, default: "" },
-    gender: { type: String, enum: ["", "male", "female", "other"], default: "" },
-    shippingAddress: { type: new Schema({
-      recipientName: { type: String, trim: true, maxlength: 100 },
-      email: { type: String, trim: true, lowercase: true },
-      province: { type: String, trim: true, maxlength: 100 },
-      district: { type: String, trim: true, maxlength: 100 },
-      ward: { type: String, trim: true, maxlength: 100 },
-      street: { type: String, trim: true, maxlength: 255 },
-      deliveryTime: { type: String, trim: true, maxlength: 255, default: "" },
-    }, { _id: false }), default: undefined },
+    gender: {
+      type: String,
+      enum: ["", "male", "female", "other"],
+      default: "",
+    },
+    shippingAddress: {
+      type: new Schema(
+        {
+          addressVersion: { type: Number, enum: [2] },
+          provinceCode: { type: Number },
+          wardCode: { type: Number },
+          recipientName: { type: String, trim: true, maxlength: 100 },
+          email: { type: String, trim: true, lowercase: true },
+          province: { type: String, trim: true, maxlength: 100 },
+          district: { type: String, trim: true, maxlength: 100 },
+          ward: { type: String, trim: true, maxlength: 100 },
+          street: { type: String, trim: true, maxlength: 255 },
+          deliveryTime: {
+            type: String,
+            trim: true,
+            maxlength: 255,
+            default: "",
+          },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+    },
     mustChangePassword: { type: Boolean, default: false },
     password: { type: String, select: false },
     accountEnabled: { type: Boolean, default: false },
@@ -25,7 +43,13 @@ const customerSchema = new Schema<ICustomer>(
     avatar: { type: String, default: "" },
     firstName: { type: String, required: true, trim: true, maxlength: 50 },
     lastName: { type: String, required: true, trim: true, maxlength: 50 },
-    email: { type: String, required: true, trim: true, lowercase: true, unique: true },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      unique: true,
+    },
     phone: { type: String, default: "", trim: true, maxlength: 30 },
     address: {
       street: { type: String, default: "", trim: true },
@@ -37,7 +61,7 @@ const customerSchema = new Schema<ICustomer>(
   {
     timestamps: true,
     versionKey: false,
-    collection: 'customers',
+    collection: "customers",
   },
 );
 
@@ -46,9 +70,10 @@ customerSchema.index({ isActive: 1 });
 
 const stripSecrets = (_doc: unknown, value: unknown) => {
   const result = value as Record<string, unknown>;
-  for (const key of ["password", "refreshToken", "tokenVersion", "accountId"]) delete result[key];
+  for (const key of ["password", "refreshToken", "tokenVersion", "accountId"])
+    delete result[key];
   return result;
 };
 customerSchema.set("toJSON", { transform: stripSecrets });
 customerSchema.set("toObject", { transform: stripSecrets });
-export const Customer = model<ICustomer>('Customer', customerSchema);
+export const Customer = model<ICustomer>("Customer", customerSchema);

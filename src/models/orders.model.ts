@@ -20,6 +20,7 @@ const orderItemSchema = new Schema<IOrderItem>({
 const orderSchema = new Schema<IOrder>(
   {
     guestCheckout: { type: Boolean },
+    contactCustomerId: { type: Schema.Types.ObjectId, ref: 'GuestContact' },
     reservationExpiresAt: { type: Date },
     reservationExpiredAt: { type: Date },
     reservationRetryAt: { type: Date },
@@ -58,6 +59,7 @@ const orderSchema = new Schema<IOrder>(
 );
 
 orderSchema.index({ customerId: 1, orderDate: -1 });
+orderSchema.index({ contactCustomerId: 1, orderDate: -1 });
 orderSchema.index({ customerId: 1, checkoutRequestId: 1 }, { unique: true, partialFilterExpression: { checkoutRequestId: { $type: 'string' } } });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ guestCheckout: 1, orderStatus: 1, reservationExpiresAt: 1 });

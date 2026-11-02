@@ -16,7 +16,7 @@ let server, base;
 before(async () => { server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); base = `http://127.0.0.1:${server.address().port}/api/v1/customer-auth`; });
 after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
 const headers = { 'Content-Type': 'application/json', 'X-Login-Area': 'storefront' };
-const input = { requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ productId: 'a'.repeat(24), quantity: 1, expectedUnitPrice: 100 }] };
+const input = { requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ productId: 'a'.repeat(24), quantity: 1, expectedUnitPrice: 100 }] };
 
 test('checkout rejects guests and administrative tokens before customer lookup', async t => {
   const lookup = t.mock.method(Customer, 'findById', () => assert.fail('No customer lookup'));

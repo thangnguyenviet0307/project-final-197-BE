@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, beforeEach } from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import mongoose from 'mongoose';
 import { createCheckout } from '../dist/services/checkout.service.js';
 import { getCheckoutLocations, resolveCheckoutAddress } from '../dist/services/checkout-locations.service.js';
@@ -14,8 +14,8 @@ import { Categories } from '../dist/models/categories.model.js';
 import { SystemLock } from '../dist/models/system-locks.model.js';
 
 const id = () => String(new mongoose.Types.ObjectId());
-const places = [{ code: 1, name: 'Province', districts: [{ code: 2, name: 'District', wards: [{ code: 3, name: 'Ward' }] }] }];
-const input = productId => ({ requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', provinceCode: 1, districtCode: 2, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ productId, quantity: 2, expectedUnitPrice: 90 }] });
+const places = [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }];
+const input = productId => ({ requestId: randomUUID(), recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ productId, quantity: 2, expectedUnitPrice: 90 }] });
 function query(value) { return { select() { return this; }, session() { return Promise.resolve(value); }, then(resolve, reject) { return Promise.resolve(value).then(resolve, reject); } }; }
 beforeEach(t => {
   t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(places), { status: 200 }));
@@ -28,12 +28,13 @@ test('checkout validation rejects forged identity, unsupported payment, invalid 
   }
 });
 
-test('locations coalesce/cache validated v1 data and reject mismatched locality hierarchy', async t => {
+test('locations coalesce/cache validated v2 data and reject mismatched locality hierarchy', async t => {
   const [first, second] = await Promise.all([getCheckoutLocations(), getCheckoutLocations()]);
-  assert.deepEqual(first, places); assert.deepEqual(second, places);
+  const current = places;
+  assert.deepEqual(first, current); assert.deepEqual(second, current);
   assert.equal(globalThis.fetch.mock.callCount(), 1);
-  assert.equal(globalThis.fetch.mock.calls[0].arguments[0], 'https://provinces.open-api.vn/api/v1/?depth=3');
-  await assert.rejects(resolveCheckoutAddress({ provinceCode: 1, districtCode: 99, wardCode: 3 }), { status: 400 });
+  assert.equal(globalThis.fetch.mock.calls[0].arguments[0], 'https://provinces.open-api.vn/api/v2/?depth=2');
+  await assert.rejects(resolveCheckoutAddress({ addressVersion: 2, provinceCode: 1, wardCode: 999 }), { status: 400 });
 });
 
 function fixture(t) {
@@ -79,6 +80,19 @@ test('same request ID belongs to one customer only', async t => {
   const request = input(String(product._id));
   await createCheckout(customerId, request); await createCheckout(id(), request);
   assert.equal(orderSaves.mock.callCount(), 2); assert.equal(product.stock, 6);
+});
+
+test('committed old receipts replay without v1 lookup; uncommitted old requests require v2 reselection', async t => {
+  const { customerId, product, receipts, orderSaves } = fixture(t);
+  const { addressVersion, ...fields } = input(String(product._id));
+  const old = checkoutSchema.parse({ ...fields, districtCode: 2 });
+  const result = { _id: new mongoose.Types.ObjectId(), orderCode: 'ORD-ABC234', totalAmount: 180, orderStatus: 1 };
+  receipts.set(`${customerId}:${old.requestId}`, { payloadHash: createHash('sha256').update(JSON.stringify(old)).digest('hex'), result });
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw Error('Must not call any locality API'); });
+  assert.equal((await createCheckout(customerId, old)).orderCode, result.orderCode);
+  await assert.rejects(createCheckout(customerId, { ...old, requestId: randomUUID() }), { status: 400 });
+  assert.equal(fetch.mock.callCount(), 0);
+  assert.equal(orderSaves.mock.callCount(), 0);
 });
 
 test('stale price, unavailable catalog, missing variants and stock cannot create orders', async t => {

@@ -17,6 +17,9 @@ export const customerProfileSchema = updateProfileSchema.extend({
   address: z.strictObject({ street: z.string().trim().max(255), city: z.string().trim().max(50), state: z.string().trim().max(50) }).optional(),
 });
 export const shippingAddressSchema = z.strictObject({
+  addressVersion: z.literal(2).optional(),
+  provinceCode: z.int().positive().optional(),
+  wardCode: z.int().positive().optional(),
   district: z.string().trim().max(100).optional(),
   recipientName: z.string().trim().min(1).max(100),
   email: z.string().trim().check(z.email()).toLowerCase(),

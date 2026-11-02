@@ -29,6 +29,7 @@ export interface IOrderItem {
 
 export interface IOrder {
   guestCheckout?: boolean;
+  contactCustomerId?: Types.ObjectId;
   reservationExpiresAt?: Date;
   reservationExpiredAt?: Date;
   reservationRetryAt?: Date;

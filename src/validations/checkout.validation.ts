@@ -6,7 +6,7 @@ export const checkoutSchema = z.strictObject({
   recipientName: z.string().trim().min(1, "Vui lòng nhập tên người nhận.").max(100),
   phone: z.string().trim().regex(/^(?:0|\+84)[0-9]{9}$/, "Số điện thoại Việt Nam không hợp lệ."),
   provinceCode: z.int().positive(),
-  districtCode: z.int().positive(),
+  districtCode: z.int().positive().optional(),
   wardCode: z.int().positive(),
   street: z.string().trim().min(1, "Vui lòng nhập địa chỉ nhà.").max(255),
   note: z.string().trim().max(1000).default(""),
@@ -24,5 +24,7 @@ export const checkoutSchema = z.strictObject({
       keys.add(key);
     });
   }),
-});
+  addressVersion: z.literal(2).optional(),
+  email: z.string().trim().email().toLowerCase().max(254).optional(),
+}).refine(input => input.addressVersion === 2 ? input.districtCode === undefined : input.districtCode !== undefined, { path: ['districtCode'], message: 'Use province and ward codes only for current addresses' });
 export type CheckoutInput = z.infer<typeof checkoutSchema>;

@@ -1,3 +1,5 @@
+import { shippingToAddress, addressToShipping } from "../utils/customer-address.js";
+import { resolveCheckoutAddress, resolveCurrentAddressNames } from "./checkout-locations.service.js";
 import argon2 from "argon2";
 import createHttpError from "http-errors";
 import { Customer } from "../models/customers.model.js";
@@ -64,7 +66,23 @@ export async function changeCustomerPassword(id: string, input: { currentPasswor
   if (!updated) throw createHttpError(409, "Account changed; please sign in again");
 }
 export async function updateCustomerProfile(id: string, version: number, input: CustomerProfileInput | { shippingAddress: ShippingAddressInput }) {
-  const customer = await Customer.findOneAndUpdate({ _id: id, isActive: true, accountEnabled: true, tokenVersion: version }, { $set: input }, { returnDocument: "after", runValidators: true });
+  if ('shippingAddress' in input) {
+    const shipping = input.shippingAddress;
+    if (!shipping.provinceCode || !shipping.wardCode || shipping.addressVersion !== 2) throw createHttpError(400, 'Vui lòng chọn tỉnh/thành và phường/xã theo địa chỉ mới.');
+    const locality = await resolveCheckoutAddress({ addressVersion: 2, provinceCode: shipping.provinceCode, wardCode: shipping.wardCode });
+    input = { shippingAddress: { ...shipping, ...locality } };
+  }
+  const update: Record<string, unknown> = { ...input };
+  if ('shippingAddress' in input) update['address'] = shippingToAddress(input.shippingAddress);
+  else if (input.address) {
+    const locality = await resolveCurrentAddressNames(input.address);
+    const saved = await Customer.findOne({ _id: id, isActive: true, accountEnabled: true, tokenVersion: version });
+    if (!saved) throw createHttpError(401, 'Customer session required');
+    const shipping = { ...addressToShipping(input.address, saved), ...locality };
+    update['shippingAddress'] = shipping;
+    update['address'] = shippingToAddress(shipping);
+  }
+  const customer = await Customer.findOneAndUpdate({ _id: id, isActive: true, accountEnabled: true, tokenVersion: version }, { $set: update }, { returnDocument: "after", runValidators: true });
   if (!customer) throw createHttpError(401, "Customer session required");
   return publicCustomer(customer);
 }

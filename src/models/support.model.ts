@@ -2,6 +2,7 @@ import { Schema, model, type HydratedDocument, type InferSchemaType } from "mong
 import { warrantyStatuses } from "../validations/support.validation.js";
 
 const contentSchema = new Schema({
+  privacy: { type: String, default: "", maxlength: 4000 },
   warranty: { type: String, default: "", maxlength: 4000 },
   returns: { type: String, default: "", maxlength: 4000 },
   shipping: { type: String, default: "", maxlength: 4000 },

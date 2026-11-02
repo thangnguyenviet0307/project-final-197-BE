@@ -2,6 +2,7 @@ import { z } from "zod";
 import { objectId } from "./common.validation.js";
 
 export const policyContentSchema = z.object({
+  privacy: z.string().trim().max(4000),
   warranty: z.string().trim().max(4000),
   returns: z.string().trim().max(4000),
   shipping: z.string().trim().max(4000),

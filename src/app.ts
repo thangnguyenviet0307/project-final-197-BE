@@ -32,7 +32,7 @@ app.use(cors({ origin: (origin, callback) => callback(null, !origin || frontendO
 // A 100,000-character article can exceed 100 KB in UTF-8 (or JSON escapes).
 // Keep the larger, bounded budget scoped to editorial requests.
 app.use("/api/v1/articles", express.json({ limit: "1mb" }));
-// Five bounded policy sections also need room for JSON-escaped Unicode.
+// Six bounded policy sections also need room for JSON-escaped Unicode.
 app.use("/api/v1/support", express.json({ limit: "256kb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

@@ -1,0 +1,94 @@
+{
+  "templateVersion": "1.0.0",
+  "reportMeta": {
+    "projectName": "VÍ DỤ MINH HỌA — cửa hàng giả lập",
+    "reviewedAt": "2026-10-31T09:00:00+07:00",
+    "reviewer": "Reviewer minh họa",
+    "isExample": true,
+    "repositories": [],
+    "branch": null,
+    "commit": null,
+    "scope": [
+      "Dữ liệu ví dụ, không phải kết quả project."
+    ],
+    "limitations": [
+      "Không có source/test thật cho ví dụ."
+    ]
+  },
+  "overview": {
+    "summary": "Ví dụ học cấu trúc dữ liệu, không đánh giá project.",
+    "demoReadiness": "Chưa đánh giá.",
+    "strengths": [],
+    "blockers": [],
+    "stack": []
+  },
+  "coverage": [],
+  "findings": [
+    {
+      "id": "EX-001",
+      "title": "VÍ DỤ: cần kiểm phục hồi pagination",
+      "severity": "P2",
+      "verificationStatus": "risk",
+      "module": "Example",
+      "layer": "FE",
+      "evidence": [
+        {
+          "file": "example/src/list.tsx",
+          "line": 10,
+          "symbol": "ExampleList",
+          "description": "File giả lập, không thuộc project."
+        }
+      ],
+      "preconditions": [
+        "Chỉ ví dụ."
+      ],
+      "reproductionSteps": [
+        "Thử project giả lập."
+      ],
+      "expectedBehavior": "Trang hợp lệ.",
+      "actualBehavior": "Chưa kiểm chứng.",
+      "impact": "Tác động minh họa.",
+      "recommendation": "Xác minh trước sửa.",
+      "verificationMethod": "Không chạy; dữ liệu minh họa."
+    }
+  ],
+  "featureMatrix": [],
+  "missingFeatures": [],
+  "actionPlan": [],
+  "manualTests": [],
+  "checks": [],
+  "topPriorities": [
+    {
+      "id": "EX-P-1",
+      "title": "Ưu tiên minh họa 1",
+      "rationale": "Ví dụ cấu trúc, không khuyến nghị cho project.",
+      "findingIds": [
+        "EX-001"
+      ]
+    },
+    {
+      "id": "EX-P-2",
+      "title": "Ưu tiên minh họa 2",
+      "rationale": "Ví dụ cấu trúc, không khuyến nghị cho project.",
+      "findingIds": []
+    },
+    {
+      "id": "EX-P-3",
+      "title": "Ưu tiên minh họa 3",
+      "rationale": "Ví dụ cấu trúc, không khuyến nghị cho project.",
+      "findingIds": []
+    },
+    {
+      "id": "EX-P-4",
+      "title": "Ưu tiên minh họa 4",
+      "rationale": "Ví dụ cấu trúc, không khuyến nghị cho project.",
+      "findingIds": []
+    },
+    {
+      "id": "EX-P-5",
+      "title": "Ưu tiên minh họa 5",
+      "rationale": "Ví dụ cấu trúc, không khuyến nghị cho project.",
+      "findingIds": []
+    }
+  ]
+}

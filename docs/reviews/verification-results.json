@@ -1,0 +1,60 @@
+{
+  "verifiedAt": "2026-10-31T05:06:34.818Z",
+  "report": "review-report-2026-10-31.json",
+  "templateVersion": "1.0.0",
+  "checks": {
+    "actualReport": {
+      "status": "passed",
+      "assertions": 55
+    },
+    "exampleReport": {
+      "status": "passed",
+      "assertions": 55
+    },
+    "dom": [
+      "search ID/title/module/evidence path",
+      "Vietnamese accent normalization",
+      "AND-combined severity/status/module/search",
+      "empty results and reset",
+      "expand/collapse",
+      "statistics counts and visible cards",
+      "beforeprint/afterprint restoration and print button",
+      "closing script/HTML injection and special Unicode",
+      "long content and empty lists"
+    ],
+    "sourcePreservation": {
+      "reference": "Previous verified source hash manifest; current Git status checked at start",
+      "filesChecked": 645,
+      "changedApplicationFiles": []
+    },
+    "visualBrowser": {
+      "status": "not_run",
+      "reason": "No browser tool available; jsdom does not verify layout, mobile viewport rendering or PDF appearance."
+    },
+    "database": {
+      "status": "not_run",
+      "reason": "Current review does not connect to or mutate a database; prior integration evidence is historical."
+    }
+  },
+  "counts": {
+    "P0": 0,
+    "P1": 1,
+    "P2": 7,
+    "P3": 4,
+    "confirmed": 3,
+    "risk": 4,
+    "not_found": 2,
+    "improvement": 3
+  },
+  "manualTests": 32,
+  "featureModules": 16,
+  "scopeItems": 12,
+  "artifactSha256": {
+    "review-report.template.html": "d9cc8f175d36632c47c4b9e991a9d6c643fd1ebb8aaeeb369d58113a870d9558",
+    "review-report.schema.json": "3eb0b6165fd81af2d5a129cbc7611125be656a858b40443513050e472e15adeb",
+    "render-review-report.mjs": "a7a4037838edce4b4dd3fc518ae8b5026c2ced5c50e5f365d1fb6759a509d33a",
+    "review-report-2026-10-31.json": "65811b09c58243beae83acce49115eaa93c54c85022edefc269efbdf5c3c1a11",
+    "review-report-2026-10-31.html": "9ce7ded9951490618e7857b895fc5de09534cfbea240d2b2033dbf0be5c4e63c"
+  },
+  "fixedTemplateOutputMatches": true
+}

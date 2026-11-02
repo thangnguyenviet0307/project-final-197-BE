@@ -3,11 +3,11 @@ import type { ClientSession } from "mongoose";
 import { ImageCleanupJob } from "../models/image-cleanup-jobs.model.js";
 import { configureCloudinary } from "../config/cloudinary.js";
 
-export async function enqueueImageCleanup(publicIds: string[], session?: ClientSession) {
+export async function enqueueImageCleanup(publicIds: string[], session?: ClientSession, deliveryType: "upload" | "authenticated" = "upload") {
   const ids = [...new Set(publicIds)];
   if (!ids.length) return;
   await ImageCleanupJob.bulkWrite(ids.map(publicId => ({ updateOne: {
-    filter: { publicId }, update: { $setOnInsert: { publicId, runAt: new Date(), leaseUntil: new Date(0), attempts: 0 } }, upsert: true,
+    filter: { publicId }, update: { $setOnInsert: { publicId, ...(deliveryType === "authenticated" ? { deliveryType } : {}), runAt: new Date(), leaseUntil: new Date(0), attempts: 0 } }, upsert: true,
   } })), session ? { session } : {});
 }
 export async function processImageCleanupBatch() {
@@ -20,7 +20,7 @@ export async function processImageCleanupBatch() {
     if (!job) return;
     const claim = { _id: job._id, leaseToken };
     try {
-      const result: { result?: string } = await configureCloudinary().uploader.destroy(job.publicId, { resource_type: "image", invalidate: true });
+      const result: { result?: string } = await configureCloudinary().uploader.destroy(job.publicId, { resource_type: "image", invalidate: true, ...(job.deliveryType === "authenticated" ? { type: "authenticated" } : {}) });
       if (result.result !== "ok" && result.result !== "not found") throw new Error("Storage cleanup pending");
       await ImageCleanupJob.deleteOne(claim);
     } catch {

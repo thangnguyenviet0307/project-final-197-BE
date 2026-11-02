@@ -1,0 +1,30 @@
+import { Router, type RequestHandler, type Router as ExpressRouter } from "express";
+import createHttpError from "http-errors";
+import { authenticate, type AuthenticatedRequest } from "../../middlewares/auth.middleware.js";
+import { authenticateCustomer } from "../../middlewares/customer-auth.middleware.js";
+import { createAuthRateLimit } from "../../middlewares/auth-rate-limit.middleware.js";
+import { validate } from "../../middlewares/validate.middleware.js";
+import { parseProductImage } from "../../middlewares/product-image.middleware.js";
+import { idParamSchema } from "../../validations/common.validation.js";
+import { createWarrantySchema, savePolicySchema, supportListSchema, updateWarrantySchema } from "../../validations/support.validation.js";
+import * as controller from "../../controllers/support.controller.js";
+
+const router: ExpressRouter = Router();
+router.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+const adminOnly: RequestHandler = (req, _res, next) => {
+  if (!["super_admin", "admin"].includes((req as AuthenticatedRequest).user?.role ?? "")) return next(createHttpError(403, "Chỉ quản trị viên được chỉnh sửa chính sách."));
+  next();
+};
+const rateLimit = createAuthRateLimit(20, 15 * 60000, "Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.");
+router.get("/policy", controller.publicPolicy);
+router.get("/admin/policy", authenticate, adminOnly, controller.adminPolicy);
+router.put("/admin/policy", authenticate, adminOnly, validate({ body: savePolicySchema }), controller.savePolicy);
+router.get("/customer/eligible-orders", authenticateCustomer, validate({ query: supportListSchema }), controller.eligibleOrders);
+router.get("/customer/requests", authenticateCustomer, validate({ query: supportListSchema }), controller.customerList);
+router.post("/customer/requests", authenticateCustomer, rateLimit, validate({ body: createWarrantySchema }), controller.createWarranty);
+router.get("/customer/requests/:id", authenticateCustomer, validate({ params: idParamSchema }), controller.customerDetail);
+router.post("/customer/requests/:id/images", authenticateCustomer, rateLimit, validate({ params: idParamSchema }), parseProductImage, controller.uploadImage);
+router.get("/admin/requests", authenticate, validate({ query: supportListSchema }), controller.adminList);
+router.get("/admin/requests/:id", authenticate, validate({ params: idParamSchema }), controller.adminDetail);
+router.patch("/admin/requests/:id", authenticate, validate({ params: idParamSchema, body: updateWarrantySchema }), controller.updateWarranty);
+export default router;

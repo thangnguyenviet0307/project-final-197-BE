@@ -12,7 +12,7 @@ export function getLoginArea(req: Request): LoginArea | undefined {
   return area;
 }
 export function matchesLoginArea(role: string, area?: LoginArea): boolean {
-  return area !== "storefront" && (role === "admin" || role === "staff");
+  return area !== "storefront" && (role === "super_admin" || role === "admin" || role === "staff");
 }
 const cookieName = (area: LoginArea) => area === "storefront" ? "customerRefreshToken" : "adminRefreshToken";
 const options = (area: LoginArea = "admin") => ({

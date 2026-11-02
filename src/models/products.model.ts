@@ -84,6 +84,10 @@ const productSchema = new Schema(
     barcode: { type: String, trim: true, maxlength: 64, default: null },
     currency: { type: String, enum: ["VND"], default: "VND" },
     tags: { type: [String], default: [] },
+    relatedNewsIds: { type: [{ type: Schema.Types.ObjectId, ref: "Article" }], default: [], validate: {
+      validator: (ids: mongoose.Types.ObjectId[]) => ids.length <= 5 && new Set(ids.map(String)).size === ids.length,
+      message: "Choose at most five different news articles",
+    } },
     weight: { type: Number, min: 0, default: null },
     dimensions: { type: new Schema({ width: { type: Number, min: 0, required: true }, height: { type: Number, min: 0, required: true }, depth: { type: Number, min: 0, required: true } }, { _id: false }), default: null },
     warrantyInformation: { type: String, maxlength: 2000, default: null },

@@ -16,6 +16,24 @@ beforeEach(t => {
   t.mock.method(ImageCleanupJob, 'bulkWrite', async () => ({}));
 });
 const id = 'a'.repeat(24);
+test('renaming through a partial API update preserves the existing slug without a client workaround', async t => {
+  const product = new Product({ product_name: 'Old name', slug: 'shared-bookmark', price: 100, stock: 2 });
+  t.mock.method(Product, 'findById', () => ({ session: async () => product }));
+  t.mock.method(product, 'save', async () => product);
+  const exists = t.mock.method(Product, 'exists', async () => null);
+  const result = await productService.updateProduct(String(product._id), { product_name: 'New name' });
+  assert.equal(result.product_name, 'New name'); assert.equal(result.slug, 'shared-bookmark');
+  assert.equal(exists.mock.callCount(), 0);
+});
+
+test('an explicit slug update works independently of name and allocates a unique slug on collision', async t => {
+  const product = new Product({ product_name: 'Original name', slug: 'original-slug', price: 100 });
+  t.mock.method(Product, 'findById', () => ({ session: async () => product }));
+  t.mock.method(product, 'save', async () => product);
+  t.mock.method(Product, 'exists', async filter => filter.slug === 'requested-slug' ? { _id: id } : null);
+  const result = await productService.updateProduct(String(product._id), { slug: 'requested-slug' });
+  assert.equal(result.slug, 'requested-slug-1'); assert.equal(result.product_name, 'Original name');
+});
 process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
 process.env.CLOUDINARY_API_KEY = 'test-key';
 process.env.CLOUDINARY_API_SECRET = 'test-secret';

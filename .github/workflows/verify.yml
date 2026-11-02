@@ -2,7 +2,9 @@ name: Verify API
 on: [push, pull_request]
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Work around MongoDB 8 kernel detection on newer Ubuntu runner images.
+    # https://github.com/actions/runner-images/issues/15005
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -16,21 +18,54 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - name: Start isolated MongoDB replica set
+        shell: bash
         run: |
-          docker run --detach --name mongo-test --publish 27017:27017 mongo:8 --replSet rs0 --bind_ip_all
-          for attempt in $(seq 1 30); do
-            if docker exec mongo-test mongosh --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+          set -Eeuo pipefail
+          on_failure() {
+            echo "::error::MongoDB replica set startup failed"
+            uname -a
+            docker inspect --format '{{json .State}}' mongo-test || true
+            docker logs --tail 200 mongo-test || true
+          }
+          trap on_failure ERR
+          docker run --detach --name mongo-test --publish 127.0.0.1:27017:27017 mongo:8.0 --replSet rs0 --bind_ip_all
+          assert_running() {
+            if [ "$(docker inspect --format '{{.State.Running}}' mongo-test)" != "true" ]; then
+              echo "::error::MongoDB container exited before becoming ready"
+              return 1
+            fi
+          }
+          ready=false
+          for attempt in $(seq 1 60); do
+            assert_running
+            if docker exec mongo-test mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
             sleep 1
           done
+          if [ "$ready" != "true" ]; then
+            echo "::error::MongoDB did not respond to ping within 60 attempts"
+            false
+          fi
           docker exec mongo-test mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
-          for attempt in $(seq 1 30); do
-            if docker exec mongo-test mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)'; then exit 0; fi
+          for attempt in $(seq 1 60); do
+            assert_running
+            if docker exec mongo-test mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' >/dev/null 2>&1; then
+              exit 0
+            fi
             sleep 1
           done
-          exit 1
+          echo "::error::MongoDB replica set did not elect a writable primary"
+          false
       - run: pnpm test:integration
         env:
           MONGODB_TEST_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true
+      - name: MongoDB diagnostics on failure
+        if: failure()
+        run: |
+          docker inspect --format '{{json .State}}' mongo-test || true
+          docker logs --tail 200 mongo-test || true
       - name: Stop test database
         if: always()
         run: docker rm --force mongo-test || true

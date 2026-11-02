@@ -69,9 +69,9 @@ test('last active admin cannot be demoted, disabled or deleted', async (t) => {
   t.mock.method(User, 'findById', () => query(admin));
   t.mock.method(User, 'exists', () => query(null));
   const write = t.mock.method(User, 'findOneAndUpdate', async () => { throw new Error('Must not write'); });
-  await assert.rejects(UserService.updateUser(String(admin._id), { role: 'staff' }), { status: 409 });
-  await assert.rejects(UserService.updateUser(String(admin._id), { active: false }), { status: 409 });
-  await assert.rejects(UserService.deleteUser(String(admin._id)), { status: 409 });
+  await assert.rejects(UserService.updateUser(String(admin._id), { role: 'staff' }, { id: 'f'.repeat(24), role: 'super_admin' }), { status: 409 });
+  await assert.rejects(UserService.updateUser(String(admin._id), { active: false }, { id: 'f'.repeat(24), role: 'super_admin' }), { status: 409 });
+  await assert.rejects(UserService.deleteUser(String(admin._id), { id: 'f'.repeat(24), role: 'super_admin' }), { status: 409 });
   assert.equal(write.mock.callCount(), 0);
 });
 
@@ -86,13 +86,13 @@ test('another active admin permits demotion and revokes the previous session', a
     assert.equal(update.$inc.tokenVersion, 1);
     return admin;
   });
-  await UserService.updateUser(String(admin._id), { role: 'staff' });
+  await UserService.updateUser(String(admin._id), { role: 'staff' }, { id: 'f'.repeat(24), role: 'super_admin' });
 });
 
 test('open orders prevent disabling their assignee and any order prevents deleting customer', async (t) => {
   t.mock.method(User, 'findById', () => query(new User({ role: 'staff', active: true })));
   t.mock.method(Order, 'exists', () => query({ _id: id() }));
-  await assert.rejects(UserService.updateUser(String(id()), { active: false }), { status: 409 });
+  await assert.rejects(UserService.updateUser(String(id()), { active: false }, { id: 'f'.repeat(24), role: 'super_admin' }), { status: 409 });
   await assert.rejects(deleteCustomer(String(id())), { status: 409 });
 });
 

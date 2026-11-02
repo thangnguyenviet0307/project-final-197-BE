@@ -9,10 +9,10 @@ import { BrandModel } from "../models/brands.model.js";
 export const publicProductFields = "_id product_name slug sku price discount category brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency";
 const references = [{ path: "category", select: "_id name" }, { path: "brand", select: "_id name" }];
 
-async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
+export async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
   const active = { isActive: true, isDeleted: { $ne: true } };
   const [categories, brands] = await Promise.all([Categories.distinct('_id', active), BrandModel.distinct('_id', active)]);
-  return { category: { $in: categories }, brand: { $in: brands } };
+  return { on_sale: { $ne: false }, category: { $in: categories }, brand: { $in: brands } };
 }
 
 export async function listStoreProducts(filters: Partial<GetProductsQuery>) {
@@ -46,6 +46,6 @@ export async function recordStoreProductView(slug: string) {
   return Product.findOneAndUpdate(
     { slug, is_active: true, ...await visibleCatalogFilter() },
     { $inc: { count_view: 1 } },
-    { new: true, timestamps: false },
+    { returnDocument: "after", timestamps: false },
   ).select("count_view -_id").lean();
 }

@@ -14,6 +14,7 @@
     "test": "tsc && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsc && node --test tests/orders.integration.mjs",
+    "test:integration:local": "tsc && node scripts/run-isolated-integration.mjs",
     "rest-client": "node --watch --watch-preserve-output scripts/rest-client-proxy.mjs"
   },
   "keywords": [],

@@ -135,7 +135,7 @@ test("password change hashes password and revokes existing sessions", async (t) 
     assert.equal(options.runValidators, true);
     return new User();
   });
-  await UserService.updateUser("507f1f77bcf86cd799439011", { password: "new password" });
+  await UserService.updateUser("507f1f77bcf86cd799439011", { password: "new password" }, { id: 'f'.repeat(24), role: 'super_admin' });
 });
 
 test("refresh tokens are unique even within the same second", () => {

@@ -27,7 +27,8 @@ export async function getCheckoutLocations(): Promise<CheckoutLocations> {
   return pending;
 }
 
-export async function resolveCheckoutAddress(provinceCode: number, districtCode: number, wardCode: number) {
+export async function resolveCheckoutAddress(input: number | { provinceCode: number; districtCode: number; wardCode: number }, districtInput?: number, wardInput?: number) {
+  const { provinceCode, districtCode, wardCode } = typeof input === "number" ? { provinceCode: input, districtCode: districtInput, wardCode: wardInput } : input;
   const provinces = await getCheckoutLocations();
   const province = provinces.find(item => item.code === provinceCode);
   const district = province?.districts.find(item => item.code === districtCode);

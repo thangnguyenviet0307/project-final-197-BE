@@ -1,9 +1,10 @@
+export { restoreOrderStock as restoreStock } from "./order-reservation.service.js";
+import { reserveOrderItems, restoreOrderStock as restoreStock } from "./order-reservation.service.js";
 import { generateOrderCode, isOrderCodeCollision } from '../utils/order-code.js';
 import { escapeRegex } from '../utils/search.js';
 import createHttpError from "http-errors";
 import { type QueryFilter, Types, type ClientSession } from "mongoose";
 import { withRelationsTransaction } from "../utils/relations-transaction.js";
-import { reserveOrderItems, restoreOrderStock as restoreStock } from "./order-reservation.service.js";
 import { calculateOrderTotal } from "../utils/order-total.js";
 import { hasPermission } from "../config/rolePermissions.js";
 import { Customer } from "../models/customers.model.js";
@@ -14,6 +15,7 @@ import { Permission } from "../types/permissions.type.js";
 import type { IOrder } from "../types/orders.type.js";
 import { OrderStatus, OPEN_ORDER_STATUSES } from "../types/orders.type.js";
 import { buildPagination } from "../utils/pagination.js";
+import { assertGuestReservationActive } from "./guest-reservation.service.js";
 import type { CreateOrderInput, GetOrdersQuery, UpdateOrderStatusInput } from "../types/orders.type.js";
 
 const STATUS_TRANSITIONS: Record<number, number[]> = {
@@ -63,7 +65,7 @@ export async function getOrders(actor: AuthUser, { page, limit, orderStatus, cus
   }
   const filter: QueryFilter<IOrder> = { $and: conditions };
   const [data, total] = await Promise.all([
-    Order.find(filter).sort({ orderDate: -1 }).skip((page - 1) * limit).limit(limit)
+    Order.find(filter).sort({ orderDate: -1, _id: -1 }).skip((page - 1) * limit).limit(limit)
       .populate("customerId", "firstName lastName email phone").populate("userId", "firstName lastName role"),
     Order.countDocuments(filter),
   ]);
@@ -97,10 +99,11 @@ async function createOrderAttempt(actor: AuthUser, input: CreateOrderInput) {
 }
 export async function updateOrderStatus(actor: AuthUser, id: string, input: UpdateOrderStatusInput) {
   if (!hasPermission(actor.role, Permission.OrderUpdateStatus)) throw createHttpError(403, "Cannot update orders");
-  if (input.orderStatus === OrderStatus.Rejected && actor.role !== 'admin' && !input.cancellationReason?.trim()) throw createHttpError(400, "Enter a cancellation reason.");
+  if (input.orderStatus === OrderStatus.Rejected && !input.cancellationReason?.trim()) throw createHttpError(400, "Enter a cancellation reason.");
   return withRelationsTransaction(async (session) => {
     const order = await Order.findOne({ _id: id, ...orderWriteScope(actor) }).session(session);
     if (!order) throw createHttpError(404, "Order not found");
+    if (input.orderStatus === OrderStatus.Processing) assertGuestReservationActive(order);
     if (!STATUS_TRANSITIONS[order.orderStatus]?.includes(input.orderStatus)) {
       const current = OrderStatus[order.orderStatus] ?? String(order.orderStatus);
       const requested = OrderStatus[input.orderStatus] ?? String(input.orderStatus);
@@ -150,6 +153,7 @@ export async function assignOrder(actor: AuthUser, id: string, requested: string
     if (!OPEN_ORDER_STATUSES.includes(order.orderStatus)) {
       throw createHttpError(409, "Only open orders can be reassigned");
     }
+    assertGuestReservationActive(order);
     await resolveAssignee(actor, requested, session);
     await assertOrderCapacity(requested, session, id);
     order.userId = new Types.ObjectId(requested);
@@ -167,6 +171,7 @@ export async function startOrder(actor: AuthUser, id: string, requested?: string
     const userId = await resolveAssignee(actor, requested ?? actor.id, session);
     await assertOrderCapacity(userId!, session, id);
     const filter: QueryFilter<IOrder> = { _id: id, orderStatus: OrderStatus.Pending,
+      $or: [{ guestCheckout: { $ne: true } }, { userId: { $ne: null } }, { reservationExpiresAt: null }, { reservationExpiresAt: { $gt: new Date() } }],
       ...(!canAssign(actor) ? { userId: { $in: [new Types.ObjectId(actor.id), null] } } : {}) };
     const order = await Order.findOneAndUpdate(filter,
       { $set: { userId: new Types.ObjectId(userId), orderStatus: OrderStatus.Processing } },
@@ -216,11 +221,19 @@ export async function updateOrderDates(actor: AuthUser, id: string, input: {
     return updated;
   });
 }
-export async function updateOrderNote(actor: AuthUser, id: string, orderNote: string) {
+export async function updateOrderNote(actor: AuthUser, id: string, orderNote: string, expectedOrderNote: string) {
   if (!hasPermission(actor.role, Permission.OrderNote)) throw createHttpError(403, "Cannot edit order notes");
-  const order = await Order.findOneAndUpdate({ _id: id, ...orderWriteScope(actor), orderStatus: { $in: OPEN_ORDER_STATUSES } },
+  const scope = { _id: id, ...orderWriteScope(actor), orderStatus: { $in: OPEN_ORDER_STATUSES } };
+  // Compare and update in one MongoDB command, never a read followed by a write.
+  // Legacy orders with a missing/null note are exposed to clients as empty text.
+  const order = await Order.findOneAndUpdate({ ...scope,
+    ...(expectedOrderNote === '' ? { $or: [{ orderNote: '' }, { orderNote: null }] } : { orderNote: expectedOrderNote }),
+  },
     { $set: { orderNote } }, { returnDocument: 'after', runValidators: true });
-  if (!order) throw createHttpError(404, "Open order not found");
+  if (!order) {
+    if (!await Order.exists(scope)) throw createHttpError(404, "Open order not found");
+    throw createHttpError(409, "Order note changed; refresh and review before saving", { businessCode: 'ORDER_NOTE_CONFLICT' });
+  }
   return order;
 }
 export async function getPersonalSales(actor: AuthUser) {

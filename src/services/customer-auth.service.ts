@@ -48,7 +48,7 @@ export async function refreshCustomer(token: string) {
   if (!customer || !customer.isActive || !customer.accountEnabled || customer.tokenVersion !== decoded.version || customer.refreshToken !== hashToken(token)) throw createHttpError(401, "Invalid customer session");
   const tokens = generateTokenPair(subject(customer));
   const updated = await Customer.findOneAndUpdate({ _id: customer._id, isActive: true, accountEnabled: true, tokenVersion: decoded.version, refreshToken: hashToken(token) }, { $set: { refreshToken: hashToken(tokens.refreshToken) } });
-  if (!updated) throw createHttpError(401, "Refresh token already used");
+  if (!updated) throw createHttpError(409, "Refresh token already used; retry with the current cookie", { authCode: "AUTH_REFRESH_CONFLICT" });
   return tokens;
 }
 export async function logoutCustomer(id: string) {

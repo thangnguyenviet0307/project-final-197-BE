@@ -245,8 +245,8 @@ const updateProduct = async (
 
   if (nextName) {
     updated.product_name = nextName;
-    updated.slug = await findAvailableProductSlug(payload.slug?.trim() || buildSlug(nextName), id);
   }
+  if (payload.slug !== undefined) updated.slug = await findAvailableProductSlug(payload.slug.trim(), id);
 
   if (Array.isArray(payload.variants)) {
     const variants = payload.variants.map((variant) => {

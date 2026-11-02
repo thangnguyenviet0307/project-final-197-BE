@@ -64,7 +64,7 @@ test('date bounds are combined with staff scope for both list and total', async 
   const dateFrom = new Date('2026-10-01T00:00:00Z');
   const dateTo = new Date('2026-10-02T23:59:59Z');
   let filter;
-  const query = { sort() { return this; }, skip() { return this; }, limit() { return this; }, populate() { return this; }, then(resolve) { return Promise.resolve([]).then(resolve); } };
+  const query = { sort(value) { assert.deepEqual(value, { orderDate: -1, _id: -1 }); return this; }, skip() { return this; }, limit() { return this; }, populate() { return this; }, then(resolve) { return Promise.resolve([]).then(resolve); } };
   t.mock.method(Order, 'find', value => { filter = value; return query; });
   t.mock.method(Order, 'countDocuments', async value => { assert.deepEqual(value, filter); return 0; });
   await getOrders(actor, { page: 1, limit: 10, dateFrom, dateTo });

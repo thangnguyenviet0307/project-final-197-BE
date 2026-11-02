@@ -8,7 +8,7 @@ import type { HeroSlideInput, UpdateHeroSlideInput } from "../types/hero-slides.
 const activeCategory = { isActive: true, isDeleted: { $ne: true } };
 async function assertCategory(category: unknown, session: ClientSession) {
   if (!await Categories.exists({ _id: category, ...activeCategory }).session(session)) {
-    throw createHttpError(409, "Danh mục không tồn tại hoặc đã ngừng hoạt động.");
+    throw createHttpError(409, "Danh mục không tồn tại hoặc đã ngừng hoạt động.", { businessCode: "CATEGORY_UNAVAILABLE" });
   }
 }
 export async function listHeroSlides(publicOnly = false) {
@@ -33,7 +33,7 @@ export async function updateHeroSlide(id: string, input: UpdateHeroSlideInput) {
     const slide = await HeroSlide.findById(id).session(session);
     if (!slide) throw createHttpError(404, "Không tìm thấy slide.");
     const { expectedVersion, ...fields } = input;
-    if ((slide.__v ?? 0) !== expectedVersion) throw createHttpError(409, "Slide đã thay đổi. Tải lại và kiểm tra trước khi lưu.");
+    if ((slide.__v ?? 0) !== expectedVersion) throw createHttpError(409, "Slide đã thay đổi. Tải lại và kiểm tra trước khi lưu.", { businessCode: "VERSION_CONFLICT" });
     if (fields.category !== undefined || fields.isActive === true) await assertCategory(fields.category ?? slide.category, session);
     slide.set(fields);
     await slide.save({ session });
@@ -44,7 +44,7 @@ export async function deleteHeroSlide(id: string, expectedVersion: number) {
   return withRelationsTransaction(async session => {
     const slide = await HeroSlide.findById(id).session(session);
     if (!slide) throw createHttpError(404, "Không tìm thấy slide.");
-    if ((slide.__v ?? 0) !== expectedVersion) throw createHttpError(409, "Slide đã thay đổi. Tải lại trước khi xóa.");
+    if ((slide.__v ?? 0) !== expectedVersion) throw createHttpError(409, "Slide đã thay đổi. Tải lại trước khi xóa.", { businessCode: "VERSION_CONFLICT" });
     await HeroSlide.deleteOne({ _id: id, __v: expectedVersion }, { session });
   });
 }

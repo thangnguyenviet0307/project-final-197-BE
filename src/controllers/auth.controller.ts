@@ -1,4 +1,8 @@
-import { authResponse, clearRefreshCookie, getLoginArea } from "../utils/auth-cookie.js";
+import {
+  authResponse,
+  clearRefreshCookie,
+  getLoginArea,
+} from "../utils/auth-cookie.js";
 import { updateProfile } from "../services/profile.service.js";
 import { toPublicUser } from "../utils/user-mapper.js";
 import type { AuthenticatedRequest } from "../middlewares/auth.middleware.js";
@@ -29,7 +33,10 @@ const loginHandler: RequestHandler = asyncHandler(
 
 const bootstrapAdminHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
-    const result = await bootstrapAdminService(req.body, req.get("x-bootstrap-secret"));
+    const result = await bootstrapAdminService(
+      req.body,
+      req.get("x-bootstrap-secret"),
+    );
 
     sendResponse(res, 201, {
       success: true,
@@ -57,7 +64,10 @@ const refreshHandler: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
     if (!refreshToken) {
-      sendResponse(res, 400, { success: false, message: "Refresh token là bắt buộc" });
+      sendResponse(res, 400, {
+        success: false,
+        message: "Refresh token là bắt buộc",
+      });
       return;
     }
     const result = await refreshService(refreshToken, getLoginArea(req));
@@ -87,7 +97,10 @@ export const authController: Record<string, RequestHandler> = {
     if (!user) throw createHttpError(401, "Authentication required");
     await changePassword(user.id, req.body);
     clearRefreshCookie(res, "admin");
-    sendResponse(res, 200, { message: "Password changed. Please sign in again.", data: null });
+    sendResponse(res, 200, {
+      message: "Password changed. Please sign in again.",
+      data: null,
+    });
   }),
   login: loginHandler,
   bootstrapAdmin: bootstrapAdminHandler,

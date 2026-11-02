@@ -122,7 +122,7 @@ test("rejecting an order restores variant stock in the same transaction", async 
   });
   t.mock.method(Product, "findById", () => ({ session: async () => product }));
   t.mock.method(product, "save", async (options) => { assert.equal(options.session, session); return product; });
-  await updateOrderStatus(actor, String(order._id), { orderStatus: 3 });
+  await updateOrderStatus(actor, String(order._id), { orderStatus: 3, cancellationReason: "Customer request" });
   assert.equal(product.stock, 5);
   assert.equal(product.variants[0].stock, 5);
 });
@@ -133,7 +133,7 @@ test("restoration failure aborts rejection; rejected/completed orders cannot tra
   t.mock.method(Order, "findOne", () => ({ session: async () => order }));
   t.mock.method(Order, "findOneAndUpdate", async () => order);
   t.mock.method(Product, "findById", () => ({ session: async () => null }));
-  await assert.rejects(updateOrderStatus(actor, String(order._id), { orderStatus: 3 }), { status: 409 });
+  await assert.rejects(updateOrderStatus(actor, String(order._id), { orderStatus: 3, cancellationReason: "Customer request" }), { status: 409 });
   assert.equal(state.aborted, true);
   assert.equal(state.committed, false);
   for (const status of [3, 4]) {

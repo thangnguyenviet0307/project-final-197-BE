@@ -29,6 +29,9 @@ export interface IOrderItem {
 
 export interface IOrder {
   guestCheckout?: boolean;
+  reservationExpiresAt?: Date;
+  reservationExpiredAt?: Date;
+  reservationRetryAt?: Date;
   cancelledByCustomer?: boolean;
   checkoutRequestId?: string;
   checkoutFingerprint?: string;

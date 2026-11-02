@@ -4,6 +4,8 @@ import type { CreateUserInput, UpdateUserInput, GetUsersQuery } from "../types/u
 export type { CreateUserInput, UpdateUserInput, GetUsersQuery } from "../types/users.type.js";
 import { z } from "zod";
 import { paginationSchema } from "./common.validation.js";
+import { objectId } from "./common.validation.js";
+export const transferOwnershipSchema = z.strictObject({ targetUserId: objectId, currentPassword: z.string().min(1).max(1024) });
 export const createUserSchema = z.object({
   email: createEmailSchema(),
   password: z.string().min(6).max(1024),
@@ -20,7 +22,7 @@ export const updateUserSchema = createUserSchema.omit({ role: true, active: true
   { error: UPDATE_REQUIRED_MESSAGE },
 ) satisfies z.ZodType<UpdateUserInput>;
 export const getUsersQuerySchema = paginationSchema.extend({
-  role: userRoleSchema.optional(),
+  role: z.enum(["super_admin", "admin", "staff"]).optional(),
   active: z.union([z.boolean(), z.enum(["true", "false"]).transform(value => value === "true")]).optional(),
   sortBy: z.enum(["username"]).optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),

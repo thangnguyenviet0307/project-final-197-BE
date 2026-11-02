@@ -2,6 +2,7 @@ import { Schema, model } from "mongoose";
 
 const schema = new Schema({
   publicId: { type: String, required: true, unique: true },
+  deliveryType: { type: String, enum: ["upload", "authenticated"], default: "upload" },
   attempts: { type: Number, default: 0 },
   runAt: { type: Date, default: Date.now, index: true },
   leaseUntil: { type: Date, default: () => new Date(0) },

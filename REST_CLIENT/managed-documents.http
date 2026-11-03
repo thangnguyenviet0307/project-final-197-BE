@@ -1,0 +1,28 @@
+@baseUrl = http://127.0.0.1:5001/api/v1
+### Use an accessToken from your existing administrative login environment.
+### Read management list (Admin/Super Admin)
+GET {{baseUrl}}/support/admin/documents
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+x-rest-client-auth: primary
+X-Login-Area: admin
+
+### Read a draft and its expectedVersion
+GET {{baseUrl}}/support/admin/documents/privacy
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+x-rest-client-auth: primary
+X-Login-Area: admin
+
+### Save draft. Replace expectedVersion with the reviewed __v from GET.
+PUT {{baseUrl}}/support/admin/documents/privacy
+Authorization: Bearer {{$dotenv ACCESS_TOKEN}}
+x-rest-client-auth: primary
+X-Login-Area: admin
+Content-Type: application/json
+
+{ "content": "<p>Nội dung cần được rà soát trước khi công bố.</p>", "publish": false, "expectedVersion": 0 }
+
+### Read the published article without recording a view
+GET {{baseUrl}}/support/documents/privacy
+
+### Record one successful public navigation
+POST {{baseUrl}}/support/documents/privacy/views

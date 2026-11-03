@@ -9,6 +9,7 @@ import { StorePolicy, WarrantyRequest } from '../dist/models/support.model.js';
 import { Order } from '../dist/models/orders.model.js';
 import { User } from '../dist/models/users.model.js';
 import { Customer } from '../dist/models/customers.model.js';
+import { StoreInformation } from '../dist/models/information.model.js';
 import { generateAccessToken } from '../dist/utils/token.js';
 import { createWarrantySchema, savePolicySchema, updateWarrantySchema, supportListSchema } from '../dist/validations/support.validation.js';
 import * as service from '../dist/services/support.service.js';
@@ -57,6 +58,7 @@ test('unpublished policy returns null and draft writes never touch public conten
   assert.equal(update.mock.callCount(), 1);
 });
 test('policy initial concurrent creation maps duplicate _id to a version conflict', async t => {
+  t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => null }));
   t.mock.method(StorePolicy, 'findOneAndUpdate', async () => { throw { code: 11000 }; });
   await assert.rejects(service.savePolicy({ content, publish: true, expectedVersion: 0 }), { status: 409, businessCode: 'VERSION_CONFLICT' });
 });
@@ -153,6 +155,7 @@ test('identical image retry returns the linked image even after acceptance witho
   assert.equal(upload.mock.callCount(), 0);
 });
 test('policy is anonymous; staff cannot manage policy and customer/admin authentication stays separate', async t => {
+  t.mock.method(StoreInformation, 'findById', () => ({ lean: async () => null }));
   t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => null }));
   t.mock.method(User, 'findById', () => ({ select: async () => new User({ _id: id, role: 'staff', active: true, tokenVersion: 0, firstName: 'A', lastName: 'B', email: 'staff@example.com' }) }));
   t.mock.method(Customer, 'findById', () => ({ select: async () => new Customer({ _id: other, firstName: 'A', lastName: 'B', email: 'customer@example.com', isActive: true, accountEnabled: true, tokenVersion: 0 }) }));
@@ -160,12 +163,31 @@ test('policy is anonymous; staff cannot manage policy and customer/admin authent
   t.after(() => { server.closeAllConnections(); server.close(); });
   const base = `http://127.0.0.1:${server.address().port}/api/v1/support`;
   assert.equal((await fetch(`${base}/policy`)).status, 200);
+  assert.equal((await fetch(`${base}/pages/gioi-thieu`)).status, 200);
+  assert.equal((await fetch(`${base}/pages/unknown`)).status, 400);
+  assert.equal((await fetch(`${base}/admin/pages/gioi-thieu`)).status, 401);
   assert.equal((await fetch(`${base}/admin/policy`)).status, 401);
   const staff = { Authorization: `Bearer ${generateAccessToken({ id, accountType: 'user' })}`, 'X-Login-Area': 'admin' };
   const customer = { Authorization: `Bearer ${generateAccessToken({ id: other, accountType: 'customer' })}`, 'X-Login-Area': 'storefront' };
+  assert.equal((await fetch(`${base}/admin/pages/gioi-thieu`, { headers: staff })).status, 403);
+  assert.equal((await fetch(`${base}/admin/pages/gioi-thieu`, { headers: customer })).status, 403);
+  assert.equal((await fetch(`${base}/admin/pages/gioi-thieu`, { method: 'PUT', headers: { ...staff, 'Content-Type': 'application/json' }, body: JSON.stringify({ content: 'test', expectedVersion: 0, publish: true }) })).status, 403);
   assert.equal((await fetch(`${base}/admin/policy`, { headers: staff })).status, 403);
   assert.equal((await fetch(`${base}/admin/requests`, { headers: customer })).status, 403);
   assert.equal((await fetch(`${base}/customer/requests`, { headers: staff })).status, 403);
   assert.equal((await fetch(`${base}/customer/requests/not-an-id`, { headers: customer })).status, 400);
   assert.equal((await fetch(`${base}/customer/requests`, { method: 'POST', headers: { ...customer, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...input, customerId: id }) })).status, 400);
+});
+
+
+test('policy sections accept 30,000 characters including markup and reject overflow', () => {
+  const html = '<p>' + 'a'.repeat(29993) + '</p>';
+  for (const key of Object.keys(content)) {
+    const sections = { ...content, [key]: html };
+    assert.equal(savePolicySchema.safeParse({ content: sections, expectedVersion: 0, publish: true }).success, true);
+    assert.equal(new StorePolicy({ _id: 'store-policy', content: sections, publishedContent: sections }).validateSync(), undefined);
+    const oversized = { ...content, [key]: html + 'a' };
+    assert.equal(savePolicySchema.safeParse({ content: oversized, expectedVersion: 0, publish: false }).success, false);
+    assert.ok(new StorePolicy({ _id: 'store-policy', content: oversized }).validateSync());
+  }
 });

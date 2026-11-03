@@ -12,6 +12,7 @@ import { buildPagination } from "../utils/pagination.js";
 import { configureCloudinary } from "../config/cloudinary.js";
 import { validateProductImage } from "./product-images.service.js";
 import { enqueueImageCleanup } from "./image-cleanup.service.js";
+import { publicationChanges } from "./publication-metadata.js";
 
 const policyId = "store-policy";
 const blankContent: PolicyContent = { warranty: "", returns: "", shipping: "", payment: "", support: "", privacy: "" };
@@ -23,9 +24,15 @@ export async function getPolicy(admin = false) {
 }
 export async function savePolicy(input: { content: PolicyContent; expectedVersion: number; publish: boolean }) {
   const { content, expectedVersion, publish } = input;
+  const current = publish ? await StorePolicy.findById(policyId).lean() : null;
+  const now = new Date();
+  const metadata = publish ? Object.assign({}, ...Object.keys(content).map(name => {
+    const key = name as keyof PolicyContent;
+    return publicationChanges(`publications.${key}`, current?.publishedContent?.[key], content[key], current?.publications?.[key], current?.publishedAt, now);
+  })) as Record<string, unknown> : {};
   try {
     const policy = await StorePolicy.findOneAndUpdate({ _id: policyId, __v: expectedVersion }, {
-      $set: { content, ...(publish ? { publishedContent: content, publishedAt: new Date() } : {}) },
+      $set: { content, ...(publish ? { publishedContent: content, publishedAt: current?.publishedAt ?? now, ...metadata } : {}) },
       $inc: { __v: 1 },
     }, { returnDocument: "after", upsert: expectedVersion === 0, runValidators: true, setDefaultsOnInsert: false });
     if (!policy) throw versionConflict();

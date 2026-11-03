@@ -54,6 +54,8 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^26.6.3",
     "@types/nodemailer": "^8.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

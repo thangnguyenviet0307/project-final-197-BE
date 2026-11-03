@@ -1,19 +1,20 @@
+import { hasReadableContent } from "./information.validation.js";
 import { z } from "zod";
 import { objectId } from "./common.validation.js";
 
 export const policyContentSchema = z.object({
-  privacy: z.string().trim().max(4000),
-  warranty: z.string().trim().max(4000),
-  returns: z.string().trim().max(4000),
-  shipping: z.string().trim().max(4000),
-  payment: z.string().trim().max(4000),
-  support: z.string().trim().max(4000),
+  privacy: z.string().trim().max(30000),
+  warranty: z.string().trim().max(30000),
+  returns: z.string().trim().max(30000),
+  shipping: z.string().trim().max(30000),
+  payment: z.string().trim().max(30000),
+  support: z.string().trim().max(30000),
 }).strict();
 export const savePolicySchema = z.object({
   content: policyContentSchema,
   publish: z.boolean(),
   expectedVersion: z.number().int().nonnegative(),
-}).strict().refine(value => !value.publish || Object.values(value.content).every(text => text.length > 0), {
+}).strict().refine(value => !value.publish || Object.values(value.content).every(hasReadableContent), {
   message: "Vui lòng điền đủ các mục trước khi công bố chính sách.", path: ["content"],
 });
 export const warrantyStatuses = ["submitted", "reviewing", "repairing", "resolved", "rejected"] as const;

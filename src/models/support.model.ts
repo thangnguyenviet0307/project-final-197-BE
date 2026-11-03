@@ -1,19 +1,24 @@
 import { Schema, model, type HydratedDocument, type InferSchemaType } from "mongoose";
 import { warrantyStatuses } from "../validations/support.validation.js";
+import { publicationSchema } from "./publication.schema.js";
 
 const contentSchema = new Schema({
-  privacy: { type: String, default: "", maxlength: 4000 },
-  warranty: { type: String, default: "", maxlength: 4000 },
-  returns: { type: String, default: "", maxlength: 4000 },
-  shipping: { type: String, default: "", maxlength: 4000 },
-  payment: { type: String, default: "", maxlength: 4000 },
-  support: { type: String, default: "", maxlength: 4000 },
+  privacy: { type: String, default: "", maxlength: 30000 },
+  warranty: { type: String, default: "", maxlength: 30000 },
+  returns: { type: String, default: "", maxlength: 30000 },
+  shipping: { type: String, default: "", maxlength: 30000 },
+  payment: { type: String, default: "", maxlength: 30000 },
+  support: { type: String, default: "", maxlength: 30000 },
 }, { _id: false });
 export const StorePolicy = model("StorePolicy", new Schema({
   _id: { type: String, required: true },
   content: { type: contentSchema, required: true },
   publishedContent: { type: contentSchema, default: null },
   publishedAt: { type: Date, default: null },
+  publications: {
+    privacy: publicationSchema, warranty: publicationSchema, returns: publicationSchema,
+    shipping: publicationSchema, payment: publicationSchema, support: publicationSchema,
+  },
 }, { timestamps: true, collection: "store_policies", optimisticConcurrency: true }));
 
 const historySchema = new Schema({

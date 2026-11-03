@@ -5,7 +5,11 @@ export interface PaginationResult {
   totalPages: number;
 }
 
-export function buildPagination(page: number, limit: number, total: number): PaginationResult {
+export function buildPagination(
+  page: number,
+  limit: number,
+  total: number
+): PaginationResult {
   return {
     page,
     limit,

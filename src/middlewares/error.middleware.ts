@@ -1,41 +1,41 @@
-import { sendResponse } from "../helpers/response.helper.js";
-import type { Request, Response, NextFunction } from "express";
+import { sendResponse } from '../helpers/response.helper.js';
+import type { Request, Response, NextFunction } from 'express';
 
-import mongoose from "mongoose";
-import { ZodError } from "zod";
+import mongoose from 'mongoose';
+import { ZodError } from 'zod';
 
 export class ApiError extends Error {
   constructor(
     public statusCode: number,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = "ApiError";
+    this.name = 'ApiError';
   }
 }
 
 const hasDuplicateKeyError = (
-  err: unknown,
+  err: unknown
 ): err is {
   code: number;
   keyPattern?: Record<string, unknown>;
 } => {
   return (
-    typeof err === "object" &&
+    typeof err === 'object' &&
     err !== null &&
-    "code" in err &&
+    'code' in err &&
     err.code === 11000
   );
 };
 
 const hasStatusCode = (
-  err: unknown,
+  err: unknown
 ): err is { statusCode: number; message: string } => {
   return (
-    typeof err === "object" &&
+    typeof err === 'object' &&
     err !== null &&
-    "statusCode" in err &&
-    typeof err.statusCode === "number"
+    'statusCode' in err &&
+    typeof err.statusCode === 'number'
   );
 };
 
@@ -43,24 +43,45 @@ export function errorMiddleware(
   err: unknown,
   _req: Request,
   res: Response,
-  _next: NextFunction,
+  _next: NextFunction
 ): void {
-  if (res.headersSent) { _next(err); return; }
-  if (hasStatusCode(err) && err.statusCode === 413 && "type" in err && err.type === "entity.too.large") {
-    sendResponse(res, 413, { success: false, message: "Dữ liệu gửi lên vượt quá dung lượng cho phép. Vui lòng rút gọn nội dung rồi thử lại.", data: null });
+  if (res.headersSent) {
+    _next(err);
     return;
   }
-  if (err instanceof SyntaxError && hasStatusCode(err) && err.statusCode === 400) {
-    sendResponse(res, 400, { success: false, message: "Invalid JSON request body", data: null });
+  if (
+    hasStatusCode(err) &&
+    err.statusCode === 413 &&
+    'type' in err &&
+    err.type === 'entity.too.large'
+  ) {
+    sendResponse(res, 413, {
+      success: false,
+      message:
+        'Dữ liệu gửi lên vượt quá dung lượng cho phép. Vui lòng rút gọn nội dung rồi thử lại.',
+      data: null,
+    });
+    return;
+  }
+  if (
+    err instanceof SyntaxError &&
+    hasStatusCode(err) &&
+    err.statusCode === 400
+  ) {
+    sendResponse(res, 400, {
+      success: false,
+      message: 'Invalid JSON request body',
+      data: null,
+    });
     return;
   }
   if (err instanceof ZodError) {
     sendResponse(res, 400, {
       success: false,
       data: null,
-      message: "Validation failed",
+      message: 'Validation failed',
       errors: err.issues.map((issue) => ({
-        field: issue.path.join("."),
+        field: issue.path.join('.'),
         message: issue.message,
         code: issue.code,
       })),
@@ -69,18 +90,27 @@ export function errorMiddleware(
   }
 
   if (err instanceof mongoose.Error.VersionError) {
-    sendResponse(res, 409, { success: false, code: "VERSION_CONFLICT", message: "Data changed; please retry", data: null });
+    sendResponse(res, 409, {
+      success: false,
+      code: 'VERSION_CONFLICT',
+      message: 'Data changed; please retry',
+      data: null,
+    });
     return;
   }
   if (err instanceof mongoose.Error.CastError) {
-    sendResponse(res, 400, { success: false, message: "Invalid identifier or value", data: null });
+    sendResponse(res, 400, {
+      success: false,
+      message: 'Invalid identifier or value',
+      data: null,
+    });
     return;
   }
   if (hasDuplicateKeyError(err)) {
     const field =
       err.keyPattern && Object.keys(err.keyPattern).length > 0
         ? Object.keys(err.keyPattern)[0]
-        : "field";
+        : 'field';
 
     sendResponse(res, 409, {
       success: false,
@@ -94,7 +124,7 @@ export function errorMiddleware(
     sendResponse(res, 400, {
       success: false,
       data: null,
-      message: "Database validation failed",
+      message: 'Database validation failed',
       errors: Object.values(err.errors).map((error) => ({
         field: error.path,
         message: error.message,
@@ -107,25 +137,38 @@ export function errorMiddleware(
     sendResponse(res, err.statusCode, {
       success: false,
       data: null,
-      message: err.statusCode >= 500 ? "Internal server error" : err.message,
-      ...("businessCode" in err && typeof err.businessCode === "string" && ["VERSION_CONFLICT", "CATEGORY_UNAVAILABLE", "ORDER_NOTE_CONFLICT", "CHECKOUT_RESERVATION_EXPIRED"].includes(err.businessCode) ? { code: err.businessCode } : {}),
-      ...("authCode" in err && typeof err.authCode === "string" && /^AUTH_[A-Z_]+$/.test(err.authCode) ? { code: err.authCode } : {}),
+      message: err.statusCode >= 500 ? 'Internal server error' : err.message,
+      ...('businessCode' in err &&
+      typeof err.businessCode === 'string' &&
+      [
+        'VERSION_CONFLICT',
+        'CATEGORY_UNAVAILABLE',
+        'ORDER_NOTE_CONFLICT',
+        'CHECKOUT_RESERVATION_EXPIRED',
+      ].includes(err.businessCode)
+        ? { code: err.businessCode }
+        : {}),
+      ...('authCode' in err &&
+      typeof err.authCode === 'string' &&
+      /^AUTH_[A-Z_]+$/.test(err.authCode)
+        ? { code: err.authCode }
+        : {}),
     });
     return;
   }
 
   if (err instanceof Error) {
-    console.error("Unhandled API error", { name: err.name });
+    console.error('Unhandled API error', { name: err.name });
     sendResponse(res, 500, {
       success: false,
       data: null,
       status: 500,
-      message: "Internal server error",
+      message: 'Internal server error',
     });
     return;
   }
 
-  sendResponse(res, 500, { message: "Internal server error" });
+  sendResponse(res, 500, { message: 'Internal server error' });
 }
 
 export const errorHandler = errorMiddleware;

@@ -1,38 +1,38 @@
-import { shippingToAddress } from "../utils/customer-address.js";
-import { createHash } from "node:crypto";
-import { Types } from "mongoose";
-import createHttpError from "http-errors";
-import { Customer } from "../models/customers.model.js";
-import { Order } from "../models/orders.model.js";
+import { shippingToAddress } from '../utils/customer-address.js';
+import { createHash } from 'node:crypto';
+import { Types } from 'mongoose';
+import createHttpError from 'http-errors';
+import { Customer } from '../models/customers.model.js';
+import { Order } from '../models/orders.model.js';
 import {
   CheckoutRequest,
   type CheckoutReceipt,
-} from "../models/checkout-requests.model.js";
+} from '../models/checkout-requests.model.js';
 import {
   checkoutSchema,
   type CheckoutInput,
-} from "../validations/checkout.validation.js";
-import { withRelationsTransaction } from "../utils/relations-transaction.js";
-import { calculateOrderTotal } from "../utils/order-total.js";
+} from '../validations/checkout.validation.js';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
+import { calculateOrderTotal } from '../utils/order-total.js';
 import {
   generateOrderCode,
   isOrderCodeCollision,
-} from "../utils/order-code.js";
-import { reserveOrderItems } from "./order-reservation.service.js";
-import { resolveCheckoutAddress } from "./checkout-locations.service.js";
+} from '../utils/order-code.js';
+import { reserveOrderItems } from './order-reservation.service.js';
+import { resolveCheckoutAddress } from './checkout-locations.service.js';
 import { saveGuestContact } from './guest-contacts.service.js';
 
 function replay(receipt: CheckoutReceipt, hash: string) {
   if (receipt.payloadHash !== hash)
     throw createHttpError(
       409,
-      "Request ID already used with different checkout data",
+      'Request ID already used with different checkout data'
     );
   if (receipt.reservationExpiredAt)
     throw createHttpError(
       409,
-      "Đơn hàng đã hết thời hạn chờ xác nhận 24 giờ và đã được hoàn tồn. Vui lòng kiểm tra giỏ hàng trước khi đặt lại.",
-      { businessCode: "CHECKOUT_RESERVATION_EXPIRED" },
+      'Đơn hàng đã hết thời hạn chờ xác nhận 24 giờ và đã được hoàn tồn. Vui lòng kiểm tra giỏ hàng trước khi đặt lại.',
+      { businessCode: 'CHECKOUT_RESERVATION_EXPIRED' }
     );
   return {
     _id: receipt.result._id.toString(),
@@ -45,7 +45,7 @@ function replay(receipt: CheckoutReceipt, hash: string) {
 export async function checkout(
   customerId: string | null,
   tokenVersion: number,
-  input: CheckoutInput,
+  input: CheckoutInput
 ) {
   return performCheckout(customerId, input, tokenVersion);
 }
@@ -58,10 +58,10 @@ export async function createCheckout(customerId: string, input: CheckoutInput) {
 async function performCheckout(
   customerId: string | null,
   raw: CheckoutInput,
-  tokenVersion?: number,
+  tokenVersion?: number
 ) {
   const input = checkoutSchema.parse(raw);
-  const hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  const hash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const scope = {
     customerId: customerId ? new Types.ObjectId(customerId) : null,
     requestId: input.requestId,
@@ -76,7 +76,7 @@ async function performCheckout(
               isActive: true,
               accountEnabled: true,
             })
-              .select("+tokenVersion")
+              .select('+tokenVersion')
               .session(session)
           : null;
         if (
@@ -88,11 +88,11 @@ async function performCheckout(
         ) {
           throw createHttpError(
             tokenVersion === undefined ? 403 : 401,
-            "Enabled customer session required",
+            'Enabled customer session required'
           );
         }
         const existing = await CheckoutRequest.findOne(scope)
-          .select("+payloadHash")
+          .select('+payloadHash')
           .session(session);
         if (existing) return replay(existing, hash);
         // Read older stage confirmations too; never reserve an existing request again.
@@ -100,13 +100,13 @@ async function performCheckout(
           customerId: scope.customerId,
           checkoutRequestId: input.requestId,
         })
-          .select("+checkoutFingerprint")
+          .select('+checkoutFingerprint')
           .session(session);
         if (legacy) {
           if (legacy.checkoutFingerprint !== hash)
             throw createHttpError(
               409,
-              "Request ID already used with different checkout data",
+              'Request ID already used with different checkout data'
             );
           const result = {
             _id: legacy._id,
@@ -121,12 +121,15 @@ async function performCheckout(
           }).save({ session });
           return { ...result, _id: result._id.toString() };
         }
-        if (!customerId && !input.email) throw createHttpError(400, 'Vui lòng nhập email nhận hàng.');
+        if (!customerId && !input.email)
+          throw createHttpError(400, 'Vui lòng nhập email nhận hàng.');
         // Finish the read/replay pass before waiting on an external provider.
         // The next pass rechecks session and receipts under the lock.
         if (!address) return null;
         const orderItems = await reserveOrderItems(input.items, session);
-        const guestContact = !customerId ? await saveGuestContact(input, address, session) : null;
+        const guestContact = !customerId
+          ? await saveGuestContact(input, address, session)
+          : null;
         const order = new Order({
           customerId: scope.customerId,
           ...(!customerId ? { guestCheckout: true } : {}),
@@ -134,7 +137,7 @@ async function performCheckout(
           ...(!customerId
             ? {
                 reservationExpiresAt: new Date(
-                  Date.now() + 24 * 60 * 60 * 1000,
+                  Date.now() + 24 * 60 * 60 * 1000
                 ),
               }
             : {}),
@@ -152,8 +155,8 @@ async function performCheckout(
               }
             : {
                 firstName: input.recipientName,
-                lastName: "",
-                email: input.email ?? "",
+                lastName: '',
+                email: input.email ?? '',
                 phone: input.phone,
               },
           recipientName: input.recipientName,
@@ -165,7 +168,7 @@ async function performCheckout(
             wardCode: input.wardCode,
           },
           street: input.street,
-          city: [address.ward, address.district].filter(Boolean).join(", "),
+          city: [address.ward, address.district].filter(Boolean).join(', '),
           state: address.province,
           orderNote: input.note,
           orderItems,
@@ -180,7 +183,7 @@ async function performCheckout(
             district: address.district,
             ward: address.ward,
             street: input.street,
-            deliveryTime: customer.shippingAddress?.deliveryTime ?? "",
+            deliveryTime: customer.shippingAddress?.deliveryTime ?? '',
             ...(input.addressVersion === 2
               ? {
                   addressVersion: 2 as const,
@@ -199,7 +202,7 @@ async function performCheckout(
           orderStatus: order.orderStatus,
         };
         await new CheckoutRequest({ ...scope, payloadHash: hash, result }).save(
-          { session },
+          { session }
         );
         return { ...result, _id: result._id.toString() };
       });
@@ -214,9 +217,9 @@ async function performCheckout(
       if (attempt === 4)
         throw createHttpError(
           503,
-          "Could not allocate order code; retry later",
+          'Could not allocate order code; retry later'
         );
     }
   }
-  throw createHttpError(503, "Checkout unavailable");
+  throw createHttpError(503, 'Checkout unavailable');
 }

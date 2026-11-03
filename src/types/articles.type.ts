@@ -1,5 +1,5 @@
-export type ArticleType = "news" | "blog";
-export type ArticleStatus = "draft" | "scheduled" | "published" | "archived";
+export type ArticleType = 'news' | 'blog';
+export type ArticleStatus = 'draft' | 'scheduled' | 'published' | 'archived';
 
 export interface ArticleSeoInput {
   title?: string | undefined;
@@ -26,7 +26,9 @@ export interface CreateArticleInput {
   seo?: ArticleSeoInput | undefined;
 }
 
-export type UpdateArticleInput = { [K in keyof CreateArticleInput]?: CreateArticleInput[K] | undefined } & {
+export type UpdateArticleInput = {
+  [K in keyof CreateArticleInput]?: CreateArticleInput[K] | undefined;
+} & {
   expectedVersion: number;
 };
 
@@ -41,10 +43,10 @@ export interface ArticleListQuery {
   tag?: string | undefined;
   status?: ArticleStatus | undefined;
   isFeatured?: boolean | undefined;
-  sort?: "newest" | "oldest" | "popular" | "display" | undefined;
+  sort?: 'newest' | 'oldest' | 'popular' | 'display' | undefined;
 }
 
 export interface AdminArticleListQuery extends ArticleListQuery {
   status?: ArticleStatus | undefined;
-  sort?: "newest" | "oldest" | "popular" | "display" | undefined;
+  sort?: 'newest' | 'oldest' | 'popular' | 'display' | undefined;
 }

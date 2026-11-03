@@ -1,4 +1,4 @@
-import type { IPaginationQuery } from "./common.types.js";
+import type { IPaginationQuery } from './common.types.js';
 import { Types } from 'mongoose';
 
 export enum OrderStatus {
@@ -12,7 +12,10 @@ export enum PaymentType {
   COD = 1,
 }
 
-export const OPEN_ORDER_STATUSES: readonly OrderStatus[] = [OrderStatus.Pending, OrderStatus.Processing];
+export const OPEN_ORDER_STATUSES: readonly OrderStatus[] = [
+  OrderStatus.Pending,
+  OrderStatus.Processing,
+];
 
 // order_items: sub schema (embedding) của Order
 export interface IOrderItem {
@@ -38,11 +41,23 @@ export interface IOrder {
   checkoutFingerprint?: string;
   recipientName?: string;
   recipientPhone?: string;
-  deliveryAddress?: { province: string; district: string; ward: string; provinceCode: number; districtCode: number; wardCode: number };
+  deliveryAddress?: {
+    province: string;
+    district: string;
+    ward: string;
+    provinceCode: number;
+    districtCode: number;
+    wardCode: number;
+  };
   plannedShippingDate?: Date;
   orderCode?: string;
   customerId: Types.ObjectId | null;
-  customerSnapshot?: { firstName: string; lastName: string; email: string; phone: string };
+  customerSnapshot?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  };
   orderStatus: OrderStatus;
   orderDate: Date;
   requireDate?: Date;

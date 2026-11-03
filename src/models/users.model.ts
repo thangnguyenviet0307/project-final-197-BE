@@ -1,7 +1,7 @@
-import { removeUserSecrets } from "../utils/user-mapper.js";
-import { Schema, model } from "mongoose";
-import type { IUser } from "../types/users.type.js";
-export type { IUser } from "../types/users.type.js";
+import { removeUserSecrets } from '../utils/user-mapper.js';
+import { Schema, model } from 'mongoose';
+import type { IUser } from '../types/users.type.js';
+export type { IUser } from '../types/users.type.js';
 
 const userSchema = new Schema<IUser>(
   {
@@ -16,11 +16,11 @@ const userSchema = new Schema<IUser>(
       required: true,
       select: false,
     },
-    personalEmail: { type: String, trim: true, lowercase: true, default: "" },
-    phone: { type: String, trim: true, maxlength: 30, default: "" },
-    location: { type: String, trim: true, maxlength: 255, default: "" },
-    bio: { type: String, trim: true, maxlength: 1000, default: "" },
-    avatar: { type: String, default: "" },
+    personalEmail: { type: String, trim: true, lowercase: true, default: '' },
+    phone: { type: String, trim: true, maxlength: 30, default: '' },
+    location: { type: String, trim: true, maxlength: 255, default: '' },
+    bio: { type: String, trim: true, maxlength: 1000, default: '' },
+    avatar: { type: String, default: '' },
     firstName: {
       type: String,
       maxlength: 50,
@@ -35,8 +35,8 @@ const userSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["super_admin", "admin", "staff"],
-      default: "staff",
+      enum: ['super_admin', 'admin', 'staff'],
+      default: 'staff',
       required: true,
     },
     active: {
@@ -55,12 +55,13 @@ const userSchema = new Schema<IUser>(
   {
     timestamps: true,
     versionKey: false,
-  },
+  }
 );
 
 userSchema.index({ email: 1 }, { unique: true });
 
-const stripSecrets = (_doc: unknown, value: unknown) => removeUserSecrets(value as Record<string, unknown>);
-userSchema.set("toJSON", { transform: stripSecrets });
-userSchema.set("toObject", { transform: stripSecrets });
-export const User = model<IUser>("User", userSchema);
+const stripSecrets = (_doc: unknown, value: unknown) =>
+  removeUserSecrets(value as Record<string, unknown>);
+userSchema.set('toJSON', { transform: stripSecrets });
+userSchema.set('toObject', { transform: stripSecrets });
+export const User = model<IUser>('User', userSchema);

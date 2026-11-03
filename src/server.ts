@@ -1,26 +1,27 @@
-import { Article } from "./models/articles.model.js";
-import { WarrantyRequest, StorePolicy } from "./models/support.model.js";
-import { PostCategory } from "./models/post-categories.model.js";
-import dotenv from "dotenv";
+import { Article } from './models/articles.model.js';
+import { WarrantyRequest, StorePolicy } from './models/support.model.js';
+import { PostCategory } from './models/post-categories.model.js';
+import dotenv from 'dotenv';
 dotenv.config();
 
-import app from "./app.js";
-import { startImageCleanupWorker } from "./services/image-cleanup.service.js";
-import { startGuestReservationWorker } from "./services/guest-reservation.service.js";
-import { connectDatabase } from "./config/database.js";
-import { validateEnvironment } from "./config/environment.js";
-import mongoose from "mongoose";
-import { CheckoutRequest } from "./models/checkout-requests.model.js";
+import app from './app.js';
+import { startImageCleanupWorker } from './services/image-cleanup.service.js';
+import { startGuestReservationWorker } from './services/guest-reservation.service.js';
+import { connectDatabase } from './config/database.js';
+import { validateEnvironment } from './config/environment.js';
+import mongoose from 'mongoose';
+import { CheckoutRequest } from './models/checkout-requests.model.js';
 import { GuestContacts } from './models/guest-contacts.model.js';
 
-const PORT = Number(process.env["PORT"] || 5000);
+const PORT = Number(process.env['PORT'] || 5000);
 
 const startServer = async (): Promise<void> => {
   try {
     validateEnvironment();
   } catch (error) {
     // Validation messages contain variable names only, never their secret values.
-    if (error instanceof Error) console.error(`Invalid server configuration: ${error.message}`);
+    if (error instanceof Error)
+      console.error(`Invalid server configuration: ${error.message}`);
     throw error;
   }
   await connectDatabase();
@@ -36,7 +37,8 @@ const startServer = async (): Promise<void> => {
 
   const stopImageCleanup = startImageCleanupWorker();
   const stopGuestReservations = startGuestReservationWorker();
-  const stopWorkers = () => Promise.all([stopImageCleanup(), stopGuestReservations()]);
+  const stopWorkers = () =>
+    Promise.all([stopImageCleanup(), stopGuestReservations()]);
   const server = app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
   });
@@ -50,10 +52,22 @@ const startServer = async (): Promise<void> => {
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
-    const timeout = setTimeout(() => { server.closeAllConnections(); process.exit(1); }, 10000);
+    const timeout = setTimeout(() => {
+      server.closeAllConnections();
+      process.exit(1);
+    }, 10000);
     timeout.unref();
     server.close(() => {
-      void stopWorkers().then(() => mongoose.disconnect()).then(() => { clearTimeout(timeout); }, () => { process.exitCode = 1; });
+      void stopWorkers()
+        .then(() => mongoose.disconnect())
+        .then(
+          () => {
+            clearTimeout(timeout);
+          },
+          () => {
+            process.exitCode = 1;
+          }
+        );
     });
   };
   process.once('SIGINT', shutdown);
@@ -61,6 +75,8 @@ const startServer = async (): Promise<void> => {
 };
 
 startServer().catch(() => {
-  console.error("Failed to start server; check environment and database configuration");
+  console.error(
+    'Failed to start server; check environment and database configuration'
+  );
   process.exit(1);
 });

@@ -4,7 +4,11 @@ export type Role = 'super_admin' | 'admin' | 'staff';
 
 const rolePermissions: Record<Role, Permission[]> = {
   super_admin: Object.values(Permission),
-  admin: Object.values(Permission).filter(permission => permission !== Permission.OwnershipTransfer && permission !== Permission.UserManageAdmins),
+  admin: Object.values(Permission).filter(
+    (permission) =>
+      permission !== Permission.OwnershipTransfer &&
+      permission !== Permission.UserManageAdmins
+  ),
   staff: [
     // Staff read all history and operate orders assigned to themselves.
     Permission.OrderView,

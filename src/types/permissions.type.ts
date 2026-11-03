@@ -1,8 +1,8 @@
 export enum Permission {
   OwnershipTransfer = 'system:transfer-ownership',
   UserManageAdmins = 'users:manage-admins',
-  HeroManage = "hero:manage",
-  ArticleManage = "articles:manage",
+  HeroManage = 'hero:manage',
+  ArticleManage = 'articles:manage',
   // Order permissions
   OrderView = 'orders:view',
   OrderStart = 'orders:start',

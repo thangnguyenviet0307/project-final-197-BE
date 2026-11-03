@@ -1,4 +1,4 @@
-import type { IPaginationQuery } from "./common.types.js";
+import type { IPaginationQuery } from './common.types.js';
 export interface IAddress {
   street: string;
   city: string;
@@ -7,7 +7,7 @@ export interface IAddress {
 
 export interface ICustomer {
   birthDate?: string;
-  gender?: "" | "male" | "female" | "other";
+  gender?: '' | 'male' | 'female' | 'other';
   shippingAddress?: {
     recipientName: string;
     email: string;

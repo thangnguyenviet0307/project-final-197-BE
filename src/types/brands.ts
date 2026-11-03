@@ -1,4 +1,4 @@
-import type { BaseDocument } from "./common.types.js";
+import type { BaseDocument } from './common.types.js';
 
 export interface IBrand {
   seedBatch?: string;

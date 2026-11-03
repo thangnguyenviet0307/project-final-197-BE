@@ -1,4 +1,4 @@
-import type { IPaginationQuery } from "./common.types.js";
+import type { IPaginationQuery } from './common.types.js';
 export interface IUser {
   personalEmail?: string;
   phone?: string;
@@ -24,7 +24,7 @@ export interface CreateUserInput {
   password: string;
   firstName: string;
   lastName: string;
-  role: "admin" | "staff";
+  role: 'admin' | 'staff';
   active: boolean;
 }
 export interface UpdateUserInput {
@@ -32,13 +32,13 @@ export interface UpdateUserInput {
   password?: string | undefined;
   firstName?: string | undefined;
   lastName?: string | undefined;
-  role?: "admin" | "staff" | undefined;
+  role?: 'admin' | 'staff' | undefined;
   active?: boolean | undefined;
 }
 export interface GetUsersQuery extends IPaginationQuery {
-  role?: "super_admin" | "admin" | "staff" | undefined;
+  role?: 'super_admin' | 'admin' | 'staff' | undefined;
   active?: boolean | undefined;
-  sortBy?: "username" | undefined;
-  sortOrder?: "asc" | "desc" | undefined;
+  sortBy?: 'username' | undefined;
+  sortOrder?: 'asc' | 'desc' | undefined;
   search?: string | undefined;
 }

@@ -1,11 +1,11 @@
-import createHttpError from "http-errors";
-import { createCheckout } from "../services/checkout.service.js";
-import { getCheckoutLocations } from "../services/checkout-locations.service.js";
-import type { Request, RequestHandler } from "express";
-import type { CustomerRequest } from "../middlewares/customer-auth.middleware.js";
-import { asyncHandler } from "../utils/async-handler.util.js";
-import { authResponse, clearRefreshCookie } from "../utils/auth-cookie.js";
-import { sendResponse } from "../helpers/response.helper.js";
+import createHttpError from 'http-errors';
+import { createCheckout } from '../services/checkout.service.js';
+import { getCheckoutLocations } from '../services/checkout-locations.service.js';
+import type { Request, RequestHandler } from 'express';
+import type { CustomerRequest } from '../middlewares/customer-auth.middleware.js';
+import { asyncHandler } from '../utils/async-handler.util.js';
+import { authResponse, clearRefreshCookie } from '../utils/auth-cookie.js';
+import { sendResponse } from '../helpers/response.helper.js';
 import {
   registerCustomer,
   loginCustomer,
@@ -14,31 +14,31 @@ import {
   publicCustomer,
   changeCustomerPassword,
   updateCustomerProfile,
-} from "../services/customer-auth.service.js";
+} from '../services/customer-auth.service.js';
 
 import {
   cancelCustomerOrder,
   listCustomerOrders,
-} from "../services/customer-orders.service.js";
-import { customerOrdersQuerySchema } from "../validations/customer-account.validation.js";
+} from '../services/customer-orders.service.js';
+import { customerOrdersQuerySchema } from '../validations/customer-account.validation.js';
 function actor(req: Request) {
   const customer = (req as CustomerRequest).customer;
-  if (!customer) throw createHttpError(401, "Customer session required");
+  if (!customer) throw createHttpError(401, 'Customer session required');
   return customer;
 }
 export const customerAuthController: Record<
-  | "register"
-  | "login"
-  | "refresh"
-  | "me"
-  | "profile"
-  | "logout"
-  | "password"
-  | "shippingAddress"
-  | "orders"
-  | "cancelOrder"
-  | "checkout"
-  | "checkoutLocations",
+  | 'register'
+  | 'login'
+  | 'refresh'
+  | 'me'
+  | 'profile'
+  | 'logout'
+  | 'password'
+  | 'shippingAddress'
+  | 'orders'
+  | 'cancelOrder'
+  | 'checkout'
+  | 'checkoutLocations',
   RequestHandler
 > = {
   checkout: asyncHandler(async (req, res) => {
@@ -52,7 +52,7 @@ export const customerAuthController: Record<
   register: asyncHandler(async (req, res) => {
     sendResponse(res, 201, {
       data: await registerCustomer(req.body),
-      message: "Account created. Please sign in.",
+      message: 'Account created. Please sign in.',
     });
   }),
   login: asyncHandler(async (req, res) => {
@@ -60,7 +60,7 @@ export const customerAuthController: Record<
       data: authResponse(
         req,
         res,
-        await loginCustomer(req.body.email, req.body.password),
+        await loginCustomer(req.body.email, req.body.password)
       ),
     });
   }),
@@ -69,7 +69,7 @@ export const customerAuthController: Record<
       data: authResponse(
         req,
         res,
-        await refreshCustomer(req.body.refreshToken),
+        await refreshCustomer(req.body.refreshToken)
       ),
     });
   }),
@@ -82,7 +82,7 @@ export const customerAuthController: Record<
       data: await updateCustomerProfile(
         customer._id.toString(),
         customer.tokenVersion ?? 0,
-        req.body,
+        req.body
       ),
     });
   }),
@@ -92,7 +92,7 @@ export const customerAuthController: Record<
       data: await updateCustomerProfile(
         customer._id.toString(),
         customer.tokenVersion ?? 0,
-        { shippingAddress: req.body },
+        { shippingAddress: req.body }
       ),
     });
   }),
@@ -100,8 +100,8 @@ export const customerAuthController: Record<
     await cancelCustomerOrder(
       actor(req)._id.toString(),
       actor(req).tokenVersion ?? 0,
-      req.params["id"] as string,
-      req.body.cancellationReason,
+      req.params['id'] as string,
+      req.body.cancellationReason
     );
     sendResponse(res, 200, { data: null });
   }),
@@ -113,18 +113,18 @@ export const customerAuthController: Record<
       await listCustomerOrders(
         actor(req)._id.toString(),
         query.page,
-        query.limit,
-      ),
+        query.limit
+      )
     );
   }),
   logout: asyncHandler(async (req, res) => {
     await logoutCustomer(actor(req)._id.toString());
-    clearRefreshCookie(res, "storefront");
+    clearRefreshCookie(res, 'storefront');
     sendResponse(res, 200, { data: null });
   }),
   password: asyncHandler(async (req, res) => {
     await changeCustomerPassword(actor(req)._id.toString(), req.body);
-    clearRefreshCookie(res, "storefront");
+    clearRefreshCookie(res, 'storefront');
     sendResponse(res, 200, { data: null });
   }),
 };

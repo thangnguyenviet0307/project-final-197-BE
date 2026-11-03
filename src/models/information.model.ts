@@ -1,20 +1,20 @@
-import { Schema, model } from "mongoose";
-import { publicationSchema } from "./publication.schema.js";
+import { Schema, model } from 'mongoose';
+import { publicationSchema } from './publication.schema.js';
 
 export const StoreInformation = model(
-  "StoreInformation",
+  'StoreInformation',
   new Schema(
     {
       _id: { type: String, required: true },
-      content: { type: String, default: "", maxlength: 30000 },
+      content: { type: String, default: '', maxlength: 30000 },
       publishedContent: { type: String, default: null, maxlength: 30000 },
       publishedAt: { type: Date, default: null },
       publication: { type: publicationSchema, default: undefined },
     },
     {
       timestamps: true,
-      collection: "store_information",
+      collection: 'store_information',
       optimisticConcurrency: true,
-    },
-  ),
+    }
+  )
 );

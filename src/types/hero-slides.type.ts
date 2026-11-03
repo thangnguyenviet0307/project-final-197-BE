@@ -6,4 +6,6 @@ export interface HeroSlideInput {
   sortOrder?: number | undefined;
   isActive?: boolean | undefined;
 }
-export type UpdateHeroSlideInput = { [K in keyof HeroSlideInput]?: HeroSlideInput[K] | undefined } & { expectedVersion: number };
+export type UpdateHeroSlideInput = {
+  [K in keyof HeroSlideInput]?: HeroSlideInput[K] | undefined;
+} & { expectedVersion: number };

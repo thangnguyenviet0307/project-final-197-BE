@@ -1,51 +1,51 @@
-import { Router, type IRouter } from "express";
-import { CategoriesController } from "../../controllers/categories.controller.js";
+import { Router, type IRouter } from 'express';
+import { CategoriesController } from '../../controllers/categories.controller.js';
 import {
   authenticate,
   requirePermission,
-} from "../../middlewares/auth.middleware.js";
-import { validate } from "../../middlewares/validate.middleware.js";
-import { Permission } from "../../types/permissions.type.js";
-import { idParamSchema } from "../../validations/common.validation.js";
+} from '../../middlewares/auth.middleware.js';
+import { validate } from '../../middlewares/validate.middleware.js';
+import { Permission } from '../../types/permissions.type.js';
+import { idParamSchema } from '../../validations/common.validation.js';
 import {
   createCategoriesSchema,
   updateCategoriesSchema,
-} from "../../validations/categories.validation.js";
+} from '../../validations/categories.validation.js';
 
 const router: IRouter = Router();
 
-router.get("/public", CategoriesController.getPublicCategories);
+router.get('/public', CategoriesController.getPublicCategories);
 
 router.use(authenticate);
 
 router
-  .route("/")
+  .route('/')
   .get(
     requirePermission(Permission.CategoryView),
-    CategoriesController.getAllCategories,
+    CategoriesController.getAllCategories
   )
   .post(
     requirePermission(Permission.CategoryCreate),
     validate({ body: createCategoriesSchema }),
-    CategoriesController.createCategories,
+    CategoriesController.createCategories
   );
 
 router
-  .route("/:id")
+  .route('/:id')
   .get(
     requirePermission(Permission.CategoryView),
     validate({ params: idParamSchema }),
-    CategoriesController.getCategoriesById,
+    CategoriesController.getCategoriesById
   )
   .put(
     requirePermission(Permission.CategoryUpdate),
     validate({ params: idParamSchema, body: updateCategoriesSchema }),
-    CategoriesController.updateCategories,
+    CategoriesController.updateCategories
   )
   .delete(
     requirePermission(Permission.CategoryDelete),
     validate({ params: idParamSchema }),
-    CategoriesController.deleteCategories,
+    CategoriesController.deleteCategories
   );
 
 export default router;

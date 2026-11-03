@@ -1,5 +1,5 @@
-import type { Request, RequestHandler } from "express";
-import type { ZodType } from "zod";
+import type { Request, RequestHandler } from 'express';
+import type { ZodType } from 'zod';
 
 export interface ValidationSchema {
   body?: ZodType;
@@ -8,23 +8,23 @@ export interface ValidationSchema {
 }
 
 const isValidationSchema = (
-  value: ZodType | ValidationSchema,
+  value: ZodType | ValidationSchema
 ): value is ValidationSchema =>
-  typeof value === "object" &&
+  typeof value === 'object' &&
   value !== null &&
-  ("body" in value || "query" in value || "params" in value);
+  ('body' in value || 'query' in value || 'params' in value);
 
 function assignValidatedData(req: Request, parsed: object): void {
-  if ("body" in parsed) req.body = parsed.body;
-  if ("query" in parsed) {
+  if ('body' in parsed) req.body = parsed.body;
+  if ('query' in parsed) {
     // Express 5 exposes query as a getter; shadow it only on this request.
-    Object.defineProperty(req, "query", {
+    Object.defineProperty(req, 'query', {
       value: parsed.query,
       writable: true,
       configurable: true,
     });
   }
-  if ("params" in parsed) req.params = parsed.params as typeof req.params;
+  if ('params' in parsed) req.params = parsed.params as typeof req.params;
 }
 
 export const validate =
@@ -55,7 +55,7 @@ export const validateData =
         query: req.query,
         params: req.params,
       });
-      if (typeof parsed === "object" && parsed !== null)
+      if (typeof parsed === 'object' && parsed !== null)
         assignValidatedData(req, parsed);
       next();
     } catch (error) {

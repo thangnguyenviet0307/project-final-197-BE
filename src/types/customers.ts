@@ -1,5 +1,4 @@
-
-import type { Document } from "mongoose";
+import type { Document } from 'mongoose';
 
 export interface ICustomer extends Document {
   first_name: string;

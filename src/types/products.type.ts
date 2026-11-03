@@ -1,4 +1,4 @@
-import type { IPaginationQuery, OptionalUpdate } from "./common.types.js";
+import type { IPaginationQuery, OptionalUpdate } from './common.types.js';
 
 export interface ProductVariantInput {
   _id?: string | undefined;
@@ -25,10 +25,11 @@ export interface ProductInput {
 
   sku?: string | null | undefined;
   barcode?: string | null | undefined;
-  currency?: "VND" | undefined;
+  currency?: 'VND' | undefined;
   tags?: string[] | undefined;
   weight?: number | null | undefined;
-  dimensions?: { width: number; height: number; depth: number } | null | undefined;
+  dimensions?:
+    { width: number; height: number; depth: number } | null | undefined;
   warrantyInformation?: string | null | undefined;
   shippingInformation?: string | null | undefined;
   returnPolicy?: string | null | undefined;
@@ -53,7 +54,9 @@ export interface CreateProductInput extends ProductInput {
   is_active: boolean;
   variants: ProductVariantInput[];
 }
-export interface UpdateProductInput extends OptionalUpdate<ProductInput> { expectedVersion?: number | undefined; }
+export interface UpdateProductInput extends OptionalUpdate<ProductInput> {
+  expectedVersion?: number | undefined;
+}
 export interface GetProductsQuery extends IPaginationQuery {
   on_sale?: boolean | undefined;
   is_best_seller?: boolean | undefined;
@@ -67,7 +70,14 @@ export interface GetProductsQuery extends IPaginationQuery {
   brand?: string | undefined;
   minPrice?: number | undefined;
   maxPrice?: number | undefined;
-  sortBy?: 'product_name' | 'price' | 'createdAt' | 'is_hot' | 'is_best_seller' | 'discount' | undefined;
+  sortBy?:
+    | 'product_name'
+    | 'price'
+    | 'createdAt'
+    | 'is_hot'
+    | 'is_best_seller'
+    | 'discount'
+    | undefined;
   sortOrder?: 'asc' | 'desc' | undefined;
   sku?: string | undefined;
   color?: string | undefined;
@@ -83,6 +93,11 @@ export interface TProduct extends ProductInput {
   updatedAt?: Date;
 }
 export interface QueryParams {
-  limit?: number; page?: number; search?: string; category?: string; brand?: string;
-  sortBy?: string; sortType?: "asc" | "desc";
+  limit?: number;
+  page?: number;
+  search?: string;
+  category?: string;
+  brand?: string;
+  sortBy?: string;
+  sortType?: 'asc' | 'desc';
 }

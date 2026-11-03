@@ -1,30 +1,59 @@
-import { enqueueImageCleanup } from "./image-cleanup.service.js";
-import { OPEN_ORDER_STATUSES } from "../types/orders.type.js";
-import { sumVariantStock } from "../utils/inventory.js";
-import { buildPagination } from "../utils/pagination.js";
-import createHttpError from "http-errors";
-import { Order } from "../models/orders.model.js";
-import { buildProductSearchQuery, discountedPricePageIds, buildProductSort } from "../utils/product-query.js";
-import Product from "../models/products.model.js";
-import { buildSlug } from "../helpers/buildSlug.helper.js";
-import { withRelationsTransaction } from "../utils/relations-transaction.js";
-import { assertActiveCatalog } from "../utils/catalog-reference.js";
-import type { ClientSession } from "mongoose";
-import { ProductReview } from "../models/product-reviews.model.js";
+import { enqueueImageCleanup } from './image-cleanup.service.js';
+import { OPEN_ORDER_STATUSES } from '../types/orders.type.js';
+import { sumVariantStock } from '../utils/inventory.js';
+import { buildPagination } from '../utils/pagination.js';
+import createHttpError from 'http-errors';
+import { Order } from '../models/orders.model.js';
+import {
+  buildProductSearchQuery,
+  discountedPricePageIds,
+  buildProductSort,
+} from '../utils/product-query.js';
+import Product from '../models/products.model.js';
+import { buildSlug } from '../helpers/buildSlug.helper.js';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
+import { assertActiveCatalog } from '../utils/catalog-reference.js';
+import type { ClientSession } from 'mongoose';
+import { ProductReview } from '../models/product-reviews.model.js';
 
-import type { ProductVariantInput, ProductInput, UpdateProductInput, GetProductsQuery } from "../types/products.type.js";
-export type { ProductVariantInput, ProductInput } from "../types/products.type.js";
+import type {
+  ProductVariantInput,
+  ProductInput,
+  UpdateProductInput,
+  GetProductsQuery,
+} from '../types/products.type.js';
+export type {
+  ProductVariantInput,
+  ProductInput,
+} from '../types/products.type.js';
 
-const exclusiveBadgeFields = ["is_best_seller", "is_new", "is_hot"] as const;
-function normalizeBadgeSelection<T extends Partial<Record<typeof exclusiveBadgeFields[number], boolean | undefined>>>(input: T): T {
-  const selected = exclusiveBadgeFields.filter(field => input[field] === true);
-  if (selected.length > 1) throw createHttpError(400, "Chỉ được chọn một nhãn Best Seller, New hoặc Hot.");
-  return selected.length ? { ...input, ...Object.fromEntries(exclusiveBadgeFields.map(field => [field, field === selected[0]])) } : input;
+const exclusiveBadgeFields = ['is_best_seller', 'is_new', 'is_hot'] as const;
+function normalizeBadgeSelection<
+  T extends Partial<
+    Record<(typeof exclusiveBadgeFields)[number], boolean | undefined>
+  >,
+>(input: T): T {
+  const selected = exclusiveBadgeFields.filter(
+    (field) => input[field] === true
+  );
+  if (selected.length > 1)
+    throw createHttpError(
+      400,
+      'Chỉ được chọn một nhãn Best Seller, New hoặc Hot.'
+    );
+  return selected.length
+    ? {
+        ...input,
+        ...Object.fromEntries(
+          exclusiveBadgeFields.map((field) => [field, field === selected[0]])
+        ),
+      }
+    : input;
 }
 
 const normalizeVariant = (
   variant: ProductVariantInput,
-  fallbackPrice: number,
+  fallbackPrice: number
 ): ProductVariantInput => {
   const images = Array.isArray(variant.images)
     ? variant.images.map((item) => String(item).trim()).filter(Boolean)
@@ -34,7 +63,7 @@ const normalizeVariant = (
 
   return {
     ...(variant._id ? { _id: variant._id } : {}),
-    sku: String(variant.sku ?? "")
+    sku: String(variant.sku ?? '')
       .trim()
       .toUpperCase(),
     variant_name: variant.variant_name?.trim() || null,
@@ -54,20 +83,20 @@ const normalizeVariant = (
 
 const normalizeVariants = (
   variants: ProductVariantInput[] | undefined,
-  fallbackPrice?: number,
+  fallbackPrice?: number
 ): ProductVariantInput[] => {
   if (!Array.isArray(variants) || variants.length === 0) {
     return [];
   }
 
   return variants.map((variant) =>
-    normalizeVariant(variant, fallbackPrice ?? 0),
+    normalizeVariant(variant, fallbackPrice ?? 0)
   );
 };
 
 const ensureUniqueVariantSkus = async (
   variants: ProductVariantInput[],
-  excludeId?: string,
+  excludeId?: string
 ): Promise<void> => {
   const seen = new Set<string>();
   const ids = new Set<string>();
@@ -75,23 +104,26 @@ const ensureUniqueVariantSkus = async (
   for (const variant of variants) {
     if (variant._id) {
       const key = variant._id.toLowerCase();
-      if (ids.has(key)) throw createHttpError(400, "Duplicate variant ID");
+      if (ids.has(key)) throw createHttpError(400, 'Duplicate variant ID');
       ids.add(key);
     }
     const { sku } = variant;
 
     if (!sku) {
-      throw createHttpError(400, "Mỗi biến thể phải có SKU");
+      throw createHttpError(400, 'Mỗi biến thể phải có SKU');
     }
 
     if (seen.has(sku)) {
-      throw createHttpError(409, `SKU ${sku} bị trùng lặp trong cùng một sản phẩm`);
+      throw createHttpError(
+        409,
+        `SKU ${sku} bị trùng lặp trong cùng một sản phẩm`
+      );
     }
 
     seen.add(sku);
 
     const exists = await Product.exists({
-      $or: [{ sku }, { "variants.sku": sku }],
+      $or: [{ sku }, { 'variants.sku': sku }],
       ...(excludeId ? { _id: { $ne: excludeId } } : {}),
     });
 
@@ -101,33 +133,70 @@ const ensureUniqueVariantSkus = async (
   }
 };
 
-async function ensureProductSku(sku: string | null | undefined, variants: ReadonlyArray<{ sku: string }>, excludeId?: string) {
+async function ensureProductSku(
+  sku: string | null | undefined,
+  variants: ReadonlyArray<{ sku: string }>,
+  excludeId?: string
+) {
   if (!sku) return;
-  if (variants.some(variant => variant.sku === sku)) throw createHttpError(409, "Product SKU must differ from its variant SKUs");
-  if (await Product.exists({ $or: [{ sku }, { "variants.sku": sku }], ...(excludeId ? { _id: { $ne: excludeId } } : {}) })) {
-    throw createHttpError(409, "SKU already exists");
+  if (variants.some((variant) => variant.sku === sku))
+    throw createHttpError(409, 'Product SKU must differ from its variant SKUs');
+  if (
+    await Product.exists({
+      $or: [{ sku }, { 'variants.sku': sku }],
+      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    })
+  ) {
+    throw createHttpError(409, 'SKU already exists');
   }
 }
 
-const getAllProducts = async (
-  filters: Partial<GetProductsQuery> = {},
-) => {
+const getAllProducts = async (filters: Partial<GetProductsQuery> = {}) => {
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 10;
   const query = await buildProductSearchQuery(filters);
-  const priceIds = filters.sortBy === 'price' ? await discountedPricePageIds(query, filters, page, limit) : null;
+  const priceIds =
+    filters.sortBy === 'price'
+      ? await discountedPricePageIds(query, filters, page, limit)
+      : null;
   const [data, total] = await Promise.all([
-    priceIds ? Product.find({ $and: [query, { _id: { $in: priceIds } }] }).populate("brand category").lean() : Product.find(query).sort(buildProductSort(filters)).skip((page - 1) * limit).limit(limit).populate("brand category").lean(),
+    priceIds
+      ? Product.find({ $and: [query, { _id: { $in: priceIds } }] })
+          .populate('brand category')
+          .lean()
+      : Product.find(query)
+          .sort(buildProductSort(filters))
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .populate('brand category')
+          .lean(),
     Product.countDocuments(query),
   ]);
-  if (priceIds) { const positions = new Map(priceIds.map((id, index) => [String(id), index])); data.sort((a, b) => positions.get(String(a._id))! - positions.get(String(b._id))!); }
+  if (priceIds) {
+    const positions = new Map(priceIds.map((id, index) => [String(id), index]));
+    data.sort(
+      (a, b) => positions.get(String(a._id))! - positions.get(String(b._id))!
+    );
+  }
   return { data, pagination: buildPagination(page, limit, total) };
 };
 
 const getStatistics = async () => {
-  const rows = await Product.aggregate<{ total: number; active: number; outOfStock: number; stockUnits: number }>([
-    { $group: { _id: null, total: { $sum: 1 }, active: { $sum: { $cond: ['$is_active', 1, 0] } },
-      outOfStock: { $sum: { $cond: [{ $eq: ['$stock', 0] }, 1, 0] } }, stockUnits: { $sum: '$stock' } } },
+  const rows = await Product.aggregate<{
+    total: number;
+    active: number;
+    outOfStock: number;
+    stockUnits: number;
+  }>([
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        active: { $sum: { $cond: ['$is_active', 1, 0] } },
+        outOfStock: { $sum: { $cond: [{ $eq: ['$stock', 0] }, 1, 0] } },
+        stockUnits: { $sum: '$stock' },
+      },
+    },
     { $project: { _id: 0 } },
   ]);
   return rows[0] ?? { total: 0, active: 0, outOfStock: 0, stockUnits: 0 };
@@ -136,17 +205,19 @@ const getStatistics = async () => {
 const getProductBySku = async (sku: string) => {
   const normalizedSku = String(sku).trim().toUpperCase();
 
-  return Product.findOne({ $or: [{ sku: normalizedSku }, { "variants.sku": normalizedSku }] })
-    .populate("brand category")
+  return Product.findOne({
+    $or: [{ sku: normalizedSku }, { 'variants.sku': normalizedSku }],
+  })
+    .populate('brand category')
     .lean();
 };
 
 const getVariantByProductAndVariantId = async (
   productId: string,
-  variantId: string,
+  variantId: string
 ) => {
   const product = await Product.findById(productId)
-    .populate("brand category")
+    .populate('brand category')
     .lean();
 
   if (!product || !Array.isArray(product.variants)) {
@@ -154,7 +225,7 @@ const getVariantByProductAndVariantId = async (
   }
 
   const variant = product.variants.find(
-    (item) => String(item._id) === String(variantId),
+    (item) => String(item._id) === String(variantId)
   );
 
   if (!variant) {
@@ -165,42 +236,60 @@ const getVariantByProductAndVariantId = async (
 };
 
 const getProductById = async (id: string) => {
-  return Product.findById(id).populate("brand category").lean();
+  return Product.findById(id).populate('brand category').lean();
 };
 
-async function findAvailableProductSlug(baseSlug: string, excludeId?: string): Promise<string> {
+async function findAvailableProductSlug(
+  baseSlug: string,
+  excludeId?: string
+): Promise<string> {
   let slug = baseSlug;
   let counter = 1;
-  while (await Product.exists({ slug, ...(excludeId ? { _id: { $ne: excludeId } } : {}) })) {
-    slug = baseSlug + "-" + counter++;
+  while (
+    await Product.exists({
+      slug,
+      ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    })
+  ) {
+    slug = baseSlug + '-' + counter++;
   }
   return slug;
 }
 
-function lowestVariantPrice(variants: ProductVariantInput[]): number | undefined {
-  return variants.length ? Math.min(...variants.map(variant => variant.price)) : undefined;
+function lowestVariantPrice(
+  variants: ProductVariantInput[]
+): number | undefined {
+  return variants.length
+    ? Math.min(...variants.map((variant) => variant.price))
+    : undefined;
 }
 
-export const createProductInSession = async (payload: ProductInput, session: ClientSession) => {
+export const createProductInSession = async (
+  payload: ProductInput,
+  session: ClientSession
+) => {
   payload = normalizeBadgeSelection(payload);
   await assertActiveCatalog(payload.brand, payload.category, session);
   const name = payload.product_name?.trim();
 
   if (!name) {
-    throw createHttpError(400, "Tên sản phẩm là bắt buộc");
+    throw createHttpError(400, 'Tên sản phẩm là bắt buộc');
   }
 
-  const slug = await findAvailableProductSlug(payload.slug?.trim() || buildSlug(name));
+  const slug = await findAvailableProductSlug(
+    payload.slug?.trim() || buildSlug(name)
+  );
 
   const normalizedVariants = normalizeVariants(
     payload.variants,
-    payload.price ?? 0,
+    payload.price ?? 0
   );
 
   await ensureUniqueVariantSkus(normalizedVariants);
   await ensureProductSku(payload.sku, normalizedVariants);
 
-  const computedPrice = payload.price ?? lowestVariantPrice(normalizedVariants) ?? 0;
+  const computedPrice =
+    payload.price ?? lowestVariantPrice(normalizedVariants) ?? 0;
 
   const computedStock = normalizedVariants.length
     ? sumVariantStock(normalizedVariants)
@@ -224,119 +313,207 @@ export const createProductInSession = async (payload: ProductInput, session: Cli
 
   return product.toObject();
 };
-const createProduct = async (payload: ProductInput) => withRelationsTransaction(session => createProductInSession(payload, session));
+const createProduct = async (payload: ProductInput) =>
+  withRelationsTransaction((session) =>
+    createProductInSession(payload, session)
+  );
 
-const updateProduct = async (
-  id: string,
-  payload: UpdateProductInput,
-) => withRelationsTransaction(async (session) => {
-  const existing = await Product.findById(id).session(session);
+const updateProduct = async (id: string, payload: UpdateProductInput) =>
+  withRelationsTransaction(async (session) => {
+    const existing = await Product.findById(id).session(session);
 
-  if (!existing) return null;
-  const { expectedVersion, ...fields } = normalizeBadgeSelection(payload);
-  await ensureProductSku(payload.sku === undefined ? existing.sku : payload.sku, payload.variants ?? existing.variants, id);
-  if ((payload.variants !== undefined || payload.stock !== undefined) && expectedVersion === undefined) {
-    throw createHttpError(400, "Read the product version before updating inventory or variants");
-  }
-  if (expectedVersion !== undefined && expectedVersion !== (existing.__v ?? 0)) {
-    throw createHttpError(409, "Product changed while you were editing. Reload and review the latest data before saving.");
-  }
-  if (payload.brand || payload.category || payload.is_active === true) {
-    await assertActiveCatalog(payload.brand ?? existing.brand, payload.category ?? existing.category, session);
-  }
-
-  const nextName = payload.product_name?.trim();
-
-  const updated: UpdateProductInput = {
-    ...fields,
-  };
-
-  if (nextName) {
-    updated.product_name = nextName;
-  }
-  if (payload.slug !== undefined) updated.slug = await findAvailableProductSlug(payload.slug.trim(), id);
-
-  if (Array.isArray(payload.variants)) {
-    const variants = payload.variants.map((variant) => {
-      if (!variant._id) return variant;
-      const previous = existing.variants.id(variant._id);
-      if (!previous) throw createHttpError(400, "Variant ID does not belong to this product");
-      return { ...previous.toObject(), ...variant, _id: String(previous._id) };
-    });
-    const normalizedVariants = normalizeVariants(
-      variants,
-      payload.price ?? existing.price ?? 0,
+    if (!existing) return null;
+    const { expectedVersion, ...fields } = normalizeBadgeSelection(payload);
+    await ensureProductSku(
+      payload.sku === undefined ? existing.sku : payload.sku,
+      payload.variants ?? existing.variants,
+      id
     );
-    await ensureUniqueVariantSkus(normalizedVariants, id);
-
-    updated.variants = normalizedVariants;
-    if (payload.price == null && normalizedVariants.length > 0) {
-      updated.price = lowestVariantPrice(normalizedVariants) ?? 0;
+    if (
+      (payload.variants !== undefined || payload.stock !== undefined) &&
+      expectedVersion === undefined
+    ) {
+      throw createHttpError(
+        400,
+        'Read the product version before updating inventory or variants'
+      );
+    }
+    if (
+      expectedVersion !== undefined &&
+      expectedVersion !== (existing.__v ?? 0)
+    ) {
+      throw createHttpError(
+        409,
+        'Product changed while you were editing. Reload and review the latest data before saving.'
+      );
+    }
+    if (payload.brand || payload.category || payload.is_active === true) {
+      await assertActiveCatalog(
+        payload.brand ?? existing.brand,
+        payload.category ?? existing.category,
+        session
+      );
     }
 
-    updated.stock = normalizedVariants.length ? sumVariantStock(normalizedVariants) : payload.stock ?? existing.stock;
+    const nextName = payload.product_name?.trim();
 
-    if (payload.thumbnail === undefined && !existing.thumbnail && normalizedVariants.length > 0) {
-      const firstVariantImage = normalizedVariants.find((variant) =>
-        Boolean(variant.image),
-      )?.image;
-      if (firstVariantImage) {
-        updated.thumbnail = firstVariantImage;
+    const updated: UpdateProductInput = {
+      ...fields,
+    };
+
+    if (nextName) {
+      updated.product_name = nextName;
+    }
+    if (payload.slug !== undefined)
+      updated.slug = await findAvailableProductSlug(payload.slug.trim(), id);
+
+    if (Array.isArray(payload.variants)) {
+      const variants = payload.variants.map((variant) => {
+        if (!variant._id) return variant;
+        const previous = existing.variants.id(variant._id);
+        if (!previous)
+          throw createHttpError(
+            400,
+            'Variant ID does not belong to this product'
+          );
+        return {
+          ...previous.toObject(),
+          ...variant,
+          _id: String(previous._id),
+        };
+      });
+      const normalizedVariants = normalizeVariants(
+        variants,
+        payload.price ?? existing.price ?? 0
+      );
+      await ensureUniqueVariantSkus(normalizedVariants, id);
+
+      updated.variants = normalizedVariants;
+      if (payload.price == null && normalizedVariants.length > 0) {
+        updated.price = lowestVariantPrice(normalizedVariants) ?? 0;
+      }
+
+      updated.stock = normalizedVariants.length
+        ? sumVariantStock(normalizedVariants)
+        : (payload.stock ?? existing.stock);
+
+      if (
+        payload.thumbnail === undefined &&
+        !existing.thumbnail &&
+        normalizedVariants.length > 0
+      ) {
+        const firstVariantImage = normalizedVariants.find((variant) =>
+          Boolean(variant.image)
+        )?.image;
+        if (firstVariantImage) {
+          updated.thumbnail = firstVariantImage;
+        }
       }
     }
-  }
 
-  if (Array.isArray(payload.variants)) {
-    if (payload.variants.length && await Order.exists({ orderStatus: { $in: OPEN_ORDER_STATUSES },
-      orderItems: { $elemMatch: { productId: id, variantId: { $exists: false } } } })) {
-      throw createHttpError(409, "Complete legacy product orders before adding variants");
+    if (Array.isArray(payload.variants)) {
+      if (
+        payload.variants.length &&
+        (await Order.exists({
+          orderStatus: { $in: OPEN_ORDER_STATUSES },
+          orderItems: {
+            $elemMatch: { productId: id, variantId: { $exists: false } },
+          },
+        }))
+      ) {
+        throw createHttpError(
+          409,
+          'Complete legacy product orders before adding variants'
+        );
+      }
+      const retained = new Set(
+        payload.variants.map((variant) => variant._id).filter(Boolean)
+      );
+      const removed = existing.variants.filter(
+        (variant) => !retained.has(String(variant._id))
+      );
+      if (
+        removed.length &&
+        (await Order.exists({
+          orderStatus: { $in: OPEN_ORDER_STATUSES },
+          orderItems: {
+            $elemMatch: {
+              productId: id,
+              variantId: { $in: removed.map((variant) => variant._id) },
+            },
+          },
+        }))
+      ) {
+        throw createHttpError(
+          409,
+          'Cannot remove variants reserved by open orders'
+        );
+      }
+    } else if (existing.variants.length && payload.stock !== undefined) {
+      throw createHttpError(400, 'Update stock on individual variants');
     }
-    const retained = new Set(payload.variants.map((variant) => variant._id).filter(Boolean));
-    const removed = existing.variants.filter((variant) => !retained.has(String(variant._id)));
-    if (removed.length && await Order.exists({ orderStatus: { $in: OPEN_ORDER_STATUSES },
-      orderItems: { $elemMatch: { productId: id, variantId: { $in: removed.map((variant) => variant._id) } } } })) {
-      throw createHttpError(409, "Cannot remove variants reserved by open orders");
-    }
-  } else if (existing.variants.length && payload.stock !== undefined) {
-    throw createHttpError(400, "Update stock on individual variants");
-  }
-  existing.set(updated);
-  await existing.save({ session });
-  return existing.toObject();
-});
+    existing.set(updated);
+    await existing.save({ session });
+    return existing.toObject();
+  });
 
-export const updateInventory = async (id: string, input: { expectedVersion: number; stock?: number | undefined; variants?: { _id: string; stock: number }[] | undefined }) => withRelationsTransaction(async session => {
-  const product = await Product.findById(id).session(session);
-  if (!product) throw createHttpError(404, "Product not found");
-  if ((product.__v ?? 0) !== input.expectedVersion) throw createHttpError(409, "Product changed. Reload before updating stock.");
-  if (product.variants.length) {
-    if (!input.variants || input.stock !== undefined) throw createHttpError(400, "Update stock on individual variants");
-    const seen = new Set<string>();
-    for (const item of input.variants) {
-      if (seen.has(item._id)) throw createHttpError(400, "Duplicate variant ID");
-      seen.add(item._id);
-      const variant = product.variants.id(item._id);
-      if (!variant) throw createHttpError(400, "Variant ID does not belong to this product");
-      variant.stock = item.stock;
+export const updateInventory = async (
+  id: string,
+  input: {
+    expectedVersion: number;
+    stock?: number | undefined;
+    variants?: { _id: string; stock: number }[] | undefined;
+  }
+) =>
+  withRelationsTransaction(async (session) => {
+    const product = await Product.findById(id).session(session);
+    if (!product) throw createHttpError(404, 'Product not found');
+    if ((product.__v ?? 0) !== input.expectedVersion)
+      throw createHttpError(
+        409,
+        'Product changed. Reload before updating stock.'
+      );
+    if (product.variants.length) {
+      if (!input.variants || input.stock !== undefined)
+        throw createHttpError(400, 'Update stock on individual variants');
+      const seen = new Set<string>();
+      for (const item of input.variants) {
+        if (seen.has(item._id))
+          throw createHttpError(400, 'Duplicate variant ID');
+        seen.add(item._id);
+        const variant = product.variants.id(item._id);
+        if (!variant)
+          throw createHttpError(
+            400,
+            'Variant ID does not belong to this product'
+          );
+        variant.stock = item.stock;
+      }
+      product.stock = sumVariantStock(product.variants);
+    } else {
+      if (input.stock === undefined || input.variants !== undefined)
+        throw createHttpError(400, 'Provide product stock');
+      product.stock = input.stock;
     }
-    product.stock = sumVariantStock(product.variants);
-  } else {
-    if (input.stock === undefined || input.variants !== undefined) throw createHttpError(400, "Provide product stock");
-    product.stock = input.stock;
-  }
-  await product.save({ session });
-  return product.toObject();
-});
+    await product.save({ session });
+    return product.toObject();
+  });
 
-const deleteProduct = async (id: string) => withRelationsTransaction(async (session) => {
-  if (await Order.exists({ "orderItems.productId": id }).session(session)) {
-    throw createHttpError(409, "Cannot delete products referenced by orders");
-  }
-  const product = await Product.findByIdAndDelete(id, { session });
-  if (product) await enqueueImageCleanup(product.images.map(image => image.public_id), session);
-  if (product) await ProductReview.deleteMany({ product: product._id }).session(session);
-  return product ? product.toObject() : null;
-});
+const deleteProduct = async (id: string) =>
+  withRelationsTransaction(async (session) => {
+    if (await Order.exists({ 'orderItems.productId': id }).session(session)) {
+      throw createHttpError(409, 'Cannot delete products referenced by orders');
+    }
+    const product = await Product.findByIdAndDelete(id, { session });
+    if (product)
+      await enqueueImageCleanup(
+        product.images.map((image) => image.public_id),
+        session
+      );
+    if (product)
+      await ProductReview.deleteMany({ product: product._id }).session(session);
+    return product ? product.toObject() : null;
+  });
 
 export default {
   getAllProducts,

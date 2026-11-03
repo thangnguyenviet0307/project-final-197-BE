@@ -1,4 +1,3 @@
-
 import mongoose from 'mongoose';
 import createHttpError from 'http-errors';
 import Product from '../models/products.model.js';
@@ -7,15 +6,14 @@ import { withRelationsTransaction } from '../utils/relations-transaction.js';
 import { BrandModel } from '../models/brands.model.js';
 import { buildSlug } from '../helpers/buildSlug.helper.js';
 
-import type {
-  BrandInput,
-  UpdateBrandInput,
-} from '../types/brands.js';
+import type { BrandInput, UpdateBrandInput } from '../types/brands.js';
 
 export class BrandService {
   static async getPublic() {
     return BrandModel.find({ isActive: true, isDeleted: { $ne: true } })
-      .select("_id name slug logoUrl").sort({ name: 1, _id: 1 }).lean();
+      .select('_id name slug logoUrl')
+      .sort({ name: 1, _id: 1 })
+      .lean();
   }
   // 1. Lấy tất cả thương hiệu chưa bị xóa
   static async getAll() {
@@ -55,10 +53,7 @@ export class BrandService {
   }
 
   // 4. Cập nhật thương hiệu
-  static async update(
-    id: string,
-    data: UpdateBrandInput
-  ) {
+  static async update(id: string, data: UpdateBrandInput) {
     if (!mongoose.isValidObjectId(id)) {
       return null;
     }
@@ -66,20 +61,21 @@ export class BrandService {
     const updateData: UpdateBrandInput & { slug?: string } = { ...data };
 
     if (data.name !== undefined) {
-
       // Sử dụng hàm buildSlug của nhóm
       updateData.slug = buildSlug(data.name);
     }
 
-    return withRelationsTransaction(async (session) => BrandModel.findOneAndUpdate(
-      { _id: id, isDeleted: { $ne: true } },
-      { $set: updateData },
-      {
-        returnDocument: 'after',
-        runValidators: true,
-        session,
-      }
-    ));
+    return withRelationsTransaction(async (session) =>
+      BrandModel.findOneAndUpdate(
+        { _id: id, isDeleted: { $ne: true } },
+        { $set: updateData },
+        {
+          returnDocument: 'after',
+          runValidators: true,
+          session,
+        }
+      )
+    );
   }
 
   // 5. Permanently delete an unreferenced brand
@@ -89,7 +85,11 @@ export class BrandService {
     }
 
     return withRelationsTransaction(async (session) => {
-      if (await Product.exists({ brand: id }).session(session)) throw createHttpError(409, 'Cannot delete a brand referenced by products');
+      if (await Product.exists({ brand: id }).session(session))
+        throw createHttpError(
+          409,
+          'Cannot delete a brand referenced by products'
+        );
       return BrandModel.findByIdAndDelete(id, { session });
     });
   }

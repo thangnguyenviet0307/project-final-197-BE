@@ -13,6 +13,7 @@ const brandSchema = new Schema<IBrand>(
     slug: { type: String, required: true, trim: true, unique: true },
     description: { type: String },
     logoUrl: { type: String },
+    imagePublicId: { type: String },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },

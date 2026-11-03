@@ -18,6 +18,8 @@ import type {
   UpdateOrderStatusInput,
 } from '../types/orders.type.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
+import { listOrderAssignees } from '../services/order-assignees.service.js';
+import { orderAssigneesQuerySchema } from '../validations/orders.validation.js';
 
 const getOrdersHandler: RequestHandler = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
@@ -97,6 +99,9 @@ const deleteOrderHandler: RequestHandler = asyncHandler(
 );
 
 export const orderController: Record<string, RequestHandler> = {
+  assignees: asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+    sendResponse(res, 200, await listOrderAssignees(req.user!, orderAssigneesQuerySchema.parse(req.query)));
+  }),
   getPersonalSales: asyncHandler(async (req: AuthenticatedRequest, res) => {
     const data = await getPersonalSales(req.user!);
     sendResponse(res, 200, { success: true, data });

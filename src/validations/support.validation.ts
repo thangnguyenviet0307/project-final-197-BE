@@ -49,6 +49,8 @@ export const createWarrantySchema = z
     description: z.string().trim().min(10).max(3000),
   })
   .strict();
+export const eligibleWarrantyOrdersSchema = supportListSchema.omit({ status: true }).extend({ orderId: objectId.optional() }).strict();
+export type EligibleWarrantyOrdersInput = z.infer<typeof eligibleWarrantyOrdersSchema>;
 export const updateWarrantySchema = z
   .object({
     expectedVersion: z.number().int().nonnegative(),

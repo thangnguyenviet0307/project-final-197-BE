@@ -3,7 +3,7 @@ import { asyncHandler } from '../utils/async-handler.util.js';
 import { sendResponse } from '../helpers/response.helper.js';
 import type { CustomerRequest } from '../middlewares/customer-auth.middleware.js';
 import type { AuthenticatedRequest } from '../middlewares/auth.middleware.js';
-import { supportListSchema } from '../validations/support.validation.js';
+import { supportListSchema, eligibleWarrantyOrdersSchema } from '../validations/support.validation.js';
 import * as service from '../services/support.service.js';
 
 const customer = (req: Request) => (req as CustomerRequest).customer!;
@@ -24,7 +24,7 @@ export const eligibleOrders: RequestHandler = asyncHandler(async (req, res) => {
     200,
     await service.eligibleWarrantyOrders(
       customerId(req),
-      supportListSchema.parse(req.query)
+      eligibleWarrantyOrdersSchema.parse(req.query)
     )
   );
 });

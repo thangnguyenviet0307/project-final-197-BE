@@ -18,6 +18,7 @@ import {
   savePolicySchema,
   supportListSchema,
   updateWarrantySchema,
+  eligibleWarrantyOrdersSchema,
 } from '../../validations/support.validation.js';
 import * as controller from '../../controllers/support.controller.js';
 import * as information from '../../controllers/information.controller.js';
@@ -117,7 +118,7 @@ router.put(
 router.get(
   '/customer/eligible-orders',
   authenticateCustomer,
-  validate({ query: supportListSchema }),
+  validate({ query: eligibleWarrantyOrdersSchema }),
   controller.eligibleOrders
 );
 router.get(

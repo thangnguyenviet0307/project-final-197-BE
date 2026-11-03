@@ -20,9 +20,11 @@ import type {
 } from '../validations/support.validation.js';
 import { buildPagination } from '../utils/pagination.js';
 import { configureCloudinary } from '../config/cloudinary.js';
+import { getCloudinaryFolder } from '../config/cloudinary-folders.js';
 import { validateProductImage } from './product-images.service.js';
 import { enqueueImageCleanup } from './image-cleanup.service.js';
 import { publicationChanges } from './publication-metadata.js';
+import type { EligibleWarrantyOrdersInput } from '../validations/support.validation.js';
 
 const policyId = 'store-policy';
 const blankContent: PolicyContent = {
@@ -182,11 +184,12 @@ export function warrantyDto(doc: WarrantyDocument, admin: boolean) {
 }
 export async function eligibleWarrantyOrders(
   customerId: string,
-  query: SupportListInput
+  query: EligibleWarrantyOrdersInput
 ) {
   const scope = {
     customerId: new Types.ObjectId(customerId),
     orderStatus: OrderStatus.Completed,
+    ...(query.orderId ? { _id: new Types.ObjectId(query.orderId) } : {}),
   };
   const [orders, total] = await Promise.all([
     Order.find(scope)
@@ -381,7 +384,7 @@ export async function addWarrantyImage(
   const uploaded = await new Promise<UploadApiResponse>((resolve, reject) => {
     const stream = storage.uploader.upload_stream(
       {
-        folder: `project-final/warranty/${id}`,
+        folder: `${getCloudinaryFolder('warranty')}/${id}`,
         public_id: randomUUID(),
         type: 'authenticated',
         resource_type: 'image',

@@ -14,6 +14,7 @@ const categoriesSchema = new mongoose.Schema<ICategories>(
     slug: { type: String, required: true, trim: true, unique: true },
     description: { type: String },
     icon: { type: String },
+    imagePublicId: { type: String },
     parent: { type: mongoose.Schema.Types.ObjectId, ref: 'Categories' },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, index: true },

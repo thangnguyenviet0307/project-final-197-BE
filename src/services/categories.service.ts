@@ -9,6 +9,7 @@ import type {
 } from '../types/categories.js';
 import { buildSlug } from '../helpers/buildSlug.helper.js';
 import { withRelationsTransaction } from '../utils/relations-transaction.js';
+import { withCatalogImage, cleanupCatalogImage } from './catalog-image.service.js';
 
 async function validateParent(
   parent: string | null | undefined,
@@ -39,9 +40,10 @@ export class CategoriesService {
   }
 
   public static async createCategory(
-    data: CreateCategoriesInput
+    data: CreateCategoriesInput,
+    file?: Express.Multer.File
   ): Promise<ICategories> {
-    return withRelationsTransaction(async (session) => {
+    return withCatalogImage(file, 'categories', async image => withRelationsTransaction(async (session) => {
       await validateParent(data.parent, session);
       const slug = buildSlug(data.name);
       if (
@@ -51,8 +53,8 @@ export class CategoriesService {
       ) {
         throw createHttpError(409, 'Category name or slug already exists');
       }
-      return new Categories({ ...data, slug }).save({ session });
-    });
+      return new Categories({ ...data, slug, ...(image ? { icon: image.url, imagePublicId: image.publicId } : {}) }).save({ session });
+    }));
   }
 
   public static async getAllCategories(): Promise<ICategories[]> {
@@ -72,9 +74,11 @@ export class CategoriesService {
 
   public static async updateCategory(
     id: string,
-    data: UpdateCategoriesInput
+    data: UpdateCategoriesInput,
+    file?: Express.Multer.File
   ): Promise<ICategories> {
-    return withRelationsTransaction(async (session) => {
+    let previous: string | undefined;
+    return withCatalogImage(file, 'categories', async image => withRelationsTransaction(async (session) => {
       const category = await Categories.findOne({
         _id: id,
         isDeleted: { $ne: true },
@@ -91,13 +95,15 @@ export class CategoriesService {
       ) {
         throw createHttpError(409, 'Category name or slug already exists');
       }
-      category.set({ ...data, slug });
+      previous = image || (data.icon !== undefined && data.icon !== category.icon) ? category.imagePublicId : undefined;
+      category.set({ ...data, slug, ...(image ? { icon: image.url, imagePublicId: image.publicId } : previous ? { imagePublicId: undefined } : {}) });
       return category.save({ session });
-    });
+    }), () => previous);
   }
 
   public static async deleteCategory(id: string): Promise<void> {
-    return withRelationsTransaction(async (session) => {
+    let previous: string | undefined;
+    await withRelationsTransaction(async (session) => {
       const category = await Categories.findById(id).session(session);
       if (!category) throw createHttpError(404, 'Categories not found');
       if (await Product.exists({ category: id }).session(session)) {
@@ -112,6 +118,8 @@ export class CategoriesService {
         { session }
       );
       await Categories.findByIdAndDelete(id, { session });
+      previous = category.imagePublicId;
     });
+    await cleanupCatalogImage(previous);
   }
 }

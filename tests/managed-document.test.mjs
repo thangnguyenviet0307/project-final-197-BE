@@ -30,6 +30,8 @@ function harness(t, Model, initial) {
 test('managed inputs reject unknown keys, empty publication, forged metadata and missing versions', () => {
   assert.equal(documentParams.safeParse({ key: 'privacy' }).success, true);
   assert.equal(documentParams.safeParse({ key: '$where' }).success, false);
+  assert.equal(documentParams.safeParse({ key: 'payment' }).success, false);
+  assert.equal(documentParams.safeParse({ key: 'support' }).success, false);
   const input = { content: '<h2>Title</h2><p>Content</p>', expectedVersion: 1, publish: true };
   assert.equal(documentInput.safeParse(input).success, true);
   for (const change of [{ content: '<p><br></p>' }, { views: 100 }, { publishedAt: new Date() }, { expectedVersion: -1 }]) assert.equal(documentInput.safeParse({ ...input, ...change }).success, false);

@@ -1,4 +1,4 @@
-import { updateOrderNoteSchema } from '../../validations/orders.validation.js';
+import { updateOrderNoteSchema, orderAssigneesQuerySchema } from '../../validations/orders.validation.js';
 import { Router, type Router as RouterType } from 'express';
 import createHttpError from 'http-errors';
 import { orderController } from '../../controllers/orders.controller.js';
@@ -21,6 +21,7 @@ import {
 const router: RouterType = Router();
 
 router.use(authenticate); // phạm vi dữ liệu theo quyền (orders:view-all) được xử lý trong service
+router.get('/assignees', requirePermission(Permission.OrderAssign), validate({ query: orderAssigneesQuerySchema }), orderController['assignees']!);
 
 router.get(
   '/personal-sales',

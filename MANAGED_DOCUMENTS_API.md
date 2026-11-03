@@ -11,9 +11,13 @@ All paths below start with `/api/v1/support`. Admin endpoints require authentica
 | GET | `/documents/:key` | Published content and metadata only; null if unavailable |
 | POST | `/documents/:key/views` | Increment public views atomically; return `{ views }` |
 
-Keys: `warranty`, `privacy`, `shipping`, `returns`, `payment`, `support`, `gioi-thieu`,
+Keys: `warranty`, `privacy`, `shipping`, `returns`, `gioi-thieu`,
 `dieu-khoan-su-dung`, `cau-hoi-thuong-gap`. These are fixed website sections; adding a new
 article means filling an empty section, not creating arbitrary route names.
+
+Payment/support are no longer independent managed documents: their editor/public routes
+and per-document API access are removed. The legacy main policy snapshot and stored data
+remain intact. Checkout, order cancellation, contact and warranty handling are unaffected.
 
 PUT body: `{ "content": "<p>Content</p>", "publish": true, "expectedVersion": 3 }`.
 DELETE body: `{ "expectedVersion": 3 }`. Responses use the existing `{ data }` envelope.

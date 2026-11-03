@@ -2,6 +2,7 @@ import type { Types } from 'mongoose';
 import type { BaseDocument } from './common.types.js';
 
 export interface ICategories {
+  imagePublicId?: string | undefined;
   seedBatch?: string;
   name: string;
   slug: string;
@@ -17,12 +18,14 @@ export type ICategoriesDocument = ICategories & BaseDocument;
 
 // API parent IDs are strings; the stored model uses Types.ObjectId.
 export interface CreateCategoriesInput {
+  icon?: string | undefined;
   name: string;
   description?: string | undefined;
   parent?: string | null | undefined;
   isActive?: boolean | undefined;
 }
 export interface UpdateCategoriesInput {
+  icon?: string | undefined;
   name?: string | undefined;
   description?: string | undefined;
   parent?: string | null | undefined;

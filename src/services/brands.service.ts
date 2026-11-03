@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import createHttpError from 'http-errors';
 import Product from '../models/products.model.js';
+import { withCatalogImage, cleanupCatalogImage } from './catalog-image.service.js';
 import { withRelationsTransaction } from '../utils/relations-transaction.js';
 
 import { BrandModel } from '../models/brands.model.js';
@@ -35,7 +36,7 @@ export class BrandService {
   }
 
   // 3. Tạo thương hiệu mới
-  static async create(data: BrandInput) {
+  static async create(data: BrandInput, file?: Express.Multer.File) {
     // Sử dụng hàm buildSlug của nhóm
     const slug = buildSlug(data.name);
 
@@ -49,11 +50,11 @@ export class BrandService {
         : {}),
     };
 
-    return BrandModel.create(brandData);
+    return withCatalogImage(file, 'brands', async image => BrandModel.create({ ...brandData, ...(image ? { logoUrl: image.url, imagePublicId: image.publicId } : {}) }));
   }
 
   // 4. Cập nhật thương hiệu
-  static async update(id: string, data: UpdateBrandInput) {
+  static async update(id: string, data: UpdateBrandInput, file?: Express.Multer.File) {
     if (!mongoose.isValidObjectId(id)) {
       return null;
     }
@@ -65,17 +66,24 @@ export class BrandService {
       updateData.slug = buildSlug(data.name);
     }
 
-    return withRelationsTransaction(async (session) =>
-      BrandModel.findOneAndUpdate(
+    let previous: string | undefined;
+    return withCatalogImage(file, 'brands', async image => withRelationsTransaction(async (session) => {
+      const imageChanged = image || data.logoUrl !== undefined;
+      if (imageChanged) {
+        const existing = await BrandModel.findOne({ _id: id, isDeleted: { $ne: true } }).session(session);
+        if (!existing) throw createHttpError(404, 'Brand not found');
+        previous = image || data.logoUrl !== existing.logoUrl ? existing.imagePublicId : undefined;
+      }
+      return BrandModel.findOneAndUpdate(
         { _id: id, isDeleted: { $ne: true } },
-        { $set: updateData },
+        { $set: { ...updateData, ...(image ? { logoUrl: image.url, imagePublicId: image.publicId } : {}) }, ...(!image && previous ? { $unset: { imagePublicId: 1 } } : {}) },
         {
           returnDocument: 'after',
           runValidators: true,
           session,
         }
-      )
-    );
+      );
+    }), () => previous);
   }
 
   // 5. Permanently delete an unreferenced brand
@@ -84,7 +92,7 @@ export class BrandService {
       return null;
     }
 
-    return withRelationsTransaction(async (session) => {
+    const deleted = await withRelationsTransaction(async (session) => {
       if (await Product.exists({ brand: id }).session(session))
         throw createHttpError(
           409,
@@ -92,5 +100,7 @@ export class BrandService {
         );
       return BrandModel.findByIdAndDelete(id, { session });
     });
+    await cleanupCatalogImage(deleted?.imagePublicId);
+    return deleted;
   }
 }

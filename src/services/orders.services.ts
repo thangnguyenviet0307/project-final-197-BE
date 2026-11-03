@@ -22,6 +22,7 @@ import type { IOrder } from '../types/orders.type.js';
 import { OrderStatus, OPEN_ORDER_STATUSES } from '../types/orders.type.js';
 import { buildPagination } from '../utils/pagination.js';
 import { assertGuestReservationActive } from './guest-reservation.service.js';
+import { orderAssigneeScope } from './order-assignees.service.js';
 import type {
   CreateOrderInput,
   GetOrdersQuery,
@@ -66,15 +67,15 @@ async function assertOrderCapacity(
 async function resolveAssignee(
   actor: AuthUser,
   requested?: string,
-  session?: ClientSession
+  session?: ClientSession,
+  enforceHierarchy = true
 ) {
   if (!requested) return undefined;
   if (!canAssign(actor) && requested !== actor.id)
     throw createHttpError(403, 'Cannot assign another user');
   const query = User.exists({
     _id: requested,
-    active: true,
-    ...(canAssign(actor) ? { role: 'staff' } : {}),
+    ...(enforceHierarchy ? orderAssigneeScope(actor) : { active: true, role: { $in: ['super_admin', 'admin', 'staff'] } }),
   });
   if (session) query.session(session);
   if (!(await query)) throw createHttpError(404, 'Active user not found');
@@ -231,7 +232,7 @@ export async function updateOrderStatus(
     if (needsAssignee(input.orderStatus) && !userId)
       throw createHttpError(400, 'Assign an order handler first');
     if (userId && (input.userId || needsAssignee(input.orderStatus))) {
-      await resolveAssignee(actor, userId, session);
+      await resolveAssignee(actor, userId, session, !!input.userId || !order.userId);
     }
     const fields: Partial<IOrder> = { orderStatus: input.orderStatus };
     if (input.orderStatus === OrderStatus.Rejected && input.cancellationReason)
@@ -306,8 +307,6 @@ export async function startOrder(
 ) {
   if (!hasPermission(actor.role, Permission.OrderStart))
     throw createHttpError(403, 'Cannot start orders');
-  if (canAssign(actor) && !requested)
-    throw createHttpError(400, 'Select an active staff handler');
   if (!canAssign(actor) && requested && requested !== actor.id)
     throw createHttpError(403, 'Cannot assign another user');
   return withRelationsTransaction(async (session) => {

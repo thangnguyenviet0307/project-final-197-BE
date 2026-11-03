@@ -18,7 +18,7 @@ export class CategoriesController {
   // 1. Create categories
   public static createCategories: RequestHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      const categories = await CategoriesService.createCategory(req.body);
+      const categories = await CategoriesService.createCategory(req.body, req.file);
       sendResponse(res, 201, {
         success: true,
         message: 'Categories created successfully',
@@ -57,7 +57,8 @@ export class CategoriesController {
     async (req: Request, res: Response): Promise<void> => {
       const updatedCategories = await CategoriesService.updateCategory(
         req.params['id'] as string,
-        req.body
+        req.body,
+        req.file
       );
       sendResponse(res, 200, {
         success: true,

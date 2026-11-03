@@ -11,7 +11,7 @@ import { User } from '../dist/models/users.model.js';
 import { Customer } from '../dist/models/customers.model.js';
 import { StoreInformation } from '../dist/models/information.model.js';
 import { generateAccessToken } from '../dist/utils/token.js';
-import { createWarrantySchema, savePolicySchema, updateWarrantySchema, supportListSchema } from '../dist/validations/support.validation.js';
+import { createWarrantySchema, savePolicySchema, updateWarrantySchema, supportListSchema, eligibleWarrantyOrdersSchema } from '../dist/validations/support.validation.js';
 import * as service from '../dist/services/support.service.js';
 
 const id = 'a'.repeat(24), other = 'b'.repeat(24);
@@ -19,6 +19,25 @@ const input = { requestId: '559d78a4-b73d-4d64-9665-381bf1273be8', orderId: id, 
 const content = { warranty: 'Bảo hành theo sản phẩm', returns: 'Điều kiện đổi trả', shipping: 'Giao hàng', payment: 'COD', support: 'Liên hệ cửa hàng', privacy: 'Bảo mật thông tin' };
 const actor = { id, role: 'staff' };
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
+
+test('targeted eligible-order lookup always scopes to the signed-in customer and completed status', async t => {
+  const query = eligibleWarrantyOrdersSchema.parse({ orderId: id });
+  assert.equal(eligibleWarrantyOrdersSchema.safeParse({ orderId: 'invalid' }).success, false);
+  assert.equal(eligibleWarrantyOrdersSchema.safeParse({ orderId: id, customerId: other }).success, false);
+  assert.equal(eligibleWarrantyOrdersSchema.safeParse({ status: 'submitted' }).success, false);
+  const check = filter => {
+    assert.equal(String(filter.customerId), other);
+    assert.equal(String(filter._id), id);
+    assert.equal(filter.orderStatus, 4);
+  };
+  t.mock.method(Order, 'find', filter => {
+    check(filter);
+    const result = { sort: () => result, skip: () => result, limit: () => result, lean: async () => [] };
+    return result;
+  });
+  t.mock.method(Order, 'countDocuments', async filter => { check(filter); return 0; });
+  assert.deepEqual((await service.eligibleWarrantyOrders(other, query)).data, []);
+});
 
 test('support inputs reject forged identity, missing publication content, invalid URL filters and oversized text', () => {
   assert.equal(createWarrantySchema.safeParse(input).success, true);

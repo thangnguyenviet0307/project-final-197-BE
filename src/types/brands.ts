@@ -1,6 +1,7 @@
 import type { BaseDocument } from './common.types.js';
 
 export interface IBrand {
+  imagePublicId?: string | undefined;
   seedBatch?: string;
   name: string;
   slug: string;

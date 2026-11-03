@@ -6,8 +6,6 @@ export const policyKeys = [
   'privacy',
   'shipping',
   'returns',
-  'payment',
-  'support',
 ] as const;
 export const documentKeys = [
   ...policyKeys,

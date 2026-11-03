@@ -3,6 +3,7 @@ import { withRelationsTransaction } from '../utils/relations-transaction.js';
 import { randomUUID } from 'node:crypto';
 import createHttpError from 'http-errors';
 import { configureCloudinary } from '../config/cloudinary.js';
+import { getCloudinaryFolder } from '../config/cloudinary-folders.js';
 import Product from '../models/products.model.js';
 import type { UploadApiResponse } from 'cloudinary';
 
@@ -34,11 +35,7 @@ export async function addProductImage(id: string, file?: Express.Multer.File) {
   if (!product) throw createHttpError(404, 'Product not found');
   if (product.images.length >= 8)
     throw createHttpError(409, 'A product can have up to 8 images');
-  const folder = (
-    process.env['CLOUDINARY_PRODUCT_FOLDER'] || 'project-final/products'
-  ).replace(/^\/+|\/+$/g, '');
-  if (!/^[a-zA-Z0-9_/-]{1,80}$/.test(folder))
-    throw createHttpError(503, 'Invalid image folder configuration');
+  const folder = getCloudinaryFolder('products');
   const uploaded = await new Promise<UploadApiResponse>((resolve, reject) => {
     try {
       const stream = storage.uploader.upload_stream(

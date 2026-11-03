@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { CategoriesController } from '../../controllers/categories.controller.js';
+import { parseCatalogImage } from '../../middlewares/catalog-image.middleware.js';
 import {
   authenticate,
   requirePermission,
@@ -26,6 +27,7 @@ router
   )
   .post(
     requirePermission(Permission.CategoryCreate),
+    parseCatalogImage,
     validate({ body: createCategoriesSchema }),
     CategoriesController.createCategories
   );
@@ -39,6 +41,8 @@ router
   )
   .put(
     requirePermission(Permission.CategoryUpdate),
+    validate({ params: idParamSchema }),
+    parseCatalogImage,
     validate({ params: idParamSchema, body: updateCategoriesSchema }),
     CategoriesController.updateCategories
   )

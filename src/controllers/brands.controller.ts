@@ -46,7 +46,7 @@ export class BrandController {
   static create: RequestHandler = asyncHandler(
     async (req: Request, res: Response) => {
       const data = req.body as BrandInput;
-      const brand = await BrandService.create(data);
+      const brand = await BrandService.create(data, req.file);
 
       sendResponse(res, 201, {
         success: true,
@@ -62,7 +62,7 @@ export class BrandController {
       const id = String(req.params['id']);
       const data = req.body as UpdateBrandInput;
 
-      const brand = await BrandService.update(id, data);
+      const brand = await BrandService.update(id, data, req.file);
 
       assertFound(brand, 'Brand not found');
 

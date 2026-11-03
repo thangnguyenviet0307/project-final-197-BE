@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Router as RouterType } from 'express';
 
 import { BrandController } from '../../controllers/brands.controller.js';
+import { parseCatalogImage } from '../../middlewares/catalog-image.middleware.js';
 import {
   authenticate,
   requirePermission,
@@ -33,12 +34,15 @@ router.get(
 router.post(
   '/',
   requirePermission(Permission.BrandCreate),
+  parseCatalogImage,
   validate({ body: createBrandSchema }),
   BrandController.create
 );
 router.put(
   '/:id',
   requirePermission(Permission.BrandUpdate),
+  validate({ params: idParamSchema }),
+  parseCatalogImage,
   validate({ params: idParamSchema, body: updateBrandSchema }),
   BrandController.update
 );

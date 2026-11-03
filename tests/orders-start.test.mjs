@@ -71,11 +71,10 @@ test('date bounds are combined with staff scope for both list and total', async 
   assert.deepEqual(filter.$and[1], { orderDate: { $gte: dateFrom, $lte: dateTo } });
   assert.deepEqual(filter.$and[0], {});
 });
-test('admin assignment requires a selected active staff account', async t => {
-  await assert.rejects(startOrder({ ...actor, role: 'admin' }, id), { status: 400 });
+test('admin assignment rejects inactive or out-of-scope accounts', async t => {
   harness(t);
   t.mock.method(User, 'exists', filter => {
-    assert.equal(filter.role, 'staff');
+    assert.deepEqual(filter.$or[1], { role: { $in: ['staff'] } });
     assert.equal(filter.active, true);
     assert.equal(filter._id, id);
     return { session() { return this; }, then(resolve) { return Promise.resolve(null).then(resolve); } };

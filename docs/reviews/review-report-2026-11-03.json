@@ -1,0 +1,605 @@
+{
+  "templateVersion": "1.0.0",
+  "reportMeta": {
+    "projectName": "Project Final 197 ? Backend, Database, Frontend",
+    "reviewedAt": "2026-11-03T20:45:00+07:00",
+    "reviewer": "Senior Full-stack Developer & Technical Reviewer",
+    "isExample": false,
+    "repositories": [
+      {
+        "name": "Backend",
+        "path": "project-final-197-BE",
+        "branch": "main",
+        "commit": "c30e96f99c12f138498c8d52610879d261feaae1",
+        "dirty": true,
+        "notes": "Working tree c? thay ??i; review d?a tr?n source ?ang c?, kh?ng gi? ??nh clean state."
+      },
+      {
+        "name": "Frontend",
+        "path": "project-final-197-FE",
+        "branch": "main",
+        "commit": "a4103b48b5c2b356720c9c054b82932ae96f41a1",
+        "dirty": true,
+        "notes": "Working tree c? thay ??i; ??nh gi? theo source hi?n h?nh."
+      }
+    ],
+    "branch": "main",
+    "commit": null,
+    "scope": [
+      "Kh?o s?t BE, FE, database, auth, checkout, cart, catalog v? admin flows.",
+      "Ch? d?ng source code hi?n c? v? k?t qu? typecheck/test/build; kh?ng s?a app, kh?ng seed DB, kh?ng deploy.",
+      "??c AGENTS.md v? PROJECT_RULES.md tr??c khi ??nh gi?."
+    ],
+    "limitations": [
+      "Ch?a c? ki?m tra live tr?n production-like domain; ch? c? static code + local checks.",
+      "Kh?ng ??c ho?c l?u secret/token/connection string / d? li?u c? nh?n.",
+      "Kh?ng x?c nh?n MongoDB/Cloudinary/hosting th?t ch? t? config v? source code."
+    ]
+  },
+  "overview": {
+    "summary": "Project ?? c? n?n t?ng h?i t? r? r?ng ? backend v? frontend, v?i nhi?u module ?? tri?n khai, nh?ng ph?m vi demo v?n c?n t?ch r? kh?i production-ready.",
+    "demoReadiness": "M?c s?n s?ng demo: trung b?nh - kh? cao cho ?? ?n full-stack local. M?c s?n s?ng production ch?a ???c ch?ng minh b?ng deployment live.",
+    "strengths": [
+      "Backend v? frontend ??u c? c?u tr?c module r? r?ng.",
+      "Typecheck/test/build ??u ??t ? c? BE v? FE.",
+      "Auth, permission v? checkout COD c? logic r? r?ng v? ???c ki?m ??nh b?ng test."
+    ],
+    "blockers": [
+      "Kh?ng c? runtime verification live v?i MongoDB/Cloudinary/hosting th?t.",
+      "Thanh to?n online ch?a c? t?ch h?p r? r?ng.",
+      "Cart hi?n l?u ? localStorage, kh?ng c? server cart ho?c sync ?a thi?t b?."
+    ],
+    "stack": [
+      {
+        "layer": "BE",
+        "technology": "Node.js + Express 5 + TypeScript + Mongoose + MongoDB",
+        "evidence": [
+          {
+            "file": "project-final-197-BE/package.json",
+            "line": null,
+            "symbol": "dependencies",
+            "description": "Khai b?o stack backend."
+          },
+          {
+            "file": "project-final-197-BE/src/app.ts",
+            "line": null,
+            "symbol": "app",
+            "description": "App bootstrap v? route mount."
+          }
+        ]
+      },
+      {
+        "layer": "FE",
+        "technology": "React 19 + Vite 8 + React Router + TanStack Query + Zustand",
+        "evidence": [
+          {
+            "file": "project-final-197-FE/package.json",
+            "line": null,
+            "symbol": "dependencies",
+            "description": "Khai b?o stack frontend."
+          },
+          {
+            "file": "project-final-197-FE/src/App.tsx",
+            "line": null,
+            "symbol": "App",
+            "description": "Router v? auth bootstrap."
+          }
+        ]
+      },
+      {
+        "layer": "DB",
+        "technology": "MongoDB schema v?i order/product snapshot v? stock logic",
+        "evidence": [
+          {
+            "file": "project-final-197-BE/src/models/orders.model.ts",
+            "line": null,
+            "symbol": "Order",
+            "description": "Schema ??n h?ng v? snapshot."
+          },
+          {
+            "file": "project-final-197-BE/src/models/products.model.ts",
+            "line": null,
+            "symbol": "Product",
+            "description": "Model s?n ph?m v?i bi?n th? v? t?n kho."
+          }
+        ]
+      },
+      {
+        "layer": "Deployment",
+        "technology": "Vercel + Render + env validation",
+        "evidence": [
+          {
+            "file": "project-final-197-FE/vercel.json",
+            "line": null,
+            "symbol": "rewrites",
+            "description": "C?u h?nh SPA rewrite."
+          },
+          {
+            "file": "project-final-197-BE/src/config/environment.ts",
+            "line": null,
+            "symbol": "validateEnvironment",
+            "description": "Env validation cho backend."
+          }
+        ]
+      }
+    ]
+  },
+  "coverage": [
+    {
+      "id": "C-001",
+      "module": "Architecture",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "project-final-197-BE/src/app.ts",
+        "project-final-197-BE/src/server.ts",
+        "project-final-197-FE/src/App.tsx"
+      ],
+      "notes": "?? ??c t?ng app v? bootstrap cho c? BE v? FE."
+    },
+    {
+      "id": "C-002",
+      "module": "Authentication",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "project-final-197-BE/src/middlewares/auth.middleware.ts",
+        "project-final-197-BE/src/utils/auth-cookie.ts",
+        "project-final-197-FE/src/services/api.ts"
+      ],
+      "notes": "Auth v? permission ?? ???c ??c ? m?c logic ch?nh."
+    },
+    {
+      "id": "C-003",
+      "module": "Checkout & Orders",
+      "layer": "Integration",
+      "status": "reviewed",
+      "paths": [
+        "project-final-197-BE/src/services/checkout.service.ts",
+        "project-final-197-FE/src/features/checkout/hooks/use-checkout-form.ts",
+        "project-final-197-BE/src/routes/v1/customer-auth.route.ts"
+      ],
+      "notes": "Checkout COD v? order creation c? logic r? r?ng nh?ng kh?ng c? payment gateway."
+    },
+    {
+      "id": "C-004",
+      "module": "Cart & storefront",
+      "layer": "FE",
+      "status": "sampled",
+      "paths": [
+        "project-final-197-FE/src/features/cart/utils/cart-storage.ts",
+        "project-final-197-FE/src/features/cart/utils/cart-journal.ts",
+        "project-final-197-FE/docs/frontend-structure.md"
+      ],
+      "notes": "Cart local-only theo identity c?a guest/customer; kh?ng c? server cart."
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "Kh?ng c? b?ng ch?ng deployment live v?i domain th?t",
+      "severity": "P1",
+      "verificationStatus": "risk",
+      "module": "Deployment",
+      "layer": "Deployment",
+      "evidence": [
+        {
+          "file": "project-final-197-FE/vercel.json",
+          "line": null,
+          "symbol": "rewrites",
+          "description": "FE c? config SPA rewrite nh?ng ch?a ch?ng minh ho?t ??ng live."
+        },
+        {
+          "file": "project-final-197-BE/src/config/environment.ts",
+          "line": null,
+          "symbol": "validateEnvironment",
+          "description": "Env validation gi?ng preflight, ch?a thay th? runtime tr?n m?i tr??ng th?t."
+        }
+      ],
+      "preconditions": [
+        "C? hosting FE/BE n?n production-like.",
+        "C?n x?c th?c cookie, CORS v? redirect tr?n domain th?t."
+      ],
+      "reproductionSteps": [
+        "Tri?n khai l?n domain th?t.",
+        "Th? ??ng nh?p customer/admin.",
+        "Ki?m tra refresh token, 401/403 v? redirect."
+      ],
+      "expectedBehavior": "Auth v? cookie ho?t ??ng ?n ??nh tr?n production domain.",
+      "actualBehavior": "Ch? c? config + validation trong source; ch?a c? smoke test live trong l?n review n?y.",
+      "impact": "L?i domain/origin/cookie c? th? ph? login v? checkout ngay khi demo tr?n m?i tr??ng th?t.",
+      "recommendation": "Ch?y smoke test real-domain tr??c demo ho?c release, ki?m tra cookie/refresh/origin/CORS.",
+      "verificationMethod": "D?a tr?n code v? config; kh?ng c? runtime deployment live ???c ch?ng minh."
+    },
+    {
+      "id": "F-002",
+      "title": "T?ch h?p thanh to?n online ch?a ???c t?m th?y",
+      "severity": "P1",
+      "verificationStatus": "not_found",
+      "module": "Checkout",
+      "layer": "Integration",
+      "evidence": [
+        {
+          "file": "project-final-197-FE/docs/frontend-structure.md",
+          "line": null,
+          "symbol": "COD checkout",
+          "description": "T?i li?u project n?u r? online payment l? unfinished."
+        },
+        {
+          "file": "project-final-197-FE/src/features/checkout/hooks/use-checkout-form.ts",
+          "line": null,
+          "symbol": "paymentMethod",
+          "description": "Payload checkout quy ??nh paymentMethod l? COD."
+        }
+      ],
+      "preconditions": [
+        "Ph?m vi project cho ph?p COD ho?c kh?ng c?n payment gateway th?c t?."
+      ],
+      "reproductionSteps": [
+        "T?m endpoint webhook, callback, verify signature, gateway SDK.",
+        "Ki?m tra FE form checkout n?u c? ph??ng th?c thanh to?n online."
+      ],
+      "expectedBehavior": "N?u c? online payment th? c?n c? callback, webhook v? idempotency.",
+      "actualBehavior": "Kh?ng t?m th?y gateway, webhook ho?c callback trong code ?? review.",
+      "impact": "Kh?ng th? xem ??y l? e-commerce ??y ?? n?u ph?m vi ti?n ?i?n t? / online payment l? b?t bu?c.",
+      "recommendation": "Gi? r? ph?m vi COD-only ho?c b? sung gateway v?i webhook/idempotency n?u c?n m? r?ng.",
+      "verificationMethod": "Kh?o s?t route, form checkout v? t?i li?u project rules; kh?ng th?y payment gateway th?c s?."
+    },
+    {
+      "id": "F-003",
+      "title": "Cart hi?n l? local-only, kh?ng c? server cart v? sync ?a thi?t b?",
+      "severity": "P2",
+      "verificationStatus": "not_found",
+      "module": "Cart",
+      "layer": "FE",
+      "evidence": [
+        {
+          "file": "project-final-197-FE/src/features/cart/utils/cart-storage.ts",
+          "line": null,
+          "symbol": "CART_STORAGE_KEY",
+          "description": "Cart l?u ? localStorage theo guest/customer."
+        },
+        {
+          "file": "project-final-197-FE/docs/frontend-structure.md",
+          "line": null,
+          "symbol": "There is no server cart",
+          "description": "Project rules ?? ghi r? gi?i h?n n?y."
+        }
+      ],
+      "preconditions": ["Ch? c?n cart browser local cho demo."],
+      "reproductionSteps": [
+        "Th?m h?ng v?o cart tr?n m?t tr?nh duy?t ho?c thi?t b?.",
+        "M? l?i tr?n thi?t b? kh?c ho?c x?a storage.",
+        "So s?nh d? li?u cart."
+      ],
+      "expectedBehavior": "N?u c?n multi-device th? ph?i c? server-side cart v? sync ??ng.",
+      "actualBehavior": "Cart l? local-only trong browser, kh?ng c? server sync hay cross-device.",
+      "impact": "??y l? ?i?m k? v?ng c?n r? r?ng n?u ng??i d?ng ngh? ??y l? ecommerce th?c t?.",
+      "recommendation": "Ghi r? cart local-only ho?c tri?n khai cart server cho customer ?? ??ng nh?p n?u m? r?ng ph?m vi.",
+      "verificationMethod": "D?a tr?n storage key v? documentation project; kh?ng c? server cart trong code review."
+    }
+  ],
+  "featureMatrix": [
+    {
+      "id": "M-001",
+      "module": "Authentication & roles",
+      "fe": "Implemented",
+      "be": "Implemented",
+      "database": "Implemented",
+      "integration": "Implemented",
+      "status": "implemented",
+      "remainingIssues": ["C?n x?c minh live production cookie/origin."],
+      "evidence": [
+        {
+          "file": "project-final-197-BE/src/middlewares/auth.middleware.ts",
+          "line": null,
+          "symbol": "authenticate",
+          "description": "Middleware auth v?i permission check."
+        },
+        {
+          "file": "project-final-197-FE/src/services/api.ts",
+          "line": null,
+          "symbol": "api",
+          "description": "Client auth v? refresh logic."
+        }
+      ]
+    },
+    {
+      "id": "M-002",
+      "module": "Catalog & products",
+      "fe": "Implemented",
+      "be": "Implemented",
+      "database": "Implemented",
+      "integration": "Implemented",
+      "status": "implemented",
+      "remainingIssues": ["Ch?a c? smoke test live cho upload ?nh/media th?t."],
+      "evidence": [
+        {
+          "file": "project-final-197-BE/src/routes/v1/products.route.ts",
+          "line": null,
+          "symbol": "productsRoutes",
+          "description": "Catalog route ???c mount."
+        },
+        {
+          "file": "project-final-197-FE/src/pages/storefront/products/index.tsx",
+          "line": null,
+          "symbol": "ProductListPage",
+          "description": "UI catalog storefront."
+        }
+      ]
+    },
+    {
+      "id": "M-003",
+      "module": "Orders & checkout",
+      "fe": "Implemented",
+      "be": "Implemented",
+      "database": "Implemented",
+      "integration": "Partial",
+      "status": "partial",
+      "remainingIssues": [
+        "COD implemented; online payment ch?a c?.",
+        "Kh?ng c? deployment live verification."
+      ],
+      "evidence": [
+        {
+          "file": "project-final-197-BE/src/services/checkout.service.ts",
+          "line": null,
+          "symbol": "createCheckout",
+          "description": "Checkout v? reserve stock."
+        },
+        {
+          "file": "project-final-197-FE/src/features/checkout/hooks/use-checkout-form.ts",
+          "line": null,
+          "symbol": "paymentMethod",
+          "description": "Checkout payload hi?n v?n l? COD."
+        }
+      ]
+    }
+  ],
+  "missingFeatures": [
+    {
+      "id": "MF-001",
+      "title": "Thanh to?n online / gateway / webhook",
+      "priority": "core",
+      "currentState": "Kh?ng t?m th?y gateway ho?c callback trong ph?m vi b?n review.",
+      "evidence": [
+        {
+          "file": "project-final-197-FE/src/features/checkout/hooks/use-checkout-form.ts",
+          "line": null,
+          "symbol": "paymentMethod",
+          "description": "Form checkout hi?n ch? c? COD."
+        },
+        {
+          "file": "project-final-197-BE/src/routes/v1/customer-auth.route.ts",
+          "line": null,
+          "symbol": "orders",
+          "description": "Route order hi?n kh?ng l? payment gateway."
+        }
+      ],
+      "rationale": "N?u c?n e-commerce th?c t?, online payment l? ph?n b?t bu?c. N?u kh?ng, c?n ghi r? COD-only.",
+      "minimumScope": "Gi? COD l?m scope t?i thi?u ho?c b? sung gateway ??n gi?n v?i callback v? idempotency.",
+      "affectedLayers": ["BE", "FE", "Integration"],
+      "difficulty": "high",
+      "estimatedEffort": "3-5 ng?y cho scope t?i thi?u, 1-2 tu?n n?u c?n webhook + test th?c t?.",
+      "assumptions": [
+        "Project l?a ch?n COD-only ho?c h? tr? m?t gateway ??n gi?n."
+      ],
+      "dependencies": [
+        "X?c ??nh gateway th?c t? ho?c sandbox.",
+        "Thi?t k? callback, verify signature v? idempotency."
+      ],
+      "acceptanceCriteria": [
+        "Checkout online t?o order ??ng v?i tr?ng th?i r? r?ng.",
+        "Webhook kh?ng t?o ??n tr?ng."
+      ]
+    },
+    {
+      "id": "MF-002",
+      "title": "Cart server-side v? ??ng b? ?a thi?t b?",
+      "priority": "recommended",
+      "currentState": "Cart hi?n l?u ? localStorage theo guest/customer identity.",
+      "evidence": [
+        {
+          "file": "project-final-197-FE/src/features/cart/utils/cart-storage.ts",
+          "line": null,
+          "symbol": "CART_STORAGE_KEY",
+          "description": "Key cart localStorage theo kh?ch/guest."
+        },
+        {
+          "file": "project-final-197-FE/docs/frontend-structure.md",
+          "line": null,
+          "symbol": "There is no server cart",
+          "description": "Project notes r? r?ng v? gi?i h?n n?y."
+        }
+      ],
+      "rationale": "Cart local l? ?? cho demo, nh?ng c?n ??nh d?u r? v? kh?ng th? ??ng b? cross-device.",
+      "minimumScope": "Ch? l?u cart server cho customer ?? ??ng nh?p, gi? guest cart local.",
+      "affectedLayers": ["BE", "FE", "DB"],
+      "difficulty": "medium",
+      "estimatedEffort": "2-4 ng?y cho phi?n b?n t?i thi?u.",
+      "assumptions": ["Ch? c?n cart c?a customer ?? ??ng nh?p."],
+      "dependencies": ["Schema cart server v? merge policy."],
+      "acceptanceCriteria": [
+        "Customer login l?i v?n th?y cart c?.",
+        "Guest cart kh?ng tr?n v?i customer cart."
+      ]
+    },
+    {
+      "id": "MF-003",
+      "title": "Smoke test production-like cho auth v? cookie",
+      "priority": "core",
+      "currentState": "Ch? c? configuration + validation, ch?a c? th?c nghi?m live.",
+      "evidence": [
+        {
+          "file": "project-final-197-BE/src/utils/auth-cookie.ts",
+          "line": null,
+          "symbol": "cookie",
+          "description": "Auth cookie logic ?ang ??nh ngh?a trusted origin v? secure flags."
+        },
+        {
+          "file": "project-final-197-FE/src/services/api.ts",
+          "line": null,
+          "symbol": "refreshAccessToken",
+          "description": "Refresh token logic c? ? client."
+        }
+      ],
+      "rationale": "Runtime auth issues th??ng ch? xu?t hi?n tr?n m?i tr??ng th?t, kh?ng b? b?t b?i unit test local.",
+      "minimumScope": "Ch?y smoke test tr?n staging/preview v?i domain th?t, refresh token v? cookie.",
+      "affectedLayers": ["Deployment", "Integration", "FE", "BE"],
+      "difficulty": "medium",
+      "estimatedEffort": "0.5-2 ng?y cho smoke test v? kh?c ph?c l?i domain.",
+      "assumptions": ["C? m?i tr??ng staging/preview ho?c preview deployment."],
+      "dependencies": ["Domain th?t", "B?ng env th?t"],
+      "acceptanceCriteria": [
+        "Login admin/customer th?nh c?ng tr?n domain th?t.",
+        "Refresh page kh?ng m?t session."
+      ]
+    }
+  ],
+  "actionPlan": [
+    {
+      "id": "A-001",
+      "title": "X?c minh m?i tr??ng deployment th?t tr??c demo",
+      "priority": "P1",
+      "timing": "Tr??c khi tr?nh b?y demo ch?nh th?c ho?c preview deploy",
+      "dependsOn": ["Domain FE/BE th?t", "B?ng env chu?n"],
+      "scope": ["Cookie", "CORS", "JWT refresh", "MongoDB th?t"],
+      "deliverables": ["Checklist smoke test login", "Bi?n b?n l?i n?u c?"],
+      "acceptanceCriteria": [
+        "Login admin/customer ch?y ?n tr?n domain th?t.",
+        "Kh?ng m?t session khi refresh page."
+      ]
+    },
+    {
+      "id": "A-002",
+      "title": "Ch?t ph?m vi COD ho?c online payment",
+      "priority": "P1",
+      "timing": "Sau khi x?c minh m?i tr??ng",
+      "dependsOn": ["Quy?t ??nh scope thanh to?n"],
+      "scope": ["Checkout", "Order status", "Gateway ho?c COD-only"],
+      "deliverables": ["Scope r? r?ng", "Checklist checkout"],
+      "acceptanceCriteria": [
+        "Kh?ng c?n m? h? gi?a COD v? online payment.",
+        "M?t demo checkout duy nh?t c? th? t?i hi?n ???c."
+      ]
+    },
+    {
+      "id": "A-003",
+      "title": "??nh d?u r? gi?i h?n cart local-only",
+      "priority": "P2",
+      "timing": "Tr??c khi demo ho?c review k?t th?c",
+      "dependsOn": ["Scope product demo"],
+      "scope": ["Cart", "Guest-user separation", "LocalStorage"],
+      "deliverables": ["Ghi ch? ph?m vi cart", "Checklist ng??i d?ng"],
+      "acceptanceCriteria": [
+        "Kh?ch h?ng kh?ng nh?m cart local v?i server cart.",
+        "Guest cart v? customer cart t?ch bi?t r? r?ng."
+      ]
+    }
+  ],
+  "manualTests": [
+    {
+      "id": "T-001",
+      "actor": "Admin",
+      "scenario": "??ng nh?p admin v? truy c?p dashboard",
+      "steps": [
+        "M? /auth/login",
+        "Nh?p credential admin",
+        "Ki?m tra redirect dashboard"
+      ],
+      "expectedBehavior": "Admin th?y dashboard v? route h?p l?.",
+      "status": "not_run"
+    },
+    {
+      "id": "T-002",
+      "actor": "Customer",
+      "scenario": "Checkout COD tr?n storefront",
+      "steps": [
+        "Th?m s?n ph?m v?o cart",
+        "?i?n ??a ch?",
+        "X?c nh?n ??t h?ng COD"
+      ],
+      "expectedBehavior": "Order ???c t?o v? stock reserve ??ng.",
+      "status": "not_run"
+    }
+  ],
+  "checks": [
+    {
+      "id": "K-001",
+      "repository": "Backend",
+      "command": "cd d:/Batch-197/project-final-197/project-final-197-BE && pnpm typecheck",
+      "status": "passed",
+      "summary": "Backend typecheck th?nh c?ng.",
+      "scope": "Backend TS validation.",
+      "executedAt": "2026-11-03T20:00:00+07:00"
+    },
+    {
+      "id": "K-002",
+      "repository": "Backend",
+      "command": "cd d:/Batch-197/project-final-197/project-final-197-BE && pnpm build",
+      "status": "passed",
+      "summary": "Backend build th?nh c?ng.",
+      "scope": "Backend build artifact.",
+      "executedAt": "2026-11-03T20:05:00+07:00"
+    },
+    {
+      "id": "K-003",
+      "repository": "Backend",
+      "command": "cd d:/Batch-197/project-final-197/project-final-197-BE && pnpm test",
+      "status": "passed",
+      "summary": "379 tests passed, 0 failed.",
+      "scope": "Backend behavioral validation.",
+      "executedAt": "2026-11-03T20:07:00+07:00"
+    },
+    {
+      "id": "K-004",
+      "repository": "Frontend",
+      "command": "cd d:/Batch-197/project-final-197/project-final-197-FE && pnpm typecheck",
+      "status": "passed",
+      "summary": "Frontend typecheck th?nh c?ng.",
+      "scope": "Frontend TS validation.",
+      "executedAt": "2026-11-03T20:12:00+07:00"
+    },
+    {
+      "id": "K-005",
+      "repository": "Frontend",
+      "command": "cd d:/Batch-197/project-final-197/project-final-197-FE && pnpm test",
+      "status": "passed",
+      "summary": "625 tests passed, 0 failed.",
+      "scope": "Frontend UI and contract tests.",
+      "executedAt": "2026-11-03T20:18:00+07:00"
+    }
+  ],
+  "topPriorities": [
+    {
+      "id": "TP-001",
+      "title": "X?c minh auth v? deployment tr?n domain th?t",
+      "rationale": "Auth, cookie v? refresh l? ?i?m r?i ro cao nh?t khi deploy live.",
+      "findingIds": ["F-001"]
+    },
+    {
+      "id": "TP-002",
+      "title": "Ch?t ph?m vi thanh to?n online ho?c COD-only",
+      "rationale": "?i?m n?y c?n r? ?? tr?nh hi?u nh?m project l? e-commerce ??y ??.",
+      "findingIds": ["F-002"]
+    },
+    {
+      "id": "TP-003",
+      "title": "C?ng nh?n gi?i h?n cart local-only",
+      "rationale": "Cart local-only ph? h?p demo nh?ng ph?i ???c c?ng nh?n r? r?ng.",
+      "findingIds": ["F-003"]
+    },
+    {
+      "id": "TP-004",
+      "title": "Ki?m tra deploy backend v?i MongoDB/media th?t",
+      "rationale": "M?i tr??ng th?t c? th? hi?n l?i kh?ng b? b?t b?i local code.",
+      "findingIds": ["F-001"]
+    },
+    {
+      "id": "TP-005",
+      "title": "??t smoke test demo tr??c bu?i tr?nh b?y",
+      "rationale": "M?t checklist demo r? r?ng c?n ???c chu?n b? tr??c khi tr?nh b?y ho?c ch?t project.",
+      "findingIds": ["F-001", "F-002", "F-003"]
+    }
+  ]
+}

@@ -12,6 +12,8 @@ import { validateEnvironment } from './config/environment.js';
 import mongoose from 'mongoose';
 import { CheckoutRequest } from './models/checkout-requests.model.js';
 import { GuestContacts } from './models/guest-contacts.model.js';
+import { CustomerOtpJob } from './models/customer-otp-jobs.model.js';
+import { startCustomerOtpWorker } from './services/customer-otp-worker.service.js';
 
 const PORT = Number(process.env['PORT'] || 5000);
 
@@ -29,6 +31,8 @@ const startServer = async (): Promise<void> => {
   await CheckoutRequest.createIndexes();
   await GuestContacts.init();
   await GuestContacts.createIndexes();
+  await CustomerOtpJob.init();
+  await CustomerOtpJob.createIndexes();
   await Promise.all([WarrantyRequest.init(), StorePolicy.init()]);
   await WarrantyRequest.createIndexes();
   // Scope index creation to the new editorial collections; never sync/drop unrelated indexes.
@@ -37,8 +41,9 @@ const startServer = async (): Promise<void> => {
 
   const stopImageCleanup = startImageCleanupWorker();
   const stopGuestReservations = startGuestReservationWorker();
+  const stopCustomerOtp = startCustomerOtpWorker();
   const stopWorkers = () =>
-    Promise.all([stopImageCleanup(), stopGuestReservations()]);
+    Promise.all([stopImageCleanup(), stopGuestReservations(), stopCustomerOtp()]);
   const server = app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
   });

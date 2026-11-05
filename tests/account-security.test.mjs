@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 import { User } from '../dist/models/users.model.js';
 import { Customer } from '../dist/models/customers.model.js';
 import { emailService } from '../dist/services/email.service.js';
-import { sendCustomerOtp, verifyCustomerOtp, resetCustomerPassword,
+import { deliverCustomerOtp, verifyCustomerOtp, resetCustomerPassword,
   sendEmailVerification, verifyPersonalEmail } from '../dist/services/account-security.service.js';
 import { UserService } from '../dist/services/users.service.js';
 import { login, changePassword, refresh } from '../dist/services/auth.service.js';
@@ -82,7 +82,7 @@ const code = messages => messages.at(-1).text.match(/\b\d{6}\b/)[0];
 test('customer recovery stores no plain OTP, consumes once, hashes new password and revokes old sessions', async t => {
   const record = customer(); record.password = await argon2.hash('Previous123!');
   database(t, Customer, record); const messages = mailbox(t);
-  await sendCustomerOtp(record.email);
+  await deliverCustomerOtp(record.email);
   const otp = code(messages);
   assert.equal(record.passwordRecovery.status, 'active');
   assert.notEqual(record.passwordRecovery.hash, otp);
@@ -103,9 +103,9 @@ test('customer recovery stores no plain OTP, consumes once, hashes new password 
 test('OTP expires exactly at five minutes and sending again invalidates the old code', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   const record = customer(); database(t, Customer, record); const messages = mailbox(t);
-  await sendCustomerOtp(record.email); const oldId = record.passwordRecovery.id;
-  await sendCustomerOtp(record.email); assert.equal(messages.length, 1);
-  t.mock.timers.tick(60_000); await sendCustomerOtp(record.email);
+  await deliverCustomerOtp(record.email); const oldId = record.passwordRecovery.id;
+  await deliverCustomerOtp(record.email); assert.equal(messages.length, 1);
+  t.mock.timers.tick(60_000); await deliverCustomerOtp(record.email);
   assert.notEqual(record.passwordRecovery.id, oldId);
   const otp = code(messages);
   t.mock.timers.tick(300_000);
@@ -114,7 +114,7 @@ test('OTP expires exactly at five minutes and sending again invalidates the old 
 
 test('five wrong attempts lock a code even when the sixth attempt is correct', async t => {
   const record = customer(); database(t, Customer, record); const messages = mailbox(t);
-  await sendCustomerOtp(record.email); const otp = code(messages);
+  await deliverCustomerOtp(record.email); const otp = code(messages);
   const wrong = otp === '000000' ? '000001' : '000000';
   for (let attempt = 0; attempt < 5; attempt++) await assert.rejects(verifyCustomerOtp(record.email, wrong), { status: 400 });
   await assert.rejects(verifyCustomerOtp(record.email, otp), { status: 400 });
@@ -124,21 +124,21 @@ test('five wrong attempts lock a code even when the sixth attempt is correct', a
 test('unknown and disabled accounts never receive mail; SMTP failure leaves no usable challenge', async t => {
   const record = customer(); record.isActive = false; database(t, Customer, record);
   const messages = mailbox(t);
-  await sendCustomerOtp('missing@example.com'); assert.equal(messages.length, 0);
-  await sendCustomerOtp(record.email); assert.equal(messages.length, 0);
+  await deliverCustomerOtp('missing@example.com'); assert.equal(messages.length, 0);
+  await deliverCustomerOtp(record.email); assert.equal(messages.length, 0);
   record.isActive = true;
   emailService.send.mock.mockImplementation(async () => { throw Object.assign(new Error('SMTP unavailable'), { status: 503 }); });
-  await assert.rejects(sendCustomerOtp(record.email), { status: 503 });
+  await assert.rejects(deliverCustomerOtp(record.email), { status: 503 });
   assert.equal(record.passwordRecovery, undefined);
 });
 
 test('reset grant expires and a session-version change invalidates an existing challenge', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   const record = customer(); database(t, Customer, record); const messages = mailbox(t);
-  await sendCustomerOtp(record.email); const grant = await verifyCustomerOtp(record.email, code(messages));
+  await deliverCustomerOtp(record.email); const grant = await verifyCustomerOtp(record.email, code(messages));
   t.mock.timers.tick(300_000);
   await assert.rejects(resetCustomerPassword({ email: record.email, resetToken: grant.resetToken, newPassword: 'Updated123!' }), { status: 400 });
-  await sendCustomerOtp(record.email); record.tokenVersion++;
+  await deliverCustomerOtp(record.email); record.tokenVersion++;
   await assert.rejects(verifyCustomerOtp(record.email, code(messages)), { status: 400 });
 });
 

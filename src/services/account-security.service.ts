@@ -1,6 +1,7 @@
 import argon2 from 'argon2';
 import createHttpError from 'http-errors';
 import { Customer } from '../models/customers.model.js';
+import { CustomerOtpJob } from '../models/customer-otp-jobs.model.js';
 import { User } from '../models/users.model.js';
 import { emailService } from './email.service.js';
 import { newOtp, newSecret, securityDigest, OTP_LIFETIME_MS, OTP_COOLDOWN_MS } from '../utils/account-security.js';
@@ -29,9 +30,28 @@ function issueChallenge(email: string, version: number, purpose: string) {
 
 export async function sendCustomerOtp(email: string): Promise<void> {
   email = createEmailSchema().parse(email);
+  try {
+    const now = Date.now();
+    // Never look up the account or wait for SMTP on the public request path.
+    await CustomerOtpJob.create({
+      email, runAt: new Date(now), expiresAt: new Date(now + 10 * 60_000),
+    });
+  } catch {
+    // Public recovery must not reveal account eligibility through delivery,
+    // configuration or account-specific persistence failures. Never log the
+    // recipient, OTP, challenge, credentials or upstream error details.
+    console.error('Customer recovery OTP queue unavailable');
+  }
+}
+
+export type CustomerOtpDeliveryResult =
+  | { status: 'delivered' | 'skipped' }
+  | { status: 'deferred'; retryAt: Date };
+
+export async function deliverCustomerOtp(email: string): Promise<CustomerOtpDeliveryResult> {
   const customer = await Customer.findOne({ email, accountEnabled: true, isActive: true })
     .select('+tokenVersion +passwordRecovery');
-  if (!customer) return;
+  if (!customer) return { status: 'skipped' };
   const { otp, challenge } = issueChallenge(email, customer.tokenVersion ?? 0, 'customer-otp');
   const reserved = await Customer.findOneAndUpdate({
     _id: customer._id, email, accountEnabled: true, isActive: true,
@@ -41,8 +61,23 @@ export async function sendCustomerOtp(email: string): Promise<void> {
       { 'passwordRecovery.resendAt': { $lte: new Date() } },
     ] }],
   }, { $set: { passwordRecovery: challenge } });
-  // Keep the public send response identical for unavailable/cooldown accounts.
-  if (!reserved) return;
+  if (!reserved) {
+    // A failed cleanup or another worker can leave a not-yet-delivered code.
+    // Re-read after the failed CAS; the first lookup may already be stale.
+    const current = await Customer.findOne({
+      _id: customer._id, email, accountEnabled: true, isActive: true,
+    }).select('+passwordRecovery +tokenVersion');
+    if (!current) return { status: 'skipped' };
+    const recovery = current.passwordRecovery;
+    if (recovery?.status !== 'pending' && recovery &&
+        recovery.version === (current.tokenVersion ?? 0) &&
+        recovery.resendAt.getTime() > Date.now()) return { status: 'skipped' };
+    // Waiting for a pending code is not a delivery failure and must not consume
+    // another SMTP attempt. The job's expiry still bounds the total wait.
+    return { status: 'deferred', retryAt: new Date(Math.max(
+      Date.now() + 1000, recovery?.resendAt.getTime() ?? 0
+    )) };
+  }
   try {
     await emailService.send(email, 'Mã xác nhận đặt lại mật khẩu',
       `Mã xác nhận của bạn: ${otp}\nMã có hiệu lực 5 phút. Không chia sẻ mã này.`);
@@ -52,6 +87,7 @@ export async function sendCustomerOtp(email: string): Promise<void> {
       'passwordRecovery.status': 'pending', 'passwordRecovery.expiresAt': { $gt: new Date() },
     }, { $set: { 'passwordRecovery.status': 'active' } });
     if (!activated) throw createHttpError(409, 'Tài khoản đã thay đổi. Vui lòng yêu cầu mã mới.');
+    return { status: 'delivered' };
   } catch (error) {
     await Customer.updateOne({ _id: customer._id, 'passwordRecovery.id': challenge.id },
       { $unset: { passwordRecovery: 1 } });

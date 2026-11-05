@@ -1,4 +1,8 @@
 import { WarrantyRequest } from '../dist/models/support.model.js';
+import { CustomerOtpJob } from '../dist/models/customer-otp-jobs.model.js';
+import { sendCustomerOtp } from '../dist/services/account-security.service.js';
+import { processCustomerOtpBatch } from '../dist/services/customer-otp-worker.service.js';
+import { emailService } from '../dist/services/email.service.js';
 import * as warrantyService from '../dist/services/support.service.js';
 import { checkout } from "../dist/services/checkout.service.js";
 import { cancelCustomerOrder } from "../dist/services/customer-orders.service.js";
@@ -648,4 +652,52 @@ test('warranty eligibility and creation enforce owner, expiry, duplicate exclusi
   const replay = await warrantyService.createWarranty(customer, payloads[winningIndex]);
   assert.equal(String(replay._id), String(claims[winningIndex].value._id));
 
+});
+
+
+test('durable OTP jobs isolate enqueue from SMTP and concurrent workers deliver once under a lease', async t => {
+  await CustomerOtpJob.init();
+  const previousSecret = process.env.OTP_SECRET;
+  process.env.OTP_SECRET = randomUUID() + randomUUID();
+  t.after(() => { if (previousSecret === undefined) delete process.env.OTP_SECRET; else process.env.OTP_SECRET = previousSecret; });
+  const buyer = await Customer.create({ firstName: 'Queue', lastName: 'Fixture', email: `otp-${randomUUID()}@example.com`, accountEnabled: true });
+  fixtures.customers.push(buyer._id);
+  const unknownEmail = `unknown-${randomUUID()}@example.com`;
+  const jobIds = [];
+  t.after(async () => { await CustomerOtpJob.deleteMany({ _id: { $in: jobIds } }); });
+  let release;
+  let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const blocked = new Promise(resolve => { release = resolve; });
+  let delivered = 0;
+  t.mock.method(emailService, 'send', async email => {
+    assert.equal(email, buyer.email);
+    delivered++;
+    entered();
+    await blocked;
+  });
+  await sendCustomerOtp(buyer.email);
+  await sendCustomerOtp(unknownEmail);
+  jobIds.push(...(await CustomerOtpJob.find({ email: { $in: [buyer.email, unknownEmail] } }).select('_id')).map(job => job._id));
+  assert.equal(jobIds.length, 2);
+  assert.equal(delivered, 0);
+  const workers = Promise.all([processCustomerOtpBatch(), processCustomerOtpBatch()]);
+  try {
+    await Promise.race([started, workers.then(() => { throw new Error('Workers finished before delivery started'); })]);
+    const pending = await Customer.findById(buyer._id).select('+passwordRecovery');
+    assert.equal(pending.passwordRecovery.status, 'pending');
+    // Both enqueue calls already completed even though delivery is still blocked.
+    assert.equal(delivered, 1);
+    const jobs = await CustomerOtpJob.find({ _id: { $in: jobIds }, leaseToken: { $exists: true } });
+    assert.ok(jobs.length >= 1);
+  } finally { release(); await workers; }
+  assert.equal(delivered, 1);
+  assert.equal(await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }), 0);
+  const active = await Customer.findById(buyer._id).select('+passwordRecovery');
+  assert.equal(active.passwordRecovery.status, 'active');
+  await sendCustomerOtp(buyer.email);
+  jobIds.push(...(await CustomerOtpJob.find({ email: buyer.email }).select('_id')).map(job => job._id));
+  await processCustomerOtpBatch();
+  assert.equal(delivered, 1); // A queued resend still respects the persisted cooldown.
+  assert.equal(await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }), 0);
 });

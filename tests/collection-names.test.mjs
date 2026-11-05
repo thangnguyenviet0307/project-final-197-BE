@@ -13,7 +13,7 @@ for (const file of await readdir(new URL('../src/models/', import.meta.url))) {
 test('all runtime models explicitly bind to the intended snake_case collections', () => {
   const expected = {
     Article: 'posts', Brand: 'brands', Categories: 'categories', CheckoutRequest: 'checkout_requests',
-    Customer: 'customers', GuestContact: 'guest_contacts', HeroSlide: 'hero_slides',
+    Customer: 'customers', CustomerOtpJob: 'customer_otp_jobs', GuestContact: 'guest_contacts', HeroSlide: 'hero_slides',
     ImageCleanupJob: 'image_cleanup_jobs', Order: 'orders', PostCategory: 'categories_post',
     Product: 'products', ProductReview: 'product_reviews', StoreInformation: 'store_information',
     StorePolicy: 'store_policies', SystemLock: 'system_locks', User: 'users', WarrantyRequest: 'warranty_requests',

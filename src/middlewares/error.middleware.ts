@@ -134,6 +134,14 @@ export function errorMiddleware(
   }
 
   if (hasStatusCode(err)) {
+    if (
+      err.statusCode === 429 &&
+      'retryAfter' in err &&
+      typeof err.retryAfter === 'number' &&
+      Number.isFinite(err.retryAfter) &&
+      err.retryAfter > 0
+    )
+      res.setHeader('Retry-After', String(Math.ceil(err.retryAfter)));
     sendResponse(res, err.statusCode, {
       success: false,
       data: null,

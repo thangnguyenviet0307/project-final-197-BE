@@ -16,6 +16,8 @@ import {
 } from '../../validations/users.validation.js';
 import { createAuthRateLimit } from '../../middlewares/auth-rate-limit.middleware.js';
 
+import { z } from 'zod';
+import { changePasswordSchema } from '../../validations/auth.validation.js';
 const router: RouterType = Router();
 
 router.use(authenticate);
@@ -72,4 +74,11 @@ router.delete(
   userController['deleteUser']!
 );
 
+const passwordResetLimit = createAuthRateLimit(5, 15 * 60 * 1000,
+  'Too many password reset requests', (req) => (req as AuthenticatedRequest).user!.id);
+router.post('/:id/reset-password', requirePermission(Permission.UserUpdate), passwordResetLimit,
+  validate({ params: idParamSchema, body: z.strictObject({}) }), userController['resetPassword']!);
+router.post('/:id/reissue-initial-password', requirePermission(Permission.UserUpdate), passwordResetLimit,
+  validate({ params: idParamSchema, body: z.strictObject({ password: changePasswordSchema.shape.newPassword }) }),
+  userController['reissueInitialPassword']!);
 export default router;

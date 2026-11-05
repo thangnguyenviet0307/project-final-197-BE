@@ -1,3 +1,5 @@
+import { accountSecurityController as security } from '../../controllers/account-security.controller.js';
+import { sendOtpSchema, verifyOtpSchema, resetPasswordSchema } from '../../validations/account-security.validation.js';
 import { idParamSchema } from '../../validations/common.validation.js';
 import { checkoutSchema } from '../../validations/checkout.validation.js';
 import { Router, type Router as ExpressRouter } from 'express';
@@ -26,6 +28,7 @@ import {
 } from '../../validations/auth.validation.js';
 
 const router: ExpressRouter = Router();
+router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 router.use((req, _res, next) => {
   try {
     if (getLoginArea(req) !== 'storefront')
@@ -97,4 +100,11 @@ router.post(
   validate({ body: changePasswordSchema }),
   controller.password
 );
+
+const recoveryIpLimit = createAuthRateLimit(30);
+const recoveryEmailLimit = createAuthRateLimit(10, 15 * 60 * 1000,
+  'Too many recovery requests', (req) => req.body.email);
+router.post('/send-otp', recoveryIpLimit, validate({ body: sendOtpSchema }), recoveryEmailLimit, security['sendOtp']!);
+router.post('/verify-otp', recoveryIpLimit, validate({ body: verifyOtpSchema }), recoveryEmailLimit, security['verifyOtp']!);
+router.post('/reset-password', recoveryIpLimit, validate({ body: resetPasswordSchema }), recoveryEmailLimit, security['resetPassword']!);
 export default router;

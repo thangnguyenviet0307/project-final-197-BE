@@ -3,6 +3,7 @@ import { toAuthUser } from '../utils/user-mapper.js';
 import type { Request, RequestHandler } from 'express';
 import createHttpError from 'http-errors';
 import { User } from '../models/users.model.js';
+import { assertTemporaryPasswordValid } from '../utils/account-security.js';
 import type { AuthUser } from '../types/auth.type.js';
 import { Permission } from '../types/permissions.type.js';
 import { hasPermission } from '../config/rolePermissions.js';
@@ -29,6 +30,14 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     }
     if (!matchesLoginArea(user.role, getLoginArea(req)))
       throw createHttpError(403, 'Account does not belong to this area');
+    const path = req.originalUrl.split('?')[0] ?? '';
+    if (path !== '/api/v1/auth/logout') assertTemporaryPasswordValid(user);
+    if (
+      user.mustChangePassword &&
+      path === '/api/v1/auth/me' &&
+      req.method !== 'GET'
+    )
+      throw createHttpError(403, 'Please change your temporary password first');
     if (
       user.mustChangePassword &&
       ![
@@ -42,6 +51,25 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
         'Password change required before accessing this resource'
       );
     }
+    if (
+      user.onboardingRequired &&
+      !user.mustChangePassword &&
+      ![
+        '/api/v1/auth/me',
+        '/api/v1/auth/logout',
+        '/api/v1/auth/change-password',
+        '/api/v1/auth/onboarding/profile',
+        '/api/v1/auth/email-verification/send-otp',
+        '/api/v1/auth/email-verification/verify-otp',
+      ].includes(path)
+    )
+      throw createHttpError(
+        403,
+        'Please complete your profile and verify your personal email',
+        {
+          authCode: 'AUTH_ONBOARDING_REQUIRED',
+        }
+      );
     (req as AuthenticatedRequest).user = toAuthUser(user);
     next();
   } catch (error) {

@@ -6,6 +6,7 @@ export interface IAddress {
 }
 
 export interface ICustomer {
+  passwordRecovery?: import('../models/security-challenge.schema.js').SecurityChallenge;
   birthDate?: string;
   gender?: '' | 'male' | 'female' | 'other';
   shippingAddress?: {

@@ -127,15 +127,8 @@ test("user serialization strips secrets from JSON and plain objects", () => {
   assert.equal(User.schema.path("refreshToken").options.select, false);
 });
 
-test("password change hashes password and revokes existing sessions", async (t) => {
-  t.mock.method(User, "findOneAndUpdate", async (_id, update, options) => {
-    assert.ok(await argon2.verify(update.$set.password, "new password"));
-    assert.equal(update.$set.refreshToken, null);
-    assert.equal(update.$inc.tokenVersion, 1);
-    assert.equal(options.runValidators, true);
-    return new User();
-  });
-  await UserService.updateUser("507f1f77bcf86cd799439011", { password: "new password" }, { id: 'f'.repeat(24), role: 'super_admin' });
+test("ordinary user updates reject passwords and require the dedicated reset flow", async () => {
+  await assert.rejects(UserService.updateUser("507f1f77bcf86cd799439011", { password: "new password" }, { id: 'f'.repeat(24), role: 'super_admin' }), { status: 400 });
 });
 
 test("refresh tokens are unique even within the same second", () => {

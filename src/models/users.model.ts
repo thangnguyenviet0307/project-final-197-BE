@@ -1,5 +1,6 @@
 import { removeUserSecrets } from '../utils/user-mapper.js';
 import { Schema, model } from 'mongoose';
+import { securityChallengeSchema } from './security-challenge.schema.js';
 import type { IUser } from '../types/users.type.js';
 export type { IUser } from '../types/users.type.js';
 
@@ -16,6 +17,11 @@ const userSchema = new Schema<IUser>(
       required: true,
       select: false,
     },
+    onboardingRequired: { type: Boolean, default: false },
+    personalEmailVerified: { type: Boolean, default: false },
+    temporaryPasswordExpiresAt: { type: Date },
+    emailVerification: { type: securityChallengeSchema, select: false },
+    pendingPassword: { type: new Schema({ id: String, hash: String, expiresAt: Date }, { _id: false }), select: false },
     personalEmail: { type: String, trim: true, lowercase: true, default: '' },
     phone: { type: String, trim: true, maxlength: 30, default: '' },
     location: { type: String, trim: true, maxlength: 255, default: '' },

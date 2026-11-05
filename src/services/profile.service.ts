@@ -28,11 +28,17 @@ export async function updateProfile(
   file?: Express.Multer.File
 ) {
   const { firstName, lastName, personalEmail, phone, location, bio } = input;
+  if (actor.onboardingRequired && !personalEmail)
+    throw createHttpError(400, 'Vui lòng nhập email cá nhân để hoàn tất hồ sơ.');
+  const emailChanged = personalEmail !== (actor.personalEmail ?? '');
   const avatar = file ? avatarData(file) : input.avatar;
   const user = await User.findOneAndUpdate(
     {
       _id: actor.id,
       active: true,
+      ...(actor.personalEmail ? { personalEmail: actor.personalEmail } : {
+        $and: [{ $or: [{ personalEmail: '' }, { personalEmail: { $exists: false } }] }],
+      }),
       $or: [
         { tokenVersion: actor.tokenVersion ?? 0 },
         { tokenVersion: { $exists: false } },
@@ -46,8 +52,10 @@ export async function updateProfile(
         phone,
         location,
         bio,
+        ...(emailChanged ? { personalEmailVerified: false, onboardingRequired: true } : {}),
         ...(avatar !== undefined ? { avatar } : {}),
       },
+      ...(emailChanged ? { $unset: { emailVerification: 1, pendingPassword: 1 } } : {}),
     },
     { returnDocument: 'after', runValidators: true }
   );

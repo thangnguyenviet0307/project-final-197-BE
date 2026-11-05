@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import { timingSafeEqual } from 'node:crypto';
 import { SystemLock } from '../models/system-locks.model.js';
 import argon2 from 'argon2';
+import { assertTemporaryPasswordValid } from '../utils/account-security.js';
 import createHttpError from 'http-errors';
 import { User } from '../models/users.model.js';
 import {
@@ -34,6 +35,7 @@ export async function login(
   if (!matchesLoginArea(user.role, area))
     throw createHttpError(401, 'Tài khoản không tồn tại !');
   const verification = await verifyPassword(user.password, password);
+  if (verification.valid) assertTemporaryPasswordValid(user);
   if (!verification.valid) {
     throw createHttpError(401, 'Email hoặc mật khẩu không chính xác');
   }
@@ -49,6 +51,8 @@ export async function login(
     {
       _id: user._id,
       password: user.password,
+      ...(user.mustChangePassword && user.temporaryPasswordExpiresAt
+        ? { temporaryPasswordExpiresAt: { $gt: new Date() } } : {}),
       $and: [
         { $or: [{ active: true }, { active: { $exists: false } }] },
         {
@@ -141,6 +145,7 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
   }
   if (!matchesLoginArea(user.role, area))
     throw createHttpError(401, 'Tài khoản không tồn tại !');
+  assertTemporaryPasswordValid(user);
   const authUser = toAuthUser(user);
   const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
     generateTokenPair(authUser);
@@ -148,6 +153,8 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
     {
       _id: user._id,
       refreshToken: hashToken(refreshToken),
+      ...(user.mustChangePassword && user.temporaryPasswordExpiresAt
+        ? { temporaryPasswordExpiresAt: { $gt: new Date() } } : {}),
       tokenVersion: decoded.version,
       active: true,
     },
@@ -170,17 +177,22 @@ export async function changePassword(
   const user = await User.findById(userId).select('+password +tokenVersion');
   if (!user || !user.active)
     throw createHttpError(401, 'Session is no longer valid');
+  assertTemporaryPasswordValid(user);
   const verification = await verifyPassword(
     user.password,
     input.currentPassword
   );
   if (!verification.valid)
     throw createHttpError(400, 'Current password is incorrect');
+  const newPasswordHash = await argon2.hash(input.newPassword);
+  assertTemporaryPasswordValid(user);
   const revocation = sessionRevocationUpdate();
   const updated = await User.findOneAndUpdate(
     {
       _id: user._id,
       password: user.password,
+      ...(user.mustChangePassword && user.temporaryPasswordExpiresAt
+        ? { temporaryPasswordExpiresAt: { $gt: new Date() } } : {}),
       active: true,
       $or: [
         { tokenVersion: user.tokenVersion ?? 0 },
@@ -190,10 +202,11 @@ export async function changePassword(
     {
       $set: {
         ...revocation.$set,
-        password: await argon2.hash(input.newPassword),
+        password: newPasswordHash,
         mustChangePassword: false,
       },
       $inc: revocation.$inc,
+      $unset: { temporaryPasswordExpiresAt: 1, pendingPassword: 1, emailVerification: 1 },
     },
     { runValidators: true }
   );

@@ -171,6 +171,7 @@ export async function changeCustomerPassword(
         mustChangePassword: false,
       },
       $inc: revocation.$inc,
+      $unset: { passwordRecovery: 1 },
     }
   );
   if (!updated)

@@ -1,4 +1,7 @@
 export interface AuthUser {
+  onboardingRequired?: boolean;
+  personalEmailVerified?: boolean;
+  temporaryPasswordExpiresAt?: Date;
   personalEmail?: string;
   phone?: string;
   location?: string;

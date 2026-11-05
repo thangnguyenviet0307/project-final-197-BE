@@ -73,6 +73,7 @@ const warrantySchema = new Schema(
       required: true,
     },
     handlerId: { type: Schema.Types.ObjectId, default: null },
+    handlerName: { type: String, default: '', maxlength: 101 },
     images: {
       type: [
         new Schema({

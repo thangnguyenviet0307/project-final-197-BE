@@ -21,6 +21,9 @@ export function toAuthUser(
     location: user.location ?? '',
     bio: user.bio ?? '',
     avatar: user.avatar ?? '',
+    onboardingRequired: user.onboardingRequired === true,
+    personalEmailVerified: user.personalEmailVerified === true,
+    ...(user.temporaryPasswordExpiresAt ? { temporaryPasswordExpiresAt: user.temporaryPasswordExpiresAt } : {}),
     mustChangePassword: user.mustChangePassword === true,
     tokenVersion: user.tokenVersion ?? 0,
   };
@@ -39,6 +42,9 @@ export function toPublicUser(user: AuthUser) {
     location: user.location ?? '',
     bio: user.bio ?? '',
     avatar: user.avatar ?? '',
+    onboardingRequired: user.onboardingRequired === true,
+    personalEmailVerified: user.personalEmailVerified === true,
+    ...(user.temporaryPasswordExpiresAt ? { temporaryPasswordExpiresAt: user.temporaryPasswordExpiresAt } : {}),
     mustChangePassword: user.mustChangePassword === true,
   };
 }
@@ -46,7 +52,7 @@ export function toPublicUser(user: AuthUser) {
 export function removeUserSecrets(
   value: Record<string, unknown>
 ): Record<string, unknown> {
-  for (const field of ['password', 'refreshToken', 'tokenVersion'])
+  for (const field of ['password', 'refreshToken', 'tokenVersion', 'emailVerification', 'pendingPassword'])
     delete value[field];
   return value;
 }

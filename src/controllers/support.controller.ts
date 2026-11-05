@@ -52,15 +52,12 @@ export const adminList: RequestHandler = asyncHandler(async (req, res) => {
 });
 export const customerDetail: RequestHandler = asyncHandler(async (req, res) => {
   sendResponse(res, 200, {
-    data: service.warrantyDto(
-      await service.getWarranty(id(req), customerId(req)),
-      false
-    ),
+    data: await service.getWarrantyDetail(id(req), customerId(req)),
   });
 });
 export const adminDetail: RequestHandler = asyncHandler(async (req, res) => {
   sendResponse(res, 200, {
-    data: service.warrantyDto(await service.getWarranty(id(req)), true),
+    data: await service.getWarrantyDetail(id(req)),
   });
 });
 export const updateWarranty: RequestHandler = asyncHandler(async (req, res) => {

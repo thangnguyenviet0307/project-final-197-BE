@@ -5,6 +5,28 @@ import { UserService } from '../services/users.service.js';
 import { asyncHandler } from '../utils/async-handler.util.js';
 import type { GetUsersQuery } from '../types/users.type.js';
 export const userController: Record<string, RequestHandler> = {
+  reissueInitialPassword: asyncHandler(async (req, res) => {
+    await UserService.reissueInitialPassword(
+      String(req.params['id']),
+      req.body.password,
+      (req as AuthenticatedRequest).user!
+    );
+    sendResponse(res, 200, {
+      message:
+        'Initial credentials reissued; password change required within 30 minutes',
+      data: null,
+    });
+  }),
+  resetPassword: asyncHandler(async (req, res) => {
+    await UserService.resetPassword(
+      String(req.params['id']),
+      (req as AuthenticatedRequest).user!
+    );
+    sendResponse(res, 200, {
+      message: 'Temporary password sent to the verified personal email',
+      data: null,
+    });
+  }),
   revokeSessions: asyncHandler(async (req, res) => {
     await UserService.revokeSessions(
       String(req.params['id']),

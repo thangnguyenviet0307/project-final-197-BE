@@ -8,6 +8,7 @@ import {
   type WarrantyDocument,
 } from '../models/support.model.js';
 import { Order } from '../models/orders.model.js';
+import { User } from '../models/users.model.js';
 import { OrderStatus } from '../types/orders.type.js';
 import type { AuthUser } from '../types/auth.type.js';
 import type { ICustomer } from '../types/customers.type.js';
@@ -143,7 +144,21 @@ export function assertWarrantyTransition(
   )
     throw createHttpError(403, 'Bạn chỉ được xử lý yêu cầu do mình phụ trách.');
 }
-export function warrantyDto(doc: WarrantyDocument, admin: boolean) {
+async function handlerNames(docs: readonly WarrantyDocument[]) {
+  const ids = [...new Set(docs.filter(doc => doc.handlerId && !doc.handlerName?.trim())
+    .map(doc => doc.handlerId!.toString()))];
+  if (!ids.length) return new Map<string, string>();
+  const users = await User.find({ _id: { $in: ids } }).select('firstName lastName').lean();
+  return new Map(users.map(user => [user._id.toString(), `${user.lastName ?? ''} ${user.firstName ?? ''}`.trim()]));
+}
+
+export async function getWarrantyDetail(id: string, customerId?: string) {
+  const doc = await getWarranty(id, customerId);
+  const names = await handlerNames([doc]);
+  return warrantyDto(doc, !customerId, names.get(doc.handlerId?.toString() ?? ''));
+}
+
+export function warrantyDto(doc: WarrantyDocument, admin: boolean, resolvedName?: string) {
   return {
     _id: doc._id,
     __v: doc.__v,
@@ -154,6 +169,7 @@ export function warrantyDto(doc: WarrantyDocument, admin: boolean) {
     status: doc.status,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
+    handlerName: doc.handlerName?.trim() || resolvedName || (doc.handlerId ? 'Nhân viên cửa hàng' : null),
     ...(admin
       ? {
           handlerId: doc.handlerId,
@@ -303,6 +319,7 @@ export async function listWarranties(
       .limit(query.limit),
     WarrantyRequest.countDocuments(scope),
   ]);
+  const names = await handlerNames(docs);
   return {
     data: docs.map((doc) => ({
       _id: doc._id,
@@ -311,6 +328,7 @@ export async function listWarranties(
       variantName: doc.variantName,
       status: doc.status,
       createdAt: doc.createdAt,
+      handlerName: doc.handlerName?.trim() || names.get(doc.handlerId?.toString() ?? '') || (doc.handlerId ? 'Nhân viên cửa hàng' : null),
       ...(customerId
         ? {}
         : { customerName: doc.customerName, handlerId: doc.handlerId }),
@@ -346,7 +364,10 @@ export async function updateWarranty(
     {
       $set: {
         status: input.status,
-        ...(doc.status === 'submitted' ? { handlerId: actor.id } : {}),
+        ...(doc.status === 'submitted' ? {
+          handlerId: actor.id,
+          handlerName: `${actor.lastName ?? ''} ${actor.firstName ?? ''}`.trim(),
+        } : {}),
       },
       $inc: { __v: 1 },
       $push: {

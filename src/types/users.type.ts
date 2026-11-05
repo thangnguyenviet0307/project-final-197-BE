@@ -1,5 +1,10 @@
 import type { IPaginationQuery } from './common.types.js';
 export interface IUser {
+  onboardingRequired?: boolean;
+  personalEmailVerified?: boolean;
+  temporaryPasswordExpiresAt?: Date;
+  emailVerification?: import('../models/security-challenge.schema.js').SecurityChallenge;
+  pendingPassword?: { id: string; hash: string; expiresAt: Date };
   personalEmail?: string;
   phone?: string;
   location?: string;

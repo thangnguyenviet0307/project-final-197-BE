@@ -99,27 +99,22 @@ test("self-service change rejects reuse, short passwords, and concurrent account
   assert.equal((await post("/api/v1/auth/change-password", { currentPassword: password, newPassword: "NewPassword123!" }, headers)).status, 409);
 });
 
-test("admin resets require the target to change password and revoke its previous sessions", async (t) => {
+test("legacy user updates cannot bypass email-based password resets", async (t) => {
   const headers = authenticate(t, account({ role: "admin" }));
-  const target = account();
-  t.mock.method(User, "findOneAndUpdate", async (id, update) => {
-    assert.equal(id._id, String(target._id));
-    assert.equal(update.$set.mustChangePassword, true);
-    assert.equal(update.$set.refreshToken, null);
-    assert.equal(update.$inc.tokenVersion, 1);
-    assert.equal(await argon2.verify(update.$set.password, "TemporaryPassword123"), true);
-    return target;
-  });
-  const response = await fetch(base + `/api/v1/users/${target._id}`, {
+  const write = t.mock.method(User, "findOneAndUpdate", async () => assert.fail("Must not update password"));
+  const response = await fetch(base + "/api/v1/users/507f1f77bcf86cd799439011", {
     method: "PUT", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ password: "TemporaryPassword123" }),
   });
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 400);
+  assert.equal(write.mock.callCount(), 0);
 });
 
 test("new admin-provisioned accounts must change their temporary passwords", async (t) => {
   t.mock.method(User, "exists", async () => null);
   t.mock.method(User, "create", async (input) => {
     assert.equal(input.mustChangePassword, true);
+    assert.equal(input.onboardingRequired, true);
+    assert.ok(input.temporaryPasswordExpiresAt > new Date());
     assert.equal(await argon2.verify(input.password, "TemporaryPassword123"), true);
     return new User(input);
   });

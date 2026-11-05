@@ -1,4 +1,5 @@
 import { Schema, model } from 'mongoose';
+import { securityChallengeSchema } from './security-challenge.schema.js';
 import type { ICustomer } from '../types/customers.type.js';
 
 const customerSchema = new Schema<ICustomer>(
@@ -32,6 +33,7 @@ const customerSchema = new Schema<ICustomer>(
       ),
       default: undefined,
     },
+    passwordRecovery: { type: securityChallengeSchema, select: false },
     mustChangePassword: { type: Boolean, default: false },
     password: { type: String, select: false },
     accountEnabled: { type: Boolean, default: false },
@@ -70,7 +72,7 @@ customerSchema.index({ isActive: 1 });
 
 const stripSecrets = (_doc: unknown, value: unknown) => {
   const result = value as Record<string, unknown>;
-  for (const key of ['password', 'refreshToken', 'tokenVersion', 'accountId'])
+  for (const key of ['password', 'refreshToken', 'tokenVersion', 'accountId', 'passwordRecovery'])
     delete result[key];
   return result;
 };

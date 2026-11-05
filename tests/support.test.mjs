@@ -18,6 +18,37 @@ const id = 'a'.repeat(24), other = 'b'.repeat(24);
 const input = { requestId: '559d78a4-b73d-4d64-9665-381bf1273be8', orderId: id, itemIndex: 0, description: 'Sản phẩm không hoạt động.' };
 const content = { warranty: 'Bảo hành theo sản phẩm', returns: 'Điều kiện đổi trả', shipping: 'Giao hàng', payment: 'COD', support: 'Liên hệ cửa hàng', privacy: 'Bảo mật thông tin' };
 const actor = { id, role: 'staff' };
+
+test('warranty handler name is visible to customers and admins without exposing employee identity or contacts', async t => {
+  const doc = new WarrantyRequest({ handlerId: id, handlerName: 'Nguyễn Văn An', images: [], history: [] });
+  for (const admin of [true, false]) {
+    const result = service.warrantyDto(doc, admin);
+    assert.equal(result.handlerName, 'Nguyễn Văn An');
+    assert.equal(result.personalEmail, undefined);
+    if (!admin) assert.equal(result.handlerId, undefined);
+  }
+  t.mock.method(WarrantyRequest, 'findOne', async filter => {
+    assert.equal(filter.customerId, other);
+    return new WarrantyRequest({ handlerId: id, images: [], history: [] });
+  });
+  t.mock.method(User, 'find', filter => ({ select: fields => {
+    assert.deepEqual(filter._id.$in, [id]);
+    assert.equal(fields, 'firstName lastName');
+    return { lean: async () => [{ _id: id, lastName: 'Trần', firstName: 'Bình' }] };
+  } }));
+  assert.equal((await service.getWarrantyDetail(id, other)).handlerName, 'Trần Bình');
+});
+
+test('acceptance records the authenticated employee name and later updates preserve the original acceptor', async t => {
+  t.mock.method(WarrantyRequest, 'findOne', async () => new WarrantyRequest({ __v: 0, status: 'submitted' }));
+  t.mock.method(WarrantyRequest, 'findOneAndUpdate', async (_filter, update) => {
+    assert.equal(update.$set.handlerId, id);
+    assert.equal(update.$set.handlerName, 'Nguyễn An');
+    return new WarrantyRequest({ ...update.$set, images: [], history: [] });
+  });
+  const accepted = await service.updateWarranty(id, { ...actor, firstName: 'An', lastName: 'Nguyễn' }, { expectedVersion: 0, status: 'reviewing', note: 'Tiếp nhận' });
+  assert.equal(accepted.handlerName, 'Nguyễn An');
+});
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
 
 test('targeted eligible-order lookup always scopes to the signed-in customer and completed status', async t => {

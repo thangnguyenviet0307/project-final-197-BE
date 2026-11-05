@@ -115,7 +115,7 @@ test('Admin resets/updates only staff; protected targets cannot match the write 
     assert.deepEqual(filter.role.$in, ['staff']);
     return null;
   });
-  await assert.rejects(UserService.updateUser(owner.id, { password: 'Replacement123' }, admin), { status: 404 });
+  await assert.rejects(UserService.updateUser(owner.id, { password: 'Replacement123' }, admin), { status: 400 });
   await assert.rejects(UserService.updateUser(admin.id, { firstName: 'Changed' }, admin), { status: 404 });
 });
 

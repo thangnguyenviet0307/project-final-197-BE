@@ -1,5 +1,8 @@
 import { OPEN_ORDER_STATUSES } from '../types/orders.type.js';
 import argon2 from 'argon2';
+import { newSecret, newTemporaryPassword, TEMPORARY_PASSWORD_MS } from '../utils/account-security.js';
+import { emailService } from './email.service.js';
+import { createEmailSchema } from '../validations/common.validation.js';
 import createHttpError from 'http-errors';
 import { User } from '../models/users.model.js';
 import { accentInsensitiveRegex } from '../utils/search.js';
@@ -58,6 +61,20 @@ async function protectLastAdmin(
 }
 
 export const UserService = {
+  async reissueInitialPassword(id: string, password: string, actor: UserActor) {
+    const roles = manageableRoles(actor);
+    const hash = await argon2.hash(password);
+    const revocation = sessionRevocationUpdate();
+    const updated = await User.findOneAndUpdate({
+      _id: id, role: { $in: roles }, active: true,
+      onboardingRequired: true, personalEmailVerified: { $ne: true },
+    }, {
+      $set: { ...revocation.$set, password: hash, mustChangePassword: true,
+        temporaryPasswordExpiresAt: new Date(Date.now() + TEMPORARY_PASSWORD_MS) },
+      $inc: revocation.$inc, $unset: { pendingPassword: 1, emailVerification: 1 },
+    }, { runValidators: true });
+    if (!updated) throw createHttpError(409, 'Only incomplete accounts without a verified email can be reissued initial credentials');
+  },
   async revokeSessions(id: string, actor: UserActor) {
     const roles = manageableRoles(actor);
     const user = await User.findOneAndUpdate(
@@ -175,6 +192,8 @@ export const UserService = {
                 role: 1,
                 active: { $ifNull: ['$active', true] },
                 mustChangePassword: 1,
+                onboardingRequired: 1,
+                personalEmailVerified: 1,
                 personalEmail: 1,
                 phone: 1,
                 avatar: 1,
@@ -194,6 +213,38 @@ export const UserService = {
       User.countDocuments(filter),
     ]);
     return { data, pagination: buildPagination(page, limit, total) };
+  },
+  async resetPassword(id: string, actor: UserActor) {
+    const roles = manageableRoles(actor);
+    const target = await User.findOne({ _id: id, role: { $in: roles }, active: true })
+      .select('+password +tokenVersion +pendingPassword');
+    if (!target) throw createHttpError(404, 'User not found or protected');
+    if (!target.personalEmailVerified || !createEmailSchema().safeParse(target.personalEmail).success)
+      throw createHttpError(409, 'Personal email must be verified before resetting the password');
+    const password = newTemporaryPassword();
+    const pending = { id: newSecret(), hash: await argon2.hash(password),
+      expiresAt: new Date(Date.now() + TEMPORARY_PASSWORD_MS) };
+    const identity = { _id: id, active: true, role: { $in: roles },
+      password: target.password, tokenVersion: target.tokenVersion ?? 0,
+      personalEmail: target.personalEmail!, personalEmailVerified: true };
+    const reserved = await User.findOneAndUpdate({ ...identity,
+      $or: [{ pendingPassword: { $exists: false } }, { 'pendingPassword.expiresAt': { $lte: new Date() } }],
+    }, { $set: { pendingPassword: pending } });
+    if (!reserved) throw createHttpError(409, 'Account changed or a reset is already pending');
+    try {
+      await emailService.send(target.personalEmail!, 'Mật khẩu tạm thời',
+        `Mật khẩu tạm thời của bạn: ${password}\nBạn có 30 phút từ khi mật khẩu được kích hoạt để đăng nhập và đổi mật khẩu. Không chia sẻ mật khẩu này.`);
+      const revocation = sessionRevocationUpdate();
+      const activated = await User.findOneAndUpdate({ ...identity, 'pendingPassword.id': pending.id,
+        'pendingPassword.expiresAt': { $gt: new Date() } }, {
+        $set: { ...revocation.$set, password: pending.hash, mustChangePassword: true,
+          temporaryPasswordExpiresAt: new Date(Date.now() + TEMPORARY_PASSWORD_MS) },
+        $inc: revocation.$inc, $unset: { pendingPassword: 1, emailVerification: 1 },
+      }, { runValidators: true });
+      if (!activated) throw createHttpError(409, 'Account changed; please request another reset');
+    } finally {
+      await User.updateOne({ _id: id, 'pendingPassword.id': pending.id }, { $unset: { pendingPassword: 1 } });
+    }
   },
   async getUserById(id: string) {
     const user = await User.findOne({
@@ -217,10 +268,14 @@ export const UserService = {
       })
     )
       throw createHttpError(409, 'Email already exists');
+    const passwordHash = await argon2.hash(input.password);
     return User.create({
       ...input,
       mustChangePassword: true,
-      password: await argon2.hash(input.password),
+      onboardingRequired: true,
+      personalEmailVerified: false,
+      temporaryPasswordExpiresAt: new Date(Date.now() + TEMPORARY_PASSWORD_MS),
+      password: passwordHash,
     });
   },
   async updateUser(id: string, input: UpdateUserInput, actor: UserActor) {
@@ -230,7 +285,9 @@ export const UserService = {
       (actor.role !== 'super_admin' || !roles.includes(input.role))
     )
       throw createHttpError(403, 'Only Super Admin can change roles');
-    const { password, ...fields } = input;
+    if (input.password !== undefined)
+      throw createHttpError(400, 'Use the dedicated password reset endpoint');
+    const { password: _rejectedPassword, ...fields } = input;
     if (
       fields.email &&
       (await User.exists({
@@ -242,7 +299,7 @@ export const UserService = {
       throw createHttpError(409, 'Email already exists');
     }
     const shouldRevokeSessions = Boolean(
-      password || fields.active === false || fields.role
+      fields.active === false || fields.role
     );
     const revocation = shouldRevokeSessions
       ? sessionRevocationUpdate()
@@ -250,9 +307,6 @@ export const UserService = {
     const update = {
       $set: {
         ...fields,
-        ...(password
-          ? { password: await argon2.hash(password), mustChangePassword: true }
-          : {}),
         ...revocation?.$set,
       },
       ...(revocation ? { $inc: revocation.$inc } : {}),

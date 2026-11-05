@@ -34,7 +34,8 @@ test("staff can update their own profile without changing credentials or revokin
     assert.equal(filter._id, String(user._id));
     assert.equal(filter.$or[0].tokenVersion, 3);
     assert.equal(filter.active, true);
-    assert.deepEqual(update.$set, input);
+    assert.deepEqual(update.$set, { ...input, personalEmailVerified: false, onboardingRequired: true });
+    assert.deepEqual(update.$unset, { emailVerification: 1, pendingPassword: 1 });
     assert.equal(update.$inc, undefined);
     assert.equal(options.returnDocument, "after");
     assert.equal(options.runValidators, true);

@@ -15,7 +15,7 @@ The original report is retained as review evidence. This file records implementa
 | F-009 | Storefront VND displays now retain up to two fraction digits, matching detail/checkout. Monetary arithmetic is unchanged. | FE `format-price.ts` |
 | F-010 | Detail applies SEO title/description/canonical with safe fallbacks, updating per article and restoring previous head state on exit. No SSR/crawler rendering guarantee. | FE `use-article-head.ts`, detail and tests |
 | F-011 | Opt-in summary projection omits long content for storefront lists. Default API/list and detail remain compatible. Synthetic 100,000-character fixture verifies >99% fewer JSON bytes, not a production latency claim. | BE article query/service; FE service/types |
-| F-012 | Replaced accumulated contradictory frontend architecture history with a current description of checkout, cart, routes, editorial, state and verification. | FE `docs/frontend-structure.md` |
+| F-012 | Replaced accumulated contradictory frontend architecture history with a current description of checkout, cart, routes, editorial, state and verification. | FE `../../../project-final-197-FE/docs/frontend-structure.md` |
 
 ## Deployment acceptance still required
 

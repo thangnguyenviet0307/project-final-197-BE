@@ -1,7 +1,8 @@
 # AGENTS.md
 
-- Read [PROJECT_RULES.md](../project-final-197-FE/PROJECT_RULES.md) for shared frontend/backend business rules before changing code.
+- Read [PROJECT_RULES.md](../project-final-197-FE/docs/PROJECT_RULES.md) for shared frontend/backend business rules before changing code.
 - Use pnpm exclusively (pnpm.cmd in PowerShell). Run pnpm.cmd typecheck and pnpm.cmd test for backend changes.
+- Keep project Markdown documentation under this repository's `docs/`; retain every `AGENTS.md` in its original location and update relative links when moving documents.
 
 ## 1. Project Overview
 
@@ -23,6 +24,7 @@
 - Controllers handle HTTP requests and responses.
 - Services contain business logic.
 - Models define MongoDB schemas using Mongoose.
+- Every top-level Mongoose model must explicitly declare its collection name. Use lowercase snake_case: separate words with `_` (for example `product_reviews`, `image_cleanup_jobs`); single-word names such as `users` remain valid. Do not rely on Mongoose's automatic lowercasing/pluralization. Update native collection references, aggregation lookups, seeds and maintenance scripts when renaming; preserve documents/indexes and never overwrite an existing destination collection.
 - Middlewares handle authentication, authorization and request validation.
 
 ## 4. API Conventions

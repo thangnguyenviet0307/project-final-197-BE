@@ -92,6 +92,7 @@ const warrantySchema = new Schema(
     optimisticConcurrency: true,
   }
 );
+warrantySchema.index({ orderId: 1 });
 warrantySchema.index({ customerId: 1, createdAt: -1, _id: -1 });
 warrantySchema.index({ status: 1, createdAt: -1, _id: -1 });
 export const WarrantyRequest = model('WarrantyRequest', warrantySchema);

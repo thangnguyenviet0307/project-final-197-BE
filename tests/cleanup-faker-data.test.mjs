@@ -8,7 +8,7 @@ function fixture() {
     customers: [{ _id: "seed-c", email: `seed-customer-${batch}-0@example.com` }, { _id: "real-c", email: `seed-customer-${batch}-1@example.com`, accountEnabled: true }],
     products: [{ _id: "seed-p", sku: `SEED-${batch}-PRODUCT-0`, brand: "brand", category: "category" }, { _id: "imported", source: "dummyjson", sku: `SEED-${batch}-PRODUCT-1` }],
     orders: [{ _id: "seed-o", customerId: "seed-c", userId: "staff", orderItems: [{ productId: "seed-p" }] }],
-    brands: [{ _id: "brand" }], categories: [{ _id: "category" }], productreviews: [{ _id: "review", product: "seed-p" }],
+    brands: [{ _id: "brand" }], categories: [{ _id: "category" }], product_reviews: [{ _id: "review", product: "seed-p" }],
   };
 }
 test("exact Faker markers exclude real registered accounts and imported products", () => {
@@ -33,7 +33,7 @@ test("retained catalog/review references, managed assets and last admin are prot
   const data = fixture(), plan = planFakerCleanup(data);
   data.products.push({ _id: "real", brand: "brand", category: "category" });
   data.categories.push({ _id: "child", parent: "category" });
-  data.productreviews.push({ _id: "real-review", product: "seed-p" });
+  data.product_reviews.push({ _id: "real-review", product: "seed-p" });
   plan.products[0].images = [{ public_id: "managed" }];
   plan.users.push(data.users[0]);
   const reasons = validateCleanup(data, plan);

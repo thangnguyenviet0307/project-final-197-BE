@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const names = ["brands", "categories", "orders", "customers", "products", "users", "productreviews"];
+const names = ["brands", "categories", "orders", "customers", "products", "users", "product_reviews"];
 const batch = "(?:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}|[a-f0-9]{8})";
 const seedEmail = kind => new RegExp(`^seed-${kind}-${batch}-\\d+@example\\.com$`, "i");
 const seedSku = new RegExp(`^SEED-${batch}-(?:PRODUCT-)?\\d+(?:-\\d+)?$`, "i");
@@ -28,7 +28,7 @@ export function planFakerCleanup(data) {
       return markedCatalog(row) || seedSlug(kind).test(row.slug ?? "") || (related.length > 0 && related.every(product => productIds.has(id(product))));
     });
   }
-  plan.productreviews = data.productreviews.filter(row => productIds.has(id(row.product)));
+  plan.product_reviews = data.product_reviews.filter(row => productIds.has(id(row.product)));
   return plan;
 }
 
@@ -44,7 +44,7 @@ export function validateCleanup(data, selected) {
   for (const category of data.categories.filter(row => !sets.categories.has(id(row)))) {
     if (sets.categories.has(id(category.parent))) blockers.push(`Retained category ${id(category)} references selected parent`);
   }
-  for (const review of data.productreviews.filter(row => !sets.productreviews.has(id(row)))) {
+  for (const review of data.product_reviews.filter(row => !sets.product_reviews.has(id(row)))) {
     if (sets.products.has(id(review.product))) blockers.push(`Retained review ${id(review)} references selected product`);
   }
   for (const product of selected.products) {
@@ -100,7 +100,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       await db.transaction(async session => {
         await db.collection("system_locks").updateOne({ _id: "relations" }, { $inc: { revision: 1 } }, { session });
         const fresh = await load(session), selected = selectManifest(db.name, manifest, fresh);
-        for (const name of ["productreviews", "orders", "products", "customers", "users", "categories", "brands"]) {
+        for (const name of ["product_reviews", "orders", "products", "customers", "users", "categories", "brands"]) {
           if (selected[name].length) {
             const result = await db.collection(name).deleteMany({ _id: { $in: selected[name].map(row => row._id) } }, { session });
             if (result.deletedCount !== selected[name].length) throw new Error(`Concurrent change in ${name}; transaction aborted`);

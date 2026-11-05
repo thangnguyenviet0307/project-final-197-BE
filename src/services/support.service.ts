@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import createHttpError from 'http-errors';
 import { Types } from 'mongoose';
+import { withRelationsTransaction } from '../utils/relations-transaction.js';
 import type { UploadApiResponse } from 'cloudinary';
 import {
   StorePolicy,
@@ -26,6 +27,13 @@ import { validateProductImage } from './product-images.service.js';
 import { enqueueImageCleanup } from './image-cleanup.service.js';
 import { publicationChanges } from './publication-metadata.js';
 import type { EligibleWarrantyOrdersInput } from '../validations/support.validation.js';
+
+export const WARRANTY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function isWithinWarrantyWindow(orderDate: Date, now = Date.now()) {
+  const time = new Date(orderDate).getTime();
+  return Number.isFinite(time) && time <= now && time >= now - WARRANTY_WINDOW_MS;
+}
 
 const policyId = 'store-policy';
 const blankContent: PolicyContent = {
@@ -207,14 +215,23 @@ export async function eligibleWarrantyOrders(
     orderStatus: OrderStatus.Completed,
     ...(query.orderId ? { _id: new Types.ObjectId(query.orderId) } : {}),
   };
-  const [orders, total] = await Promise.all([
-    Order.find(scope)
-      .sort({ orderDate: -1, _id: -1 })
-      .skip((query.page - 1) * query.limit)
-      .limit(query.limit)
-      .lean(),
-    Order.countDocuments(scope),
+  const now = new Date();
+  // Filter before pagination: previously submitted requests on any page must count.
+  const [result] = await Order.aggregate<{
+    data: { _id: Types.ObjectId; orderCode?: string; orderDate: Date;
+      orderItems: { productName?: string; variantName?: string; quantity: number }[] }[];
+    total: { count: number }[];
+  }>([
+    { $match: { ...scope, orderDate: { $gte: new Date(now.getTime() - WARRANTY_WINDOW_MS), $lte: now } } },
+    { $lookup: { from: WarrantyRequest.collection.name, localField: '_id', foreignField: 'orderId',
+      pipeline: [{ $limit: 1 }, { $project: { _id: 1 } }], as: 'existingWarranty' } },
+    { $match: { 'existingWarranty.0': { $exists: false } } },
+    { $sort: { orderDate: -1, _id: -1 } },
+    { $facet: { data: [{ $skip: (query.page - 1) * query.limit }, { $limit: query.limit },
+      { $project: { _id: 1, orderCode: 1, orderDate: 1, orderItems: 1 } }], total: [{ $count: 'count' }] } },
   ]);
+  const orders = result?.data ?? [];
+  const total = result?.total[0]?.count ?? 0;
   return {
     data: orders.map((order) => ({
       _id: order._id,
@@ -243,31 +260,35 @@ export async function createWarranty(
   const fingerprint = createHash('sha256')
     .update(JSON.stringify([input.orderId, input.itemIndex, input.description]))
     .digest('hex');
-  const replay = async () => {
-    const existing = await WarrantyRequest.findOne({
-      _id: id,
+  return withRelationsTransaction(async (session) => {
+    const replay = async () => {
+      const existing = await WarrantyRequest.findOne({
+        _id: id,
+        customerId,
+      }).session(session).select('+fingerprint');
+      if (existing && existing.fingerprint !== fingerprint)
+        throw createHttpError(
+          409,
+          'Mã gửi đã được dùng cho nội dung khác. Hãy tải lại danh sách yêu cầu.'
+        );
+      return existing;
+    };
+    const existing = await replay();
+    if (existing) return warrantyDto(existing, false);
+    const order = await Order.findOne({
+      _id: input.orderId,
       customerId,
-    }).select('+fingerprint');
-    if (existing && existing.fingerprint !== fingerprint)
-      throw createHttpError(
-        409,
-        'Mã gửi đã được dùng cho nội dung khác. Hãy tải lại danh sách yêu cầu.'
-      );
-    return existing;
-  };
-  const existing = await replay();
-  if (existing) return warrantyDto(existing, false);
-  const order = await Order.findOne({
-    _id: input.orderId,
-    customerId,
-    orderStatus: OrderStatus.Completed,
-  }).lean();
-  if (!order)
-    throw createHttpError(404, 'Không tìm thấy đơn đã hoàn tất của bạn.');
-  const item = order.orderItems[input.itemIndex];
-  if (!item) throw createHttpError(400, 'Sản phẩm không thuộc đơn hàng này.');
-  try {
-    const doc = await WarrantyRequest.create({
+      orderStatus: OrderStatus.Completed,
+    }).session(session).lean();
+    if (!order)
+      throw createHttpError(404, 'Không tìm thấy đơn đã hoàn tất của bạn.');
+    if (!isWithinWarrantyWindow(order.orderDate))
+      throw createHttpError(409, 'Đơn hàng đã quá thời hạn gửi yêu cầu bảo hành 7 ngày.');
+    if (await WarrantyRequest.exists({ orderId: order._id }).session(session))
+      throw createHttpError(409, 'Đơn hàng đã có yêu cầu bảo hành.');
+    const item = order.orderItems[input.itemIndex];
+    if (!item) throw createHttpError(400, 'Sản phẩm không thuộc đơn hàng này.');
+    const [doc] = await WarrantyRequest.create([{
       _id: id,
       customerId,
       customerName: `${customer.lastName} ${customer.firstName}`.trim(),
@@ -288,20 +309,10 @@ export async function createWarranty(
           actorType: 'customer',
         },
       ],
-    });
+    }], { session });
+    if (!doc) throw createHttpError(500, 'Không thể tạo yêu cầu bảo hành.');
     return warrantyDto(doc, false);
-  } catch (error) {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 11000
-    ) {
-      const saved = await replay();
-      if (saved) return warrantyDto(saved, false);
-    }
-    throw error;
-  }
+  });
 }
 export async function listWarranties(
   query: SupportListInput,
@@ -323,6 +334,7 @@ export async function listWarranties(
   return {
     data: docs.map((doc) => ({
       _id: doc._id,
+      orderId: doc.orderId,
       orderCode: doc.orderCode,
       productName: doc.productName,
       variantName: doc.variantName,

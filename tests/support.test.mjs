@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+import { SystemLock } from '../dist/models/system-locks.model.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { once } from 'node:events';
@@ -18,6 +20,11 @@ const id = 'a'.repeat(24), other = 'b'.repeat(24);
 const input = { requestId: '559d78a4-b73d-4d64-9665-381bf1273be8', orderId: id, itemIndex: 0, description: 'Sản phẩm không hoạt động.' };
 const content = { warranty: 'Bảo hành theo sản phẩm', returns: 'Điều kiện đổi trả', shipping: 'Giao hàng', payment: 'COD', support: 'Liên hệ cửa hàng', privacy: 'Bảo mật thông tin' };
 const actor = { id, role: 'staff' };
+function mockTransaction(t) {
+  t.mock.method(SystemLock, 'updateOne', async () => ({}));
+  t.mock.method(mongoose.connection, 'transaction', async work => work({}));
+}
+
 
 test('warranty handler name is visible to customers and admins without exposing employee identity or contacts', async t => {
   const doc = new WarrantyRequest({ handlerId: id, handlerName: 'Nguyễn Văn An', images: [], history: [] });
@@ -61,12 +68,16 @@ test('targeted eligible-order lookup always scopes to the signed-in customer and
     assert.equal(String(filter._id), id);
     assert.equal(filter.orderStatus, 4);
   };
-  t.mock.method(Order, 'find', filter => {
-    check(filter);
-    const result = { sort: () => result, skip: () => result, limit: () => result, lean: async () => [] };
-    return result;
+  t.mock.method(Order, 'aggregate', async pipeline => {
+    check(pipeline[0].$match);
+    assert.ok(pipeline[0].$match.orderDate.$gte instanceof Date);
+    assert.ok(pipeline[0].$match.orderDate.$lte instanceof Date);
+    assert.equal(pipeline[1].$lookup.from, 'warranty_requests');
+    assert.equal(pipeline[1].$lookup.foreignField, 'orderId');
+    assert.deepEqual(pipeline[2], { $match: { 'existingWarranty.0': { $exists: false } } });
+    assert.ok(pipeline[4].$facet.data);
+    return [{ data: [], total: [] }];
   });
-  t.mock.method(Order, 'countDocuments', async filter => { check(filter); return 0; });
   assert.deepEqual((await service.eligibleWarrantyOrders(other, query)).data, []);
 });
 
@@ -125,13 +136,15 @@ test('customer warranty lookup scopes by authenticated identity and returns 404 
   await assert.rejects(service.getWarranty(id, other), { status: 404 });
 });
 test('warranty creation uses a completed owned order, immutable product snapshot and durable replay key', async t => {
+  mockTransaction(t);
   let saved;
-  t.mock.method(WarrantyRequest, 'findOne', filter => ({ select: async () => saved && String(saved._id) === filter._id ? saved : null }));
+  t.mock.method(WarrantyRequest, 'exists', () => ({ session: async () => saved ? { _id: saved._id } : null }));
+  t.mock.method(WarrantyRequest, 'findOne', filter => ({ session() { return this; }, select: async () => saved && String(saved._id) === filter._id ? saved : null }));
   const orders = t.mock.method(Order, 'findOne', filter => {
     assert.deepEqual(filter, { _id: id, customerId: other, orderStatus: 4 });
-    return { lean: async () => ({ _id: id, orderCode: 'ORD-ABCDEF', orderItems: [{ productName: 'Snapshot name', variantName: 'Blue' }] }) };
+    return { session() { return this; }, lean: async () => ({ _id: id, orderDate: new Date(), orderCode: 'ORD-ABCDEF', orderItems: [{ productName: 'Snapshot name', variantName: 'Blue' }] }) };
   });
-  t.mock.method(WarrantyRequest, 'create', async data => { saved = new WarrantyRequest(data); return saved; });
+  t.mock.method(WarrantyRequest, 'create', async (data, options) => { assert.ok(options.session); saved = new WarrantyRequest(data[0]); return [saved]; });
   const customer = { _id: other, firstName: 'A', lastName: 'B', email: 'customer@example.com' };
   const first = await service.createWarranty(customer, input);
   assert.equal(saved.customerName, 'B A');
@@ -157,8 +170,9 @@ test('concurrent status update uses atomic version and status conditions', async
   await assert.rejects(service.updateWarranty(id, actor, { expectedVersion: 3, status: 'resolved', note: 'Finished' }), { status: 409 });
 });
 test('uncompleted or unowned order cannot create a warranty request', async t => {
-  t.mock.method(WarrantyRequest, 'findOne', () => ({ select: async () => null }));
-  t.mock.method(Order, 'findOne', () => ({ lean: async () => null }));
+  mockTransaction(t);
+  t.mock.method(WarrantyRequest, 'findOne', () => ({ session() { return this; }, select: async () => null }));
+  t.mock.method(Order, 'findOne', () => ({ session() { return this; }, lean: async () => null }));
   const create = t.mock.method(WarrantyRequest, 'create', async () => null);
   await assert.rejects(service.createWarranty({ _id: other }, input), { status: 404 });
   assert.equal(create.mock.callCount(), 0);
@@ -239,5 +253,45 @@ test('policy sections accept 30,000 characters including markup and reject overf
     const oversized = { ...content, [key]: html + 'a' };
     assert.equal(savePolicySchema.safeParse({ content: oversized, expectedVersion: 0, publish: false }).success, false);
     assert.ok(new StorePolicy({ _id: 'store-policy', content: oversized }).validateSync());
+  }
+});
+
+
+test('warranty window includes exactly seven days and rejects expired, future and invalid dates', () => {
+  const now = Date.parse('2026-11-06T12:00:00Z');
+  assert.equal(service.isWithinWarrantyWindow(new Date(now - service.WARRANTY_WINDOW_MS), now), true);
+  assert.equal(service.isWithinWarrantyWindow(new Date(now - service.WARRANTY_WINDOW_MS - 1), now), false);
+  assert.equal(service.isWithinWarrantyWindow(new Date(now + 1), now), false);
+  assert.equal(service.isWithinWarrantyWindow(new Date('invalid'), now), false);
+});
+
+test('direct warranty creation rejects expired orders and existing requests regardless of status or requestId', async t => {
+  mockTransaction(t);
+  let date = new Date(Date.now() - service.WARRANTY_WINDOW_MS - 1000);
+  let duplicate = false;
+  t.mock.method(WarrantyRequest, 'findOne', () => ({ session() { return this; }, select: async () => null }));
+  t.mock.method(WarrantyRequest, 'exists', filter => ({ session: async () => {
+    assert.equal(filter.orderId, id); return duplicate ? { _id: other } : null;
+  } }));
+  t.mock.method(Order, 'findOne', () => ({ session() { return this; }, lean: async () => ({
+    _id: id, orderDate: date, orderItems: [{ productName: 'Phone' }],
+  }) }));
+  const create = t.mock.method(WarrantyRequest, 'create', async () => { throw new Error('Must not create'); });
+  await assert.rejects(service.createWarranty({ _id: other }, input), { status: 409 });
+  date = new Date(); duplicate = true;
+  await assert.rejects(service.createWarranty({ _id: other }, input), { status: 409 });
+  assert.equal(create.mock.callCount(), 0);
+});
+
+test('warranty list includes orderId for both customer and administrative consumers', async t => {
+  const doc = new WarrantyRequest({ orderId: id, images: [], history: [] });
+  t.mock.method(WarrantyRequest, 'find', () => {
+    const query = { select: () => query, sort: () => query, skip: () => query, limit: async () => [doc] };
+    return query;
+  });
+  t.mock.method(WarrantyRequest, 'countDocuments', async () => 1);
+  for (const customerId of [undefined, other]) {
+    const result = await service.listWarranties({ page: 1, limit: 10 }, customerId);
+    assert.equal(String(result.data[0].orderId), id);
   }
 });

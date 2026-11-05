@@ -152,5 +152,5 @@ vite.config.ts.timestamp-*
 .local-backups/
 
 reports
-docs
 MD
+docs

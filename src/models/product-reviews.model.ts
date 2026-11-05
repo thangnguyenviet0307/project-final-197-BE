@@ -26,7 +26,7 @@ const reviewSchema = new Schema(
     email: { type: String, trim: true, maxlength: 254, select: false },
     phone: { type: String, trim: true, maxlength: 20, select: false },
   },
-  { timestamps: true }
+  { timestamps: true, collection: 'product_reviews' }
 );
 reviewSchema.index({ product: 1, date: -1, _id: -1 });
 export const ProductReview = model('ProductReview', reviewSchema);

@@ -13,6 +13,6 @@ const schema = new Schema(
     leaseUntil: { type: Date, default: () => new Date(0) },
     leaseToken: String,
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false, collection: 'image_cleanup_jobs' }
 );
 export const ImageCleanupJob = model('ImageCleanupJob', schema);

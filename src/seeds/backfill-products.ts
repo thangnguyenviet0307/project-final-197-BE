@@ -3,10 +3,10 @@ import mongoose from 'mongoose';
 import { faker } from '@faker-js/faker';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import Product from '../models/products.model.js';
-import { ProductReview } from '../models/product-reviews.model.js';
+import Product from '../models/products/products.model.js';
+import { ProductReview } from '../models/products/product-reviews.model.js';
 import { generateProductMetadata, generateProductReview } from './generate.js';
-import { updateProductSchema } from '../validations/products.validation.js';
+import { updateProductSchema } from '../validations/products/products.validation.js';
 import { formatSeedError } from './errors.js';
 
 const seedBatch = '(?:[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}|[a-f0-9]{8})';

@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test:ai:integration:local": "tsc && node scripts/run-isolated-integration.mjs tests/ai.integration.mjs",
     "seed": "tsx src/seeds/run.ts",
     "seed:check": "tsx src/seeds/run.ts --dry-run",
     "seed:backfill": "pnpm run build && node dist/seeds/backfill-products.js",
@@ -42,7 +43,9 @@
     "mongoose": "^9.10.2",
     "multer": "^2.4.0",
     "nodemailer": "^10.0.12",
+    "openai": "^7.53.0",
     "slugify": "^1.6.9",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -56,6 +59,7 @@
     "@types/nodemailer": "^8.0.2",
     "eslint-config-prettier": "^10.1.8",
     "prettier-plugin-tailwindcss": "^0.8.1",
+    "socket.io-client": "^4.8.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

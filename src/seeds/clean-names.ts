@@ -97,28 +97,26 @@ async function main() {
       if (result.matchedCount !== 1)
         throw new Error('Catalog changed during cleanup; rerun the preview.');
       if (change.collection === 'products') {
-        await database
-          .collection('orders')
-          .updateMany(
-            {
-              orderItems: {
-                $elemMatch: {
-                  productId: change.id,
-                  productName: change.oldName,
-                },
+        await database.collection('orders').updateMany(
+          {
+            orderItems: {
+              $elemMatch: {
+                productId: change.id,
+                productName: change.oldName,
               },
             },
-            { $set: { 'orderItems.$[item].productName': change.name } },
-            {
-              session,
-              arrayFilters: [
-                {
-                  'item.productId': change.id,
-                  'item.productName': change.oldName,
-                },
-              ],
-            }
-          );
+          },
+          { $set: { 'orderItems.$[item].productName': change.name } },
+          {
+            session,
+            arrayFilters: [
+              {
+                'item.productId': change.id,
+                'item.productName': change.oldName,
+              },
+            ],
+          }
+        );
       }
     }
   });

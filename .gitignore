@@ -153,4 +153,5 @@ vite.config.ts.timestamp-*
 
 reports
 MD
-docs
+/docs/*
+!/docs/AI_MODULE.md

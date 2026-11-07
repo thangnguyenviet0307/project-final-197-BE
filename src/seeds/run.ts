@@ -2,9 +2,9 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import { generateSeedData } from './generate.js';
 import { formatSeedError } from './errors.js';
-import { BrandModel } from '../models/brands.model.js';
-import { Categories } from '../models/categories.model.js';
-import Product from '../models/products.model.js';
+import { BrandModel } from '../models/brands/brands.model.js';
+import { Categories } from '../models/categories/categories.model.js';
+import Product from '../models/products/products.model.js';
 import type { ExistingCatalog } from './names.js';
 
 let stage = 'validating seed data';

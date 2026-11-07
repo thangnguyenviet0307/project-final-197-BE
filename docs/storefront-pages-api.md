@@ -29,7 +29,7 @@ Each category has an `id`, display `label`, `title` and `questions` array.
 Each question has a stable `id`, `question` and plain-text `answer`. The
 frontend filters these questions locally by topic and search text.
 
-Content is maintained in `src/services/storefront-content.service.ts`.
+Content is maintained in `src/services/storefront/storefront-content.service.ts`.
 The endpoints intentionally do not provide write operations or imply
 administrator-managed CMS functionality.
 

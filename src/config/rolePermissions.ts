@@ -1,4 +1,4 @@
-import { Permission } from '../types/permissions.type.js';
+import { Permission } from '../types/shared/permissions.type.js';
 
 export type Role = 'super_admin' | 'admin' | 'staff';
 

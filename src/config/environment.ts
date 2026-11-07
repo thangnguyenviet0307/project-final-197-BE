@@ -1,6 +1,8 @@
+import { validateAiEnvironment } from '../services/ai/environment.js';
 export function validateEnvironment(
   environment: NodeJS.ProcessEnv = process.env
 ): void {
+  validateAiEnvironment(environment);
   for (const name of ['MONGODB_URI', 'JWT_SECRET', 'JWT_REFRESH_SECRET']) {
     if (!environment[name]?.trim())
       throw new Error(`Missing required environment variable: ${name}`);

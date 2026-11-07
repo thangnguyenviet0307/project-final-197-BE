@@ -7,11 +7,22 @@ const folders = {
   warranty: ['CLOUDINARY_WARRANTY_FOLDER', 'project-final/warranty'],
 } as const;
 
-export function getCloudinaryFolder(kind: keyof typeof folders, environment: NodeJS.ProcessEnv = process.env): string {
+export function getCloudinaryFolder(
+  kind: keyof typeof folders,
+  environment: NodeJS.ProcessEnv = process.env
+): string {
   const [variable, fallback] = folders[kind];
-  const value = (environment[variable] || fallback).trim().replace(/^\/+|\/+$/g, '');
-  if (value.length > 80 || !/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(value)) {
-    throw createHttpError(503, `Invalid image folder configuration: ${variable}`);
+  const value = (environment[variable] || fallback)
+    .trim()
+    .replace(/^\/+|\/+$/g, '');
+  if (
+    value.length > 80 ||
+    !/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(value)
+  ) {
+    throw createHttpError(
+      503,
+      `Invalid image folder configuration: ${variable}`
+    );
   }
   return value;
 }

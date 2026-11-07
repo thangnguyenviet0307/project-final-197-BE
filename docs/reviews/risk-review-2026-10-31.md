@@ -25,7 +25,7 @@ Chưa phát hiện P0 được xác nhận trong phạm vi đã đọc. Có mộ
 
 ## R-002 — P1 có điều kiện: đơn COD vãng lai có thể giữ tồn kho không có thời hạn tự giải phóng
 
-**Bằng chứng:** BE `src/routes/v1/storefront.route.ts:13` cho checkout không đăng nhập với giới hạn năm request/IP/15 phút/process. `src/validations/checkout.validation.ts:17` chấp nhận tối đa 100.000 đơn vị mỗi dòng; service vẫn kiểm tra tồn thực. `src/services/checkout.service.ts:53-57` giữ kho và tạo Pending ngay. `src/models/orders.model.ts` chưa có mốc hết hạn reservation; `src/server.ts` chỉ khởi động worker dọn ảnh, chưa có worker hết hạn đơn.
+**Bằng chứng:** BE `src/routes/v1/storefront/storefront.route.ts:13` cho checkout không đăng nhập với giới hạn năm request/IP/15 phút/process. `src/validations/orders/checkout.validation.ts:17` chấp nhận tối đa 100.000 đơn vị mỗi dòng; service vẫn kiểm tra tồn thực. `src/services/orders/checkout.service.ts:53-57` giữ kho và tạo Pending ngay. `src/models/orders/orders.model.ts` chưa có mốc hết hạn reservation; `src/server.ts` chỉ khởi động worker dọn ảnh, chưa có worker hết hạn đơn.
 
 **Ảnh hưởng:** một đơn vãng lai hợp lệ về hình thức có thể giữ toàn bộ lượng đang bán của một SKU nếu lượng đó nằm trong giới hạn cho phép. Kho vẫn bị giữ cho đến khi đơn được xử lý/từ chối thủ công; chưa có cơ chế tự giải phóng. Rate limit số request không hạn chế lượng hàng giữ trong một request. Chưa thử tấn công hay chứng minh có lạm dụng thực tế. Nếu cửa hàng chủ động chọn quy trình xác nhận thủ công không có SLA, đây là rủi ro kinh doanh của quy trình đó, không phải lỗi transaction/bán vượt kho.
 
@@ -38,7 +38,7 @@ Chưa phát hiện P0 được xác nhận trong phạm vi đã đọc. Có mộ
 
 ## R-003 — P2: chuyển quyền sở hữu thiếu giới hạn thử mật khẩu
 
-**Bằng chứng:** `src/routes/v1/users.route.ts:20` có authenticate/permission/validation nhưng không có limiter; `src/services/users.service.ts:46` xác minh mật khẩu hiện tại. Đây là endpoint riêng, không đi qua limiter `/auth`.
+**Bằng chứng:** `src/routes/v1/users/users.route.ts:20` có authenticate/permission/validation nhưng không có limiter; `src/services/users/users.service.ts:46` xác minh mật khẩu hiện tại. Đây là endpoint riêng, không đi qua limiter `/auth`.
 
 **Tái hiện:** `pnpm.cmd exec node docs/reviews/reproduce-ownership-limit.mjs` gửi 40 request loopback với phiên Super Admin giả lập, tất cả đi tới service và trả 400, không request nào trả 429. Database và service mật khẩu được mock; phép thử xác nhận tuyến HTTP thiếu throttle, không đo CPU/không thử brute-force mật khẩu thật.
 

@@ -1,0 +1,80 @@
+import { removeUserSecrets } from '../../utils/users/user-mapper.js';
+import { Schema, model } from 'mongoose';
+import { securityChallengeSchema } from '../auth/security-challenge.schema.js';
+import type { IUser } from '../../types/users/users.type.js';
+export type { IUser } from '../../types/users/users.type.js';
+
+const userSchema = new Schema<IUser>(
+  {
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      select: false,
+    },
+    onboardingRequired: { type: Boolean, default: false },
+    personalEmailVerified: { type: Boolean, default: false },
+    temporaryPasswordExpiresAt: { type: Date },
+    emailVerification: { type: securityChallengeSchema, select: false },
+    pendingPassword: {
+      type: new Schema(
+        { id: String, hash: String, expiresAt: Date },
+        { _id: false }
+      ),
+      select: false,
+    },
+    personalEmail: { type: String, trim: true, lowercase: true, default: '' },
+    phone: { type: String, trim: true, maxlength: 30, default: '' },
+    location: { type: String, trim: true, maxlength: 255, default: '' },
+    bio: { type: String, trim: true, maxlength: 1000, default: '' },
+    avatar: { type: String, default: '' },
+    firstName: {
+      type: String,
+      maxlength: 50,
+      required: true,
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      maxlength: 50,
+      required: true,
+      trim: true,
+    },
+    role: {
+      type: String,
+      enum: ['super_admin', 'admin', 'staff'],
+      default: 'staff',
+      required: true,
+    },
+    active: {
+      type: Boolean,
+      default: true,
+      required: true,
+    },
+    mustChangePassword: { type: Boolean, default: false },
+    tokenVersion: { type: Number, default: 0, select: false },
+    refreshToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+    collection: 'users',
+  }
+);
+
+userSchema.index({ email: 1 }, { unique: true });
+
+const stripSecrets = (_doc: unknown, value: unknown) =>
+  removeUserSecrets(value as Record<string, unknown>);
+userSchema.set('toJSON', { transform: stripSecrets });
+userSchema.set('toObject', { transform: stripSecrets });
+export const User = model<IUser>('User', userSchema);

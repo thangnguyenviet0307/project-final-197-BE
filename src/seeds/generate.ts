@@ -1,14 +1,14 @@
 import type mongoose from 'mongoose';
 import { faker } from '@faker-js/faker';
-import { BrandModel } from '../models/brands.model.js';
-import { Categories } from '../models/categories.model.js';
-import Product from '../models/products.model.js';
-import { ProductReview } from '../models/product-reviews.model.js';
-import { sumVariantStock } from '../utils/inventory.js';
+import { BrandModel } from '../models/brands/brands.model.js';
+import { Categories } from '../models/categories/categories.model.js';
+import Product from '../models/products/products.model.js';
+import { ProductReview } from '../models/products/product-reviews.model.js';
+import { sumVariantStock } from '../utils/orders/inventory.js';
 import { createNameAllocator, type ExistingCatalog } from './names.js';
-import { createBrandSchema } from '../validations/brands.validation.js';
-import { createCategoriesSchema } from '../validations/categories.validation.js';
-import { createProductSchema } from '../validations/products.validation.js';
+import { createBrandSchema } from '../validations/brands/brands.validation.js';
+import { createCategoriesSchema } from '../validations/categories/categories.validation.js';
+import { createProductSchema } from '../validations/products/products.validation.js';
 
 /** Shared metadata for new and legacy native Faker products (kg, cm, VND). */
 export function generateProductMetadata(

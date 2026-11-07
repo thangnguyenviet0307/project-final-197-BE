@@ -1,19 +1,26 @@
-import { Article } from './models/articles.model.js';
-import { WarrantyRequest, StorePolicy } from './models/support.model.js';
-import { PostCategory } from './models/post-categories.model.js';
+import { Article } from './models/articles/articles.model.js';
+import { aiModels } from './models/ai/ai.model.js';
+import { attachAiGateway } from './gateways/ai/chat.gateway.js';
+import { startAiRetentionWorker } from './services/ai/conversation.service.js';
+import { startAiIndexWorker } from './services/ai/knowledge-index.service.js';
+import {
+  WarrantyRequest,
+  StorePolicy,
+} from './models/support/support.model.js';
+import { PostCategory } from './models/articles/post-categories.model.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
 import app from './app.js';
-import { startImageCleanupWorker } from './services/image-cleanup.service.js';
-import { startGuestReservationWorker } from './services/guest-reservation.service.js';
+import { startImageCleanupWorker } from './services/products/image-cleanup.service.js';
+import { startGuestReservationWorker } from './services/orders/guest-reservation.service.js';
 import { connectDatabase } from './config/database.js';
 import { validateEnvironment } from './config/environment.js';
 import mongoose from 'mongoose';
-import { CheckoutRequest } from './models/checkout-requests.model.js';
-import { GuestContacts } from './models/guest-contacts.model.js';
-import { CustomerOtpJob } from './models/customer-otp-jobs.model.js';
-import { startCustomerOtpWorker } from './services/customer-otp-worker.service.js';
+import { CheckoutRequest } from './models/orders/checkout-requests.model.js';
+import { GuestContacts } from './models/customers/guest-contacts.model.js';
+import { CustomerOtpJob } from './models/customers/customer-otp-jobs.model.js';
+import { startCustomerOtpWorker } from './services/customers/customer-otp-worker.service.js';
 
 const PORT = Number(process.env['PORT'] || 5000);
 
@@ -27,6 +34,10 @@ const startServer = async (): Promise<void> => {
     throw error;
   }
   await connectDatabase();
+  for (const model of aiModels) {
+    await model.init();
+    await model.createIndexes();
+  }
   await CheckoutRequest.init();
   await CheckoutRequest.createIndexes();
   await GuestContacts.init();
@@ -42,11 +53,20 @@ const startServer = async (): Promise<void> => {
   const stopImageCleanup = startImageCleanupWorker();
   const stopGuestReservations = startGuestReservationWorker();
   const stopCustomerOtp = startCustomerOtpWorker();
+  const stopAiRetention = startAiRetentionWorker();
+  const stopAiIndex = startAiIndexWorker();
   const stopWorkers = () =>
-    Promise.all([stopImageCleanup(), stopGuestReservations(), stopCustomerOtp()]);
+    Promise.all([
+      stopImageCleanup(),
+      stopGuestReservations(),
+      stopCustomerOtp(),
+      stopAiRetention(),
+      stopAiIndex(),
+    ]);
   const server = app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
   });
+  const stopAiGateway = attachAiGateway(server);
   server.on('error', async () => {
     console.error('Cannot listen on configured PORT');
     process.exitCode = 1;
@@ -57,6 +77,7 @@ const startServer = async (): Promise<void> => {
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
+    stopAiGateway();
     const timeout = setTimeout(() => {
       server.closeAllConnections();
       process.exit(1);

@@ -14,7 +14,7 @@ before(async () => {
 
 after(async () => {
   server.closeAllConnections();
-  await new Promise(resolve => server.close(resolve));
+  await new Promise((resolve) => server.close(resolve));
 });
 
 test('public about page returns the complete structured content without authentication', async () => {
@@ -40,12 +40,17 @@ test('public FAQ page returns categorized searchable questions without authentic
   assert.equal(result.success, true);
   assert.equal(result.data.title, 'Câu hỏi thường gặp');
   assert.ok(result.data.categories.length >= 5);
-  const questions = result.data.categories.flatMap(category => category.questions);
+  const questions = result.data.categories.flatMap(
+    (category) => category.questions
+  );
   assert.ok(questions.length >= 20);
-  assert.ok(questions.every(question =>
-    typeof question.id === 'string' &&
-    typeof question.question === 'string' &&
-    typeof question.answer === 'string'
-  ));
-  assert.ok(questions.some(question => question.id === 'checkout'));
+  assert.ok(
+    questions.every(
+      (question) =>
+        typeof question.id === 'string' &&
+        typeof question.question === 'string' &&
+        typeof question.answer === 'string'
+    )
+  );
+  assert.ok(questions.some((question) => question.id === 'checkout'));
 });

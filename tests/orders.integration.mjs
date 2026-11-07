@@ -1,75 +1,137 @@
-import { WarrantyRequest } from '../dist/models/support.model.js';
-import { CustomerOtpJob } from '../dist/models/customer-otp-jobs.model.js';
-import { sendCustomerOtp } from '../dist/services/account-security.service.js';
-import { processCustomerOtpBatch } from '../dist/services/customer-otp-worker.service.js';
-import { emailService } from '../dist/services/email.service.js';
-import * as warrantyService from '../dist/services/support.service.js';
-import { checkout } from "../dist/services/checkout.service.js";
-import { cancelCustomerOrder } from "../dist/services/customer-orders.service.js";
-import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { before, after, test } from "node:test";
-import mongoose from "mongoose";
-import argon2 from "argon2";
-import Product from "../dist/models/products.model.js";
-import { Order } from "../dist/models/orders.model.js";
-import { GuestContacts } from "../dist/models/guest-contacts.model.js";
-import { Customer } from "../dist/models/customers.model.js";
-import { BrandModel } from "../dist/models/brands.model.js";
-import { Categories } from "../dist/models/categories.model.js";
-import { SystemLock } from "../dist/models/system-locks.model.js";
-import { User } from "../dist/models/users.model.js";
-import { UserService } from "../dist/services/users.service.js";
-import { CategoriesService } from "../dist/services/categories.service.js";
-import productService from "../dist/services/products.service.js";
-import { createOrder, updateOrderStatus, updateOrderNote } from "../dist/services/orders.services.js";
-import { createCheckout } from "../dist/services/checkout.service.js";
-import { CheckoutRequest } from "../dist/models/checkout-requests.model.js";
-import { Article } from "../dist/models/articles.model.js";
-import { PostCategory } from "../dist/models/post-categories.model.js";
-import * as productNews from "../dist/services/product-news.service.js";
-import * as storeProducts from "../dist/services/store-products.service.js";
-import { getStorefrontProduct } from "../dist/services/storefront.service.js";
-import { addStoreProductReview } from "../dist/services/product-reviews.service.js";
-import { expireGuestReservation, processGuestReservationBatch } from "../dist/services/guest-reservation.service.js";
-import { startOrder, assignOrder, deleteOrder } from "../dist/services/orders.services.js";
+import { WarrantyRequest } from '../dist/models/support/support.model.js';
+import { CustomerOtpJob } from '../dist/models/customers/customer-otp-jobs.model.js';
+import { sendCustomerOtp } from '../dist/services/auth/account-security.service.js';
+import { processCustomerOtpBatch } from '../dist/services/customers/customer-otp-worker.service.js';
+import { emailService } from '../dist/services/auth/email.service.js';
+import * as warrantyService from '../dist/services/support/support.service.js';
+import { checkout } from '../dist/services/orders/checkout.service.js';
+import { cancelCustomerOrder } from '../dist/services/orders/customer-orders.service.js';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { before, after, test } from 'node:test';
+import mongoose from 'mongoose';
+import argon2 from 'argon2';
+import Product from '../dist/models/products/products.model.js';
+import { Order } from '../dist/models/orders/orders.model.js';
+import { GuestContacts } from '../dist/models/customers/guest-contacts.model.js';
+import { Customer } from '../dist/models/customers/customers.model.js';
+import { BrandModel } from '../dist/models/brands/brands.model.js';
+import { Categories } from '../dist/models/categories/categories.model.js';
+import { SystemLock } from '../dist/models/shared/system-locks.model.js';
+import { User } from '../dist/models/users/users.model.js';
+import { UserService } from '../dist/services/users/users.service.js';
+import { CategoriesService } from '../dist/services/categories/categories.service.js';
+import productService from '../dist/services/products/products.service.js';
+import {
+  createOrder,
+  updateOrderStatus,
+  updateOrderNote,
+} from '../dist/services/orders/orders.services.js';
+import { createCheckout } from '../dist/services/orders/checkout.service.js';
+import { CheckoutRequest } from '../dist/models/orders/checkout-requests.model.js';
+import { Article } from '../dist/models/articles/articles.model.js';
+import { PostCategory } from '../dist/models/articles/post-categories.model.js';
+import * as productNews from '../dist/services/products/product-news.service.js';
+import * as storeProducts from '../dist/services/products/store-products.service.js';
+import { getStorefrontProduct } from '../dist/services/storefront/storefront.service.js';
+import { addStoreProductReview } from '../dist/services/products/product-reviews.service.js';
+import {
+  expireGuestReservation,
+  processGuestReservationBatch,
+} from '../dist/services/orders/guest-reservation.service.js';
+import {
+  startOrder,
+  assignOrder,
+  deleteOrder,
+} from '../dist/services/orders/orders.services.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 // Deliberately do not import dotenv: never fall back to the application's database.
 const uri = process.env.MONGODB_TEST_URI;
-if (!uri) throw new Error("Set MONGODB_TEST_URI to a dedicated replica-set test deployment");
-const dbName = `codex_test_${randomUUID().replaceAll("-", "").slice(0, 24)}`;
-const actor = { id: String(new mongoose.Types.ObjectId()), role: "admin" };
-const fixtures = { products: [], orders: [], customers: [], users: [], categories: [], contacts: [] };
+if (!uri)
+  throw new Error(
+    'Set MONGODB_TEST_URI to a dedicated replica-set test deployment'
+  );
+const dbName = `codex_test_${randomUUID().replaceAll('-', '').slice(0, 24)}`;
+const actor = { id: String(new mongoose.Types.ObjectId()), role: 'admin' };
+const fixtures = {
+  products: [],
+  orders: [],
+  customers: [],
+  users: [],
+  categories: [],
+  contacts: [],
+};
 let guestPhoneSequence = 0;
 function guestIdentity() {
-  return { email: `guest-${randomUUID()}@example.com`, phone: `09${String(++guestPhoneSequence).padStart(8, '0')}` };
+  return {
+    email: `guest-${randomUUID()}@example.com`,
+    phone: `09${String(++guestPhoneSequence).padStart(8, '0')}`,
+  };
 }
 let customer;
 let brand;
 let category;
-before(async () => { try {
-  await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 5000 });
-  assert.equal(mongoose.connection.name, dbName);
-  await Promise.all([Product.init(), Order.init(), Customer.init(), GuestContacts.init(), BrandModel.init(), Categories.init(), SystemLock.init(), User.init(), CheckoutRequest.init(), WarrantyRequest.init()]);
-  brand = await BrandModel.create({ name: 'Fixture brand', slug: 'fixture-brand' });
-  category = await Categories.create({ name: 'Fixture category', slug: 'fixture-category' });
-  customer = await Customer.create({ firstName: "Fixture", lastName: "Customer",
-    email: "fixture@example.com", phone: "0123456789", accountEnabled: true,
-    address: { street: "Test street", city: "Test city", state: "Test state" } });
-  fixtures.customers.push(customer._id);
-  } catch (error) { console.error('Integration setup failed:', error.message); await mongoose.disconnect(); throw error; }
+before(async () => {
+  try {
+    await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 5000 });
+    assert.equal(mongoose.connection.name, dbName);
+    await Promise.all([
+      Product.init(),
+      Order.init(),
+      Customer.init(),
+      GuestContacts.init(),
+      BrandModel.init(),
+      Categories.init(),
+      SystemLock.init(),
+      User.init(),
+      CheckoutRequest.init(),
+      WarrantyRequest.init(),
+    ]);
+    brand = await BrandModel.create({
+      name: 'Fixture brand',
+      slug: 'fixture-brand',
+    });
+    category = await Categories.create({
+      name: 'Fixture category',
+      slug: 'fixture-category',
+    });
+    customer = await Customer.create({
+      firstName: 'Fixture',
+      lastName: 'Customer',
+      email: 'fixture@example.com',
+      phone: '0123456789',
+      accountEnabled: true,
+      address: {
+        street: 'Test street',
+        city: 'Test city',
+        state: 'Test state',
+      },
+    });
+    fixtures.customers.push(customer._id);
+  } catch (error) {
+    console.error('Integration setup failed:', error.message);
+    await mongoose.disconnect();
+    throw error;
+  }
 });
 after(async () => {
   if (mongoose.connection.readyState === 1) {
     assert.equal(mongoose.connection.name, dbName);
     // Only delete documents whose IDs were generated by this test process.
-    await WarrantyRequest.deleteMany({ customerId: { $in: fixtures.customers } });
+    await WarrantyRequest.deleteMany({
+      customerId: { $in: fixtures.customers },
+    });
     await Order.deleteMany({ _id: { $in: fixtures.orders } });
     await Order.deleteMany({ customerId: { $in: fixtures.customers } });
-    await CheckoutRequest.deleteMany({ $or: [{ customerId: { $in: fixtures.customers } }, { "result._id": { $in: fixtures.orders } }] });
+    await CheckoutRequest.deleteMany({
+      $or: [
+        { customerId: { $in: fixtures.customers } },
+        { 'result._id': { $in: fixtures.orders } },
+      ],
+    });
     await Product.deleteMany({ _id: { $in: fixtures.products } });
     await GuestContacts.deleteMany({ _id: { $in: fixtures.contacts } });
     await Customer.deleteMany({ _id: { $in: fixtures.customers } });
@@ -82,15 +144,31 @@ after(async () => {
   await mongoose.disconnect();
 });
 async function product(stock) {
-  const result = await Product.create({ product_name: "Integration fixture", model_year: 2025,
-    slug: `fixture-${randomUUID()}`, brand: brand._id, category: category._id,
-    stock, variants: [{ sku: `SKU-${randomUUID().toUpperCase()}`, price: 25, stock }] });
+  const result = await Product.create({
+    product_name: 'Integration fixture',
+    model_year: 2025,
+    slug: `fixture-${randomUUID()}`,
+    brand: brand._id,
+    category: category._id,
+    stock,
+    variants: [{ sku: `SKU-${randomUUID().toUpperCase()}`, price: 25, stock }],
+  });
   fixtures.products.push(result._id);
   return result;
 }
-const item = (entry, quantity = 1) => ({ productId: String(entry._id), variantId: String(entry.variants[0]._id), quantity });
-const input = (orderItems) => ({ customerId: String(customer._id), street: "Test street",
-  city: "Test city", state: "Test state", paymentType: 1, orderItems });
+const item = (entry, quantity = 1) => ({
+  productId: String(entry._id),
+  variantId: String(entry.variants[0]._id),
+  quantity,
+});
+const input = (orderItems) => ({
+  customerId: String(customer._id),
+  street: 'Test street',
+  city: 'Test city',
+  state: 'Test state',
+  paymentType: 1,
+  orderItems,
+});
 async function order(items) {
   const result = await createOrder(actor, input(items));
   fixtures.orders.push(result._id);
@@ -103,151 +181,327 @@ async function guestOrder(t, stock = 3) {
   const request = { ...checkoutInput(entry), ...guestIdentity() };
   const result = await checkout(null, 0, request);
   fixtures.orders.push(result._id);
-  const stored = await Order.findById(result._id).select("contactCustomerId");
+  const stored = await Order.findById(result._id).select('contactCustomerId');
   fixtures.contacts.push(stored.contactCustomerId);
   return { entry, request, result };
 }
 
-test("real transaction rolls stock back when a later order item fails", async () => {
+test('real transaction rolls stock back when a later order item fails', async () => {
   const entry = await product(3);
-  await assert.rejects(order([item(entry, 2), { productId: String(new mongoose.Types.ObjectId()), quantity: 1 }]), { status: 404 });
+  await assert.rejects(
+    order([
+      item(entry, 2),
+      { productId: String(new mongoose.Types.ObjectId()), quantity: 1 },
+    ]),
+    { status: 404 }
+  );
   const stored = await Product.findById(entry._id);
   assert.equal(stored.stock, 3);
   assert.equal(stored.variants[0].stock, 3);
   assert.equal(await Order.countDocuments(), 0);
 });
 
-test("concurrent orders cannot oversell the last variant unit", async () => {
+test('concurrent orders cannot oversell the last variant unit', async () => {
   const entry = await product(1);
-  const results = await Promise.allSettled([order([item(entry)]), order([item(entry)])]);
-  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
-  const failure = results.find((result) => result.status === "rejected");
+  const results = await Promise.allSettled([
+    order([item(entry)]),
+    order([item(entry)]),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  const failure = results.find((result) => result.status === 'rejected');
   assert.equal(failure.reason.status, 409);
   const stored = await Product.findById(entry._id);
   assert.equal(stored.stock, 0);
   assert.equal(stored.variants[0].stock, 0);
 });
 
-test("rejection restores stock exactly once", async () => {
+test('rejection restores stock exactly once', async () => {
   const entry = await product(5);
   const placed = await order([item(entry, 2)]);
-  await updateOrderStatus(actor, String(placed._id), { orderStatus: 3, cancellationReason: "Customer request" });
-  await assert.rejects(updateOrderStatus(actor, String(placed._id), { orderStatus: 3, cancellationReason: "Customer request" }), { status: 409 });
+  await updateOrderStatus(actor, String(placed._id), {
+    orderStatus: 3,
+    cancellationReason: 'Customer request',
+  });
+  await assert.rejects(
+    updateOrderStatus(actor, String(placed._id), {
+      orderStatus: 3,
+      cancellationReason: 'Customer request',
+    }),
+    { status: 409 }
+  );
   const stored = await Product.findById(entry._id);
   assert.equal(stored.stock, 5);
   assert.equal(stored.variants[0].stock, 5);
 });
 
-test("stock restoration failure rolls the order status back", async () => {
+test('stock restoration failure rolls the order status back', async () => {
   const entry = await product(2);
   const placed = await order([item(entry)]);
   // Intentionally corrupt only this test's fixture to exercise transaction rollback.
   await Product.deleteOne({ _id: entry._id });
-  await assert.rejects(updateOrderStatus(actor, String(placed._id), { orderStatus: 3, cancellationReason: "Customer request" }), { status: 409 });
+  await assert.rejects(
+    updateOrderStatus(actor, String(placed._id), {
+      orderStatus: 3,
+      cancellationReason: 'Customer request',
+    }),
+    { status: 409 }
+  );
   assert.equal((await Order.findById(placed._id)).orderStatus, 1);
 });
 
 test('concurrent admin deactivations leave one active administrator', async () => {
   const users = [];
   for (const suffix of ['one', 'two']) {
-    const user = await UserService.createUser({ email: `${suffix}@example.com`, password: 'FixturePassword123',
-      firstName: 'Fixture', lastName: suffix, role: 'admin', active: true }, { id: 'f'.repeat(24), role: 'super_admin' });
+    const user = await UserService.createUser(
+      {
+        email: `${suffix}@example.com`,
+        password: 'FixturePassword123',
+        firstName: 'Fixture',
+        lastName: suffix,
+        role: 'admin',
+        active: true,
+      },
+      { id: 'f'.repeat(24), role: 'super_admin' }
+    );
     fixtures.users.push(user._id);
     users.push(user);
   }
-  const results = await Promise.allSettled(users.map(user => UserService.updateUser(String(user._id), { active: false }, { id: 'f'.repeat(24), role: 'super_admin' })));
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
+  const results = await Promise.allSettled(
+    users.map((user) =>
+      UserService.updateUser(
+        String(user._id),
+        { active: false },
+        { id: 'f'.repeat(24), role: 'super_admin' }
+      )
+    )
+  );
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    results.find((result) => result.status === 'rejected').reason.status,
+    409
+  );
   assert.equal(await User.countDocuments({ role: 'admin', active: true }), 1);
 });
 
 test('concurrent category reparenting cannot create an ancestor cycle', async () => {
   const roots = [];
   for (const name of ['Cycle root A', 'Cycle root B']) {
-    const category = await Categories.create({ name, slug: name.toLowerCase().replaceAll(' ', '-') });
+    const category = await Categories.create({
+      name,
+      slug: name.toLowerCase().replaceAll(' ', '-'),
+    });
     fixtures.categories.push(category._id);
     roots.push(category);
   }
   const results = await Promise.allSettled([
-    CategoriesService.updateCategory(String(roots[0]._id), { parent: roots[1]._id }),
-    CategoriesService.updateCategory(String(roots[1]._id), { parent: roots[0]._id }),
+    CategoriesService.updateCategory(String(roots[0]._id), {
+      parent: roots[1]._id,
+    }),
+    CategoriesService.updateCategory(String(roots[1]._id), {
+      parent: roots[0]._id,
+    }),
   ]);
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    results.find((result) => result.status === 'rejected').reason.status,
+    409
+  );
 });
 
 test('concurrent category deletion and product creation cannot leave a dangling reference', async () => {
-  const category = await Categories.create({ name: 'Race category', slug: 'race-category' });
+  const category = await Categories.create({
+    name: 'Race category',
+    slug: 'race-category',
+  });
   fixtures.categories.push(category._id);
   const results = await Promise.allSettled([
     CategoriesService.deleteCategory(String(category._id)),
-    productService.createProduct({ product_name: 'Race product', slug: 'race-product', model_year: 2025,
-      brand: String(brand._id), category: String(category._id), stock: 0 }).then(product => {
-        fixtures.products.push(product._id); return product;
+    productService
+      .createProduct({
+        product_name: 'Race product',
+        slug: 'race-product',
+        model_year: 2025,
+        brand: String(brand._id),
+        category: String(category._id),
+        stock: 0,
+      })
+      .then((product) => {
+        fixtures.products.push(product._id);
+        return product;
       }),
   ]);
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    results.find((result) => result.status === 'rejected').reason.status,
+    409
+  );
   const stored = await Product.findOne({ slug: 'race-product' });
   if (stored) assert.ok(await Categories.exists({ _id: stored.category }));
 });
 
 test('order codes, phone search and staff scheduling work on MongoDB', async () => {
-  const { startOrder, getOrders, updateOrderDates } = await import('../dist/services/orders.services.js');
-  const staff = await UserService.createUser({ email: 'schedule-staff@example.com', password: 'FixturePassword123', firstName: 'Schedule', lastName: 'Staff', role: 'staff', active: true }, { id: 'f'.repeat(24), role: 'super_admin' });
+  const { startOrder, getOrders, updateOrderDates } =
+    await import('../dist/services/orders/orders.services.js');
+  const staff = await UserService.createUser(
+    {
+      email: 'schedule-staff@example.com',
+      password: 'FixturePassword123',
+      firstName: 'Schedule',
+      lastName: 'Staff',
+      role: 'staff',
+      active: true,
+    },
+    { id: 'f'.repeat(24), role: 'super_admin' }
+  );
   fixtures.users.push(staff._id);
   const staffActor = { id: String(staff._id), role: 'staff' };
   const entry = await product(2);
   const placed = await order([item(entry)]);
   assert.match(placed.orderCode, /^ORD-[A-HJ-NP-Z2-9]{6}$/);
-  assert.equal((await getOrders(actor, { page: 1, limit: 10, search: placed.orderCode })).pagination.total, 1);
-  assert.ok((await getOrders(actor, { page: 1, limit: 10, search: '0123456789' })).data.some(value => String(value._id) === String(placed._id)));
-  await assert.rejects(updateOrderDates(staffActor, String(placed._id), { requireDate: new Date(Date.now() + 86400000) }), { status: 404 });
+  assert.equal(
+    (await getOrders(actor, { page: 1, limit: 10, search: placed.orderCode }))
+      .pagination.total,
+    1
+  );
+  assert.ok(
+    (
+      await getOrders(actor, { page: 1, limit: 10, search: '0123456789' })
+    ).data.some((value) => String(value._id) === String(placed._id))
+  );
+  await assert.rejects(
+    updateOrderDates(staffActor, String(placed._id), {
+      requireDate: new Date(Date.now() + 86400000),
+    }),
+    { status: 404 }
+  );
   await startOrder(staffActor, String(placed._id));
   const plannedShippingDate = new Date(Date.now() + 86400000);
-  const updated = await updateOrderDates(staffActor, String(placed._id), { plannedShippingDate });
+  const updated = await updateOrderDates(staffActor, String(placed._id), {
+    plannedShippingDate,
+  });
   assert.equal(updated.orderStatus, 2);
-  assert.equal(updated.plannedShippingDate.toISOString(), plannedShippingDate.toISOString());
+  assert.equal(
+    updated.plannedShippingDate.toISOString(),
+    plannedShippingDate.toISOString()
+  );
   assert.equal(updated.totalAmount, placed.totalAmount);
-  const duplicate = new Order({ ...placed.toObject(), _id: new mongoose.Types.ObjectId() });
-  await assert.rejects(duplicate.save(), error => error.code === 11000);
+  const duplicate = new Order({
+    ...placed.toObject(),
+    _id: new mongoose.Types.ObjectId(),
+  });
+  await assert.rejects(duplicate.save(), (error) => error.code === 11000);
 });
 
-test("stale editor cannot overwrite stock reserved after its preflight read", async () => {
+test('stale editor cannot overwrite stock reserved after its preflight read', async () => {
   const entry = await product(5);
   const staleVersion = entry.__v ?? 0;
-  const staleVariants = entry.variants.map(variant => ({ ...variant.toObject(), _id: String(variant._id) }));
+  const staleVariants = entry.variants.map((variant) => ({
+    ...variant.toObject(),
+    _id: String(variant._id),
+  }));
   await order([item(entry, 1)]);
-  await assert.rejects(productService.updateProduct(String(entry._id), { expectedVersion: staleVersion, variants: staleVariants }), { status: 409 });
+  await assert.rejects(
+    productService.updateProduct(String(entry._id), {
+      expectedVersion: staleVersion,
+      variants: staleVariants,
+    }),
+    { status: 409 }
+  );
   const stored = await Product.findById(entry._id);
   assert.equal(stored.stock, 4);
   assert.equal(stored.variants[0].stock, 4);
 });
 
-test("checkout concurrent retries reserve once and failed multi-line orders roll back", async t => {
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }] }));
-  const buyer = await Customer.create({ firstName: 'Checkout', lastName: 'Fixture', email: `checkout-${randomUUID()}@example.com`, accountEnabled: true });
+test('checkout concurrent retries reserve once and failed multi-line orders roll back', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => [
+      { code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] },
+    ],
+  }));
+  const buyer = await Customer.create({
+    firstName: 'Checkout',
+    lastName: 'Fixture',
+    email: `checkout-${randomUUID()}@example.com`,
+    accountEnabled: true,
+  });
   fixtures.customers.push(buyer._id);
   const first = await product(5);
   const second = await product(1);
-  const payload = { requestId: randomUUID(), email: "guest-fixture@example.com", recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
-  const results = await Promise.all([checkout(String(buyer._id), 0, payload), checkout(String(buyer._id), 0, payload)]);
+  const payload = {
+    requestId: randomUUID(),
+    email: 'guest-fixture@example.com',
+    recipientName: 'Recipient',
+    phone: '0901234567',
+    addressVersion: 2,
+    provinceCode: 1,
+    wardCode: 3,
+    street: 'Street',
+    note: '',
+    paymentMethod: 'cod',
+    items: [{ ...item(first, 2), expectedUnitPrice: 25 }],
+  };
+  const results = await Promise.all([
+    checkout(String(buyer._id), 0, payload),
+    checkout(String(buyer._id), 0, payload),
+  ]);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   assert.equal(results[0]._id, results[1]._id);
   assert.equal((await Product.findById(first._id)).stock, 3);
-  await assert.rejects(checkout(String(buyer._id), 0, { ...payload, requestId: randomUUID(), items: [{ ...item(first, 1), expectedUnitPrice: 25 }, { ...item(second, 2), expectedUnitPrice: 25 }] }), { status: 409 });
+  await assert.rejects(
+    checkout(String(buyer._id), 0, {
+      ...payload,
+      requestId: randomUUID(),
+      items: [
+        { ...item(first, 1), expectedUnitPrice: 25 },
+        { ...item(second, 2), expectedUnitPrice: 25 },
+      ],
+    }),
+    { status: 409 }
+  );
   assert.equal((await Product.findById(first._id)).stock, 3);
   assert.equal((await Product.findById(second._id)).stock, 1);
   assert.equal(await Order.countDocuments({ customerId: buyer._id }), 1);
 });
 
-test("guest concurrent retries reserve once without creating customers and failed orders roll back", async t => {
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => [{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }] }));
+test('guest concurrent retries reserve once without creating customers and failed orders roll back', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true,
+    json: async () => [
+      { code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] },
+    ],
+  }));
   const customerCount = await Customer.countDocuments();
   const first = await product(5);
   const second = await product(1);
-  const payload = { requestId: randomUUID(), ...guestIdentity(), recipientName: 'Guest recipient', addressVersion: 2, provinceCode: 1, wardCode: 3, street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(first, 2), expectedUnitPrice: 25 }] };
-  const results = await Promise.all([checkout(null, 0, payload), checkout(null, 0, payload)]);
+  const payload = {
+    requestId: randomUUID(),
+    ...guestIdentity(),
+    recipientName: 'Guest recipient',
+    addressVersion: 2,
+    provinceCode: 1,
+    wardCode: 3,
+    street: 'Street',
+    note: '',
+    paymentMethod: 'cod',
+    items: [{ ...item(first, 2), expectedUnitPrice: 25 }],
+  };
+  const results = await Promise.all([
+    checkout(null, 0, payload),
+    checkout(null, 0, payload),
+  ]);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   assert.equal(results[0]._id, results[1]._id);
   const stored = await Order.findById(results[0]._id);
@@ -263,24 +517,51 @@ test("guest concurrent retries reserve once without creating customers and faile
   assert.equal((await Product.findById(first._id)).stock, 3);
   const failedRequest = randomUUID();
   const failedIdentity = guestIdentity();
-  await assert.rejects(checkout(null, 0, { ...payload, ...failedIdentity, requestId: failedRequest, items: [{ ...item(first, 1), expectedUnitPrice: 25 }, { ...item(second, 2), expectedUnitPrice: 25 }] }), { status: 409 });
+  await assert.rejects(
+    checkout(null, 0, {
+      ...payload,
+      ...failedIdentity,
+      requestId: failedRequest,
+      items: [
+        { ...item(first, 1), expectedUnitPrice: 25 },
+        { ...item(second, 2), expectedUnitPrice: 25 },
+      ],
+    }),
+    { status: 409 }
+  );
   assert.equal((await Product.findById(first._id)).stock, 3);
   assert.equal((await Product.findById(second._id)).stock, 1);
-  assert.equal(await Order.countDocuments({ checkoutRequestId: failedRequest }), 0);
+  assert.equal(
+    await Order.countDocuments({ checkoutRequestId: failedRequest }),
+    0
+  );
   assert.equal(await Customer.countDocuments(), customerCount);
-  assert.equal(await GuestContacts.exists({ email: failedIdentity.email }), null);
+  assert.equal(
+    await GuestContacts.exists({ email: failedIdentity.email }),
+    null
+  );
   assert.equal(await GuestContacts.countDocuments({ email: payload.email }), 1);
 });
 
-test("guest phone match preserves the registered email and never changes login identity or private order ownership", async t => {
+test('guest phone match preserves the registered email and never changes login identity or private order ownership', async (t) => {
   mockLocations(t);
   const identity = guestIdentity();
-  const buyer = await Customer.create({ firstName: 'Existing', lastName: 'Account', email: `account-${randomUUID()}@example.com`, phone: identity.phone, accountEnabled: true, tokenVersion: 7 });
+  const buyer = await Customer.create({
+    firstName: 'Existing',
+    lastName: 'Account',
+    email: `account-${randomUUID()}@example.com`,
+    phone: identity.phone,
+    accountEnabled: true,
+    tokenVersion: 7,
+  });
   fixtures.customers.push(buyer._id);
   const customerCount = await Customer.countDocuments();
   const entry = await product(5);
   const payload = { ...checkoutInput(entry), ...identity };
-  const results = await Promise.all([checkout(null, 0, payload), checkout(null, 0, payload)]);
+  const results = await Promise.all([
+    checkout(null, 0, payload),
+    checkout(null, 0, payload),
+  ]);
   assert.equal(results[0]._id, results[1]._id);
   fixtures.orders.push(new mongoose.Types.ObjectId(results[0]._id));
   const stored = await Order.findById(results[0]._id);
@@ -304,123 +585,257 @@ test("guest phone match preserves the registered email and never changes login i
   assert.equal((await Product.findById(entry._id)).stock, 4);
 });
 
-test("concurrent customer cancellations restore stock once and restoration errors roll back the status", async () => {
-  const buyer = await Customer.create({ firstName: 'Cancel', lastName: 'Fixture', email: `cancel-${randomUUID()}@example.com`, accountEnabled: true });
+test('concurrent customer cancellations restore stock once and restoration errors roll back the status', async () => {
+  const buyer = await Customer.create({
+    firstName: 'Cancel',
+    lastName: 'Fixture',
+    email: `cancel-${randomUUID()}@example.com`,
+    accountEnabled: true,
+  });
   fixtures.customers.push(buyer._id);
   const entry = await product(5);
-  const placed = await createOrder(actor, { ...input([item(entry, 2)]), customerId: String(buyer._id) });
+  const placed = await createOrder(actor, {
+    ...input([item(entry, 2)]),
+    customerId: String(buyer._id),
+  });
   fixtures.orders.push(placed._id);
-  await Promise.all([cancelCustomerOrder(String(buyer._id), 0, String(placed._id), 'Cancel'), cancelCustomerOrder(String(buyer._id), 0, String(placed._id), 'Cancel')]);
+  await Promise.all([
+    cancelCustomerOrder(String(buyer._id), 0, String(placed._id), 'Cancel'),
+    cancelCustomerOrder(String(buyer._id), 0, String(placed._id), 'Cancel'),
+  ]);
   assert.equal((await Product.findById(entry._id)).stock, 5);
   assert.equal((await Order.findById(placed._id)).orderStatus, 3);
-  const second = await createOrder(actor, { ...input([item(entry)]), customerId: String(buyer._id) });
+  const second = await createOrder(actor, {
+    ...input([item(entry)]),
+    customerId: String(buyer._id),
+  });
   fixtures.orders.push(second._id);
   // Simulate inconsistent legacy storage without touching any non-fixture document.
   await Product.deleteOne({ _id: entry._id });
-  await assert.rejects(cancelCustomerOrder(String(buyer._id), 0, String(second._id), 'Cancel'), { status: 409 });
+  await assert.rejects(
+    cancelCustomerOrder(String(buyer._id), 0, String(second._id), 'Cancel'),
+    { status: 409 }
+  );
   assert.equal((await Order.findById(second._id)).orderStatus, 1);
 });
 
-test("purchase snapshots survive product and variant metadata changes", async () => {
+test('purchase snapshots survive product and variant metadata changes', async () => {
   const entry = await product(5);
-  entry.variants[0].variant_name = "Purchased variant";
-  entry.variants[0].attributes = { material: "Original" };
+  entry.variants[0].variant_name = 'Purchased variant';
+  entry.variants[0].attributes = { material: 'Original' };
   await entry.save();
   const placed = await order([item(entry)]);
   const latest = await Product.findById(entry._id);
-  await productService.updateProduct(String(entry._id), { expectedVersion: latest.__v,
-    product_name: "Renamed after purchase", variants: latest.variants.map(variant => ({ ...variant.toObject(), _id: String(variant._id), variant_name: "Renamed variant", attributes: { material: "Changed" } })) });
+  await productService.updateProduct(String(entry._id), {
+    expectedVersion: latest.__v,
+    product_name: 'Renamed after purchase',
+    variants: latest.variants.map((variant) => ({
+      ...variant.toObject(),
+      _id: String(variant._id),
+      variant_name: 'Renamed variant',
+      attributes: { material: 'Changed' },
+    })),
+  });
   const stored = await Order.findById(placed._id);
-  assert.equal(stored.orderItems[0].productName, "Integration fixture");
-  assert.equal(stored.orderItems[0].variantName, "Purchased variant");
-  assert.equal(stored.orderItems[0].selectedOptions.material, "Original");
+  assert.equal(stored.orderItems[0].productName, 'Integration fixture');
+  assert.equal(stored.orderItems[0].variantName, 'Purchased variant');
+  assert.equal(stored.orderItems[0].selectedOptions.material, 'Original');
   assert.equal(stored.orderItems[0].price, 25);
 });
 
 function checkoutInput(entry, requestId = randomUUID()) {
-  return { requestId, email: "guest-fixture@example.com", recipientName: 'Recipient', phone: '0901234567', addressVersion: 2, provinceCode: 1, wardCode: 3,
-    street: 'Street', note: '', paymentMethod: 'cod', items: [{ ...item(entry), expectedUnitPrice: 25 }] };
+  return {
+    requestId,
+    email: 'guest-fixture@example.com',
+    recipientName: 'Recipient',
+    phone: '0901234567',
+    addressVersion: 2,
+    provinceCode: 1,
+    wardCode: 3,
+    street: 'Street',
+    note: '',
+    paymentMethod: 'cod',
+    items: [{ ...item(entry), expectedUnitPrice: 25 }],
+  };
 }
 function mockLocations(t) {
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify([{ code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] }])));
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response(
+        JSON.stringify([
+          { code: 1, name: 'Province', wards: [{ code: 3, name: 'Ward' }] },
+        ])
+      )
+  );
 }
-test('concurrent identical checkouts commit one order and reserve stock once, even after order deletion', async t => {
+test('concurrent identical checkouts commit one order and reserve stock once, even after order deletion', async (t) => {
   mockLocations(t);
-  const entry = await product(3), request = checkoutInput(entry);
-  const results = await Promise.all(Array.from({ length: 4 }, () => createCheckout(String(customer._id), request)));
-  assert.equal(new Set(results.map(result => String(result._id))).size, 1);
+  const entry = await product(3),
+    request = checkoutInput(entry);
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () =>
+      createCheckout(String(customer._id), request)
+    )
+  );
+  assert.equal(new Set(results.map((result) => String(result._id))).size, 1);
   assert.equal((await Product.findById(entry._id)).stock, 2);
-  assert.equal(await CheckoutRequest.countDocuments({ customerId: customer._id, requestId: request.requestId }), 1);
+  assert.equal(
+    await CheckoutRequest.countDocuments({
+      customerId: customer._id,
+      requestId: request.requestId,
+    }),
+    1
+  );
   await Order.deleteOne({ _id: results[0]._id });
   const replay = await createCheckout(String(customer._id), request);
   assert.equal(String(replay._id), String(results[0]._id));
   assert.equal((await Product.findById(entry._id)).stock, 2);
 });
-test('competing checkouts for the last unit cannot oversell', async t => {
+test('competing checkouts for the last unit cannot oversell', async (t) => {
   mockLocations(t);
   const entry = await product(1);
-  const results = await Promise.allSettled([createCheckout(String(customer._id), checkoutInput(entry)), createCheckout(String(customer._id), checkoutInput(entry))]);
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
+  const results = await Promise.allSettled([
+    createCheckout(String(customer._id), checkoutInput(entry)),
+    createCheckout(String(customer._id), checkoutInput(entry)),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    results.find((result) => result.status === 'rejected').reason.status,
+    409
+  );
   assert.equal((await Product.findById(entry._id)).stock, 0);
 });
-test('checkout failure on a later line rolls back earlier reservations and leaves no receipt', async t => {
+test('checkout failure on a later line rolls back earlier reservations and leaves no receipt', async (t) => {
   mockLocations(t);
-  const first = await product(3), second = await product(0), request = checkoutInput(first);
+  const first = await product(3),
+    second = await product(0),
+    request = checkoutInput(first);
   request.items.push({ ...item(second), expectedUnitPrice: 25 });
-  await assert.rejects(createCheckout(String(customer._id), request), { status: 409 });
+  await assert.rejects(createCheckout(String(customer._id), request), {
+    status: 409,
+  });
   assert.equal((await Product.findById(first._id)).stock, 3);
-  assert.equal(await CheckoutRequest.countDocuments({ customerId: customer._id, requestId: request.requestId }), 0);
+  assert.equal(
+    await CheckoutRequest.countDocuments({
+      customerId: customer._id,
+      requestId: request.requestId,
+    }),
+    0
+  );
 });
 
-test("two real concurrent note writes cannot overwrite the same original note", async () => {
+test('two real concurrent note writes cannot overwrite the same original note', async () => {
   const entry = await product(2);
   const created = await order([item(entry)]);
   const results = await Promise.allSettled([
     updateOrderNote(actor, String(created._id), 'First draft', ''),
     updateOrderNote(actor, String(created._id), 'Second draft', ''),
   ]);
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-  const rejected = results.find(result => result.status === 'rejected');
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  const rejected = results.find((result) => result.status === 'rejected');
   assert.equal(rejected.reason.status, 409);
   assert.equal(rejected.reason.businessCode, 'ORDER_NOTE_CONFLICT');
-  const winner = results.find(result => result.status === 'fulfilled');
-  assert.equal((await Order.findById(created._id)).orderNote, winner.value.orderNote);
+  const winner = results.find((result) => result.status === 'fulfilled');
+  assert.equal(
+    (await Order.findById(created._id)).orderNote,
+    winner.value.orderNote
+  );
 });
 
-test("ownership transfer rolls back invalid targets and concurrent transfers preserve one owner", async () => {
+test('ownership transfer rolls back invalid targets and concurrent transfers preserve one owner', async () => {
   const password = 'OwnerIntegration123';
   const hash = await argon2.hash(password);
   const accounts = await User.create([
-    { email: 'owner-fixture@example.com', firstName: 'Owner', lastName: 'Fixture', password: hash, role: 'super_admin', active: true },
-    { email: 'target-one@example.com', firstName: 'Target', lastName: 'One', password: hash, role: 'admin', active: true, mustChangePassword: true },
-    { email: 'target-two@example.com', firstName: 'Target', lastName: 'Two', password: hash, role: 'staff', active: true },
+    {
+      email: 'owner-fixture@example.com',
+      firstName: 'Owner',
+      lastName: 'Fixture',
+      password: hash,
+      role: 'super_admin',
+      active: true,
+    },
+    {
+      email: 'target-one@example.com',
+      firstName: 'Target',
+      lastName: 'One',
+      password: hash,
+      role: 'admin',
+      active: true,
+      mustChangePassword: true,
+    },
+    {
+      email: 'target-two@example.com',
+      firstName: 'Target',
+      lastName: 'Two',
+      password: hash,
+      role: 'staff',
+      active: true,
+    },
   ]);
-  fixtures.users.push(...accounts.map(user => user._id));
+  fixtures.users.push(...accounts.map((user) => user._id));
   const owner = { id: String(accounts[0]._id), role: 'super_admin' };
-  await assert.rejects(UserService.transferOwnership(owner, String(accounts[1]._id), password), { status: 409 });
+  await assert.rejects(
+    UserService.transferOwnership(owner, String(accounts[1]._id), password),
+    { status: 409 }
+  );
   assert.equal((await User.findById(owner.id)).role, 'super_admin');
-  await User.updateOne({ _id: accounts[1]._id }, { $set: { mustChangePassword: false } });
-  const results = await Promise.allSettled(accounts.slice(1).map(user => UserService.transferOwnership(owner, String(user._id), password)));
-  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  await User.updateOne(
+    { _id: accounts[1]._id },
+    { $set: { mustChangePassword: false } }
+  );
+  const results = await Promise.allSettled(
+    accounts
+      .slice(1)
+      .map((user) =>
+        UserService.transferOwnership(owner, String(user._id), password)
+      )
+  );
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
   assert.equal(await User.countDocuments({ role: 'super_admin' }), 1);
   assert.equal((await User.findById(owner.id)).role, 'admin');
-  assert.equal((await User.findById(owner.id).select('+tokenVersion')).tokenVersion, 1);
+  assert.equal(
+    (await User.findById(owner.id).select('+tokenVersion')).tokenVersion,
+    1
+  );
 });
 
 test('orders with equal dates have stable descending ID order across page boundaries', async () => {
-  const { getOrders } = await import('../dist/services/orders.services.js');
+  const { getOrders } =
+    await import('../dist/services/orders/orders.services.js');
   const entry = await product(6);
   const created = [];
-  for (let index = 0; index < 4; index++) created.push(await order([item(entry)]));
+  for (let index = 0; index < 4; index++)
+    created.push(await order([item(entry)]));
   const sameDate = new Date('2026-10-31T00:00:00.000Z');
-  await Order.updateMany({ _id: { $in: created.map(value => value._id) } }, { $set: { orderDate: sameDate } });
-  const expected = created.map(value => String(value._id)).sort().reverse();
+  await Order.updateMany(
+    { _id: { $in: created.map((value) => value._id) } },
+    { $set: { orderDate: sameDate } }
+  );
+  const expected = created
+    .map((value) => String(value._id))
+    .sort()
+    .reverse();
   for (let repeat = 0; repeat < 2; repeat++) {
     const ids = [];
     for (let page = 1; page <= 2; page++) {
-      const result = await getOrders(actor, { page, limit: 2, dateFrom: sameDate, dateTo: sameDate });
-      ids.push(...result.data.map(value => String(value._id)));
+      const result = await getOrders(actor, {
+        page,
+        limit: 2,
+        dateFrom: sameDate,
+        dateTo: sameDate,
+      });
+      ids.push(...result.data.map((value) => String(value._id)));
     }
     assert.deepEqual(ids, expected);
   }
@@ -432,35 +847,71 @@ test('core index migration is read-only by default, creates required indexes and
   await client.connect();
   const database = client.db(target);
   const run = promisify(execFile);
-  const invoke = args => run(process.execPath, ['scripts/ensure-core-indexes.mjs', '--database', target, ...args], {
-    cwd: fileURLToPath(new URL('../', import.meta.url)), timeout: 20000, windowsHide: true,
-    env: { ...process.env, MONGODB_URI: uri },
-  });
+  const invoke = (args) =>
+    run(
+      process.execPath,
+      ['scripts/ensure-core-indexes.mjs', '--database', target, ...args],
+      {
+        cwd: fileURLToPath(new URL('../', import.meta.url)),
+        timeout: 20000,
+        windowsHide: true,
+        env: { ...process.env, MONGODB_URI: uri },
+      }
+    );
   try {
     const dry = await invoke([]);
     assert.match(dry.stdout, /"state":"missing"/);
-    assert.equal((await database.listCollections().toArray()).length, 0, 'Dry-run must not create collections or indexes');
-    await assert.rejects(invoke(['--apply', '--confirm-database', 'wrong-database']));
+    assert.equal(
+      (await database.listCollections().toArray()).length,
+      0,
+      'Dry-run must not create collections or indexes'
+    );
+    await assert.rejects(
+      invoke(['--apply', '--confirm-database', 'wrong-database'])
+    );
     assert.equal((await database.listCollections().toArray()).length, 0);
     const applied = await invoke(['--apply', '--confirm-database', target]);
     assert.match(applied.stdout, /"verified":true/);
     for (const collection of ['users', 'customers', 'products', 'orders']) {
-      assert.ok((await database.collection(collection).indexes()).some(index => index.unique), collection);
+      assert.ok(
+        (await database.collection(collection).indexes()).some(
+          (index) => index.unique
+        ),
+        collection
+      );
     }
     const repeated = await invoke(['--apply', '--confirm-database', target]);
     assert.match(repeated.stdout, /"created":0/);
     await database.collection('users').dropIndex('email_1');
     await database.collection('users').createIndex({ email: 1 });
     await assert.rejects(invoke(['--apply', '--confirm-database', target]));
-    assert.equal((await database.collection('users').indexes()).find(index => index.name === 'email_1').unique, undefined, 'Conflicts must not be dropped or replaced');
+    assert.equal(
+      (await database.collection('users').indexes()).find(
+        (index) => index.name === 'email_1'
+      ).unique,
+      undefined,
+      'Conflicts must not be dropped or replaced'
+    );
     await database.collection('users').dropIndex('email_1');
-    await database.collection('users').insertMany([{ email: 'duplicate-fixture@example.com' }, { email: 'duplicate-fixture@example.com' }]);
-    await assert.rejects(invoke(['--apply', '--confirm-database', target]), error => {
-      assert.match(error.stderr, /"code":11000/);
-      assert.doesNotMatch(error.stderr, /duplicate-fixture@example.com/);
-      return true;
-    });
-    assert.equal(await database.collection('users').countDocuments(), 2, 'Duplicate data is never modified to force an index');
+    await database
+      .collection('users')
+      .insertMany([
+        { email: 'duplicate-fixture@example.com' },
+        { email: 'duplicate-fixture@example.com' },
+      ]);
+    await assert.rejects(
+      invoke(['--apply', '--confirm-database', target]),
+      (error) => {
+        assert.match(error.stderr, /"code":11000/);
+        assert.doesNotMatch(error.stderr, /duplicate-fixture@example.com/);
+        return true;
+      }
+    );
+    assert.equal(
+      await database.collection('users').countDocuments(),
+      2,
+      'Duplicate data is never modified to force an index'
+    );
   } finally {
     // Only this randomly named database, created above on the explicitly provided test deployment.
     assert.match(database.databaseName, /^codex_index_[a-f0-9]{32}$/);
@@ -469,87 +920,177 @@ test('core index migration is read-only by default, creates required indexes and
   }
 });
 
-test('guest reservations expire after 24h, restore once and preserve expired replay after deletion', async t => {
+test('guest reservations expire after 24h, restore once and preserve expired replay after deletion', async (t) => {
   const before = Date.now();
   const { entry, request, result } = await guestOrder(t);
   const stored = await Order.findById(result._id);
-  assert.ok(stored.reservationExpiresAt.getTime() >= before + 24 * 60 * 60 * 1000);
-  assert.ok(stored.reservationExpiresAt.getTime() <= Date.now() + 24 * 60 * 60 * 1000);
+  assert.ok(
+    stored.reservationExpiresAt.getTime() >= before + 24 * 60 * 60 * 1000
+  );
+  assert.ok(
+    stored.reservationExpiresAt.getTime() <= Date.now() + 24 * 60 * 60 * 1000
+  );
   assert.equal(await expireGuestReservation(result._id), false);
-  const original = (await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId })).result.toObject();
-  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(Date.now() - 1) } });
-  const results = await Promise.all([expireGuestReservation(result._id), expireGuestReservation(result._id)]);
+  const original = (
+    await CheckoutRequest.findOne({
+      customerId: null,
+      requestId: request.requestId,
+    })
+  ).result.toObject();
+  await Order.updateOne(
+    { _id: result._id },
+    { $set: { reservationExpiresAt: new Date(Date.now() - 1) } }
+  );
+  const results = await Promise.all([
+    expireGuestReservation(result._id),
+    expireGuestReservation(result._id),
+  ]);
   assert.equal(results.filter(Boolean).length, 1);
   assert.equal((await Product.findById(entry._id)).stock, 3);
   assert.equal((await Order.findById(result._id)).orderStatus, 3);
-  const receipt = await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId });
+  const receipt = await CheckoutRequest.findOne({
+    customerId: null,
+    requestId: request.requestId,
+  });
   assert.ok(receipt.reservationExpiredAt);
   assert.deepEqual(receipt.result.toObject(), original);
   await deleteOrder(result._id);
-  await assert.rejects(checkout(null, 0, request), { status: 409, businessCode: 'CHECKOUT_RESERVATION_EXPIRED' });
+  await assert.rejects(checkout(null, 0, request), {
+    status: 409,
+    businessCode: 'CHECKOUT_RESERVATION_EXPIRED',
+  });
   assert.equal(await Order.countDocuments({ _id: result._id }), 0);
   assert.equal((await Product.findById(entry._id)).stock, 3);
 });
 
-test('expired guest reservations cannot be accepted or assigned before the worker runs', async t => {
+test('expired guest reservations cannot be accepted or assigned before the worker runs', async (t) => {
   const { result, entry } = await guestOrder(t);
-  const staff = await User.create({ email: `staff-${randomUUID()}@example.com`, firstName: 'Fixture', lastName: 'Staff', password: 'unused', role: 'staff', active: true });
+  const staff = await User.create({
+    email: `staff-${randomUUID()}@example.com`,
+    firstName: 'Fixture',
+    lastName: 'Staff',
+    password: 'unused',
+    role: 'staff',
+    active: true,
+  });
   fixtures.users.push(staff._id);
-  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(Date.now() - 1) } });
-  await assert.rejects(startOrder(actor, result._id, String(staff._id)), { status: 409 });
-  await assert.rejects(assignOrder(actor, result._id, String(staff._id)), { status: 409 });
-  await assert.rejects(updateOrderStatus(actor, result._id, { orderStatus: 2, userId: String(staff._id) }), { status: 409 });
+  await Order.updateOne(
+    { _id: result._id },
+    { $set: { reservationExpiresAt: new Date(Date.now() - 1) } }
+  );
+  await assert.rejects(startOrder(actor, result._id, String(staff._id)), {
+    status: 409,
+  });
+  await assert.rejects(assignOrder(actor, result._id, String(staff._id)), {
+    status: 409,
+  });
+  await assert.rejects(
+    updateOrderStatus(actor, result._id, {
+      orderStatus: 2,
+      userId: String(staff._id),
+    }),
+    { status: 409 }
+  );
   await processGuestReservationBatch();
   assert.equal((await Order.findById(result._id)).orderStatus, 3);
   assert.equal((await Product.findById(entry._id)).stock, 3);
 });
 
-test('accepted and legacy guest orders and customer orders are excluded from expiry', async t => {
+test('accepted and legacy guest orders and customer orders are excluded from expiry', async (t) => {
   const { result, entry } = await guestOrder(t);
-  const staff = await User.create({ email: `staff-${randomUUID()}@example.com`, firstName: 'Fixture', lastName: 'Staff', password: 'unused', role: 'staff', active: true });
+  const staff = await User.create({
+    email: `staff-${randomUUID()}@example.com`,
+    firstName: 'Fixture',
+    lastName: 'Staff',
+    password: 'unused',
+    role: 'staff',
+    active: true,
+  });
   fixtures.users.push(staff._id);
   await startOrder(actor, result._id, String(staff._id));
-  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  await Order.updateOne(
+    { _id: result._id },
+    { $set: { reservationExpiresAt: new Date(0) } }
+  );
   assert.equal(await expireGuestReservation(result._id), false);
   assert.equal((await Product.findById(entry._id)).stock, 2);
   const legacy = await guestOrder(t);
-  await Order.updateOne({ _id: legacy.result._id }, { $unset: { reservationExpiresAt: 1 } });
+  await Order.updateOne(
+    { _id: legacy.result._id },
+    { $unset: { reservationExpiresAt: 1 } }
+  );
   assert.equal(await expireGuestReservation(legacy.result._id), false);
   const contactOrder = await order([item(await product(3))]);
-  await Order.updateOne({ _id: contactOrder._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  await Order.updateOne(
+    { _id: contactOrder._id },
+    { $set: { reservationExpiresAt: new Date(0) } }
+  );
   assert.equal(await expireGuestReservation(String(contactOrder._id)), false);
 });
 
-test('failed expiration rolls back status, earlier restored lines and receipt marker', async t => {
+test('failed expiration rolls back status, earlier restored lines and receipt marker', async (t) => {
   const { result, entry, request } = await guestOrder(t);
   const missing = new mongoose.Types.ObjectId();
-  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) },
-    $push: { orderItems: { productId: missing, quantity: 1, price: 25, discount: 0 } } });
+  await Order.updateOne(
+    { _id: result._id },
+    {
+      $set: { reservationExpiresAt: new Date(0) },
+      $push: {
+        orderItems: { productId: missing, quantity: 1, price: 25, discount: 0 },
+      },
+    }
+  );
   await assert.rejects(expireGuestReservation(result._id), { status: 409 });
   assert.equal((await Order.findById(result._id)).orderStatus, 1);
-  assert.equal((await Order.findById(result._id)).reservationExpiredAt, undefined);
+  assert.equal(
+    (await Order.findById(result._id)).reservationExpiredAt,
+    undefined
+  );
   assert.equal((await Product.findById(entry._id)).stock, 2);
-  assert.equal((await CheckoutRequest.findOne({ customerId: null, requestId: request.requestId })).reservationExpiredAt, undefined);
+  assert.equal(
+    (
+      await CheckoutRequest.findOne({
+        customerId: null,
+        requestId: request.requestId,
+      })
+    ).reservationExpiredAt,
+    undefined
+  );
 });
 
-test('expiration and manual rejection race without double stock restoration', async t => {
+test('expiration and manual rejection race without double stock restoration', async (t) => {
   const { result, entry } = await guestOrder(t);
-  await Order.updateOne({ _id: result._id }, { $set: { reservationExpiresAt: new Date(0) } });
+  await Order.updateOne(
+    { _id: result._id },
+    { $set: { reservationExpiresAt: new Date(0) } }
+  );
   const results = await Promise.allSettled([
     expireGuestReservation(result._id),
-    updateOrderStatus(actor, result._id, { orderStatus: 3, cancellationReason: 'Manual rejection fixture' }),
+    updateOrderStatus(actor, result._id, {
+      orderStatus: 3,
+      cancellationReason: 'Manual rejection fixture',
+    }),
   ]);
-  assert.ok(results.some(value => value.status === 'fulfilled'));
+  assert.ok(results.some((value) => value.status === 'fulfilled'));
   assert.equal((await Order.findById(result._id)).orderStatus, 3);
   assert.equal((await Product.findById(entry._id)).stock, 3);
   assert.equal(await expireGuestReservation(result._id), false);
 });
 
-test('missing receipt aborts expiration, and failed batch items back off without blocking healthy orders', async t => {
-  const broken = await guestOrder(t), healthy = await guestOrder(t);
-  await CheckoutRequest.deleteOne({ customerId: null, requestId: broken.request.requestId });
-  await Order.updateMany({ _id: { $in: [broken.result._id, healthy.result._id] } }, { $set: { reservationExpiresAt: new Date(0) } });
-  await assert.rejects(expireGuestReservation(broken.result._id), { status: 409 });
+test('missing receipt aborts expiration, and failed batch items back off without blocking healthy orders', async (t) => {
+  const broken = await guestOrder(t),
+    healthy = await guestOrder(t);
+  await CheckoutRequest.deleteOne({
+    customerId: null,
+    requestId: broken.request.requestId,
+  });
+  await Order.updateMany(
+    { _id: { $in: [broken.result._id, healthy.result._id] } },
+    { $set: { reservationExpiresAt: new Date(0) } }
+  );
+  await assert.rejects(expireGuestReservation(broken.result._id), {
+    status: 409,
+  });
   assert.equal((await Order.findById(broken.result._id)).orderStatus, 1);
   assert.equal((await Product.findById(broken.entry._id)).stock, 2);
   const warning = t.mock.method(console, 'error', () => {});
@@ -559,43 +1100,120 @@ test('missing receipt aborts expiration, and failed batch items back off without
   assert.ok(retryAt > new Date());
   assert.equal((await Order.findById(healthy.result._id)).orderStatus, 3);
   await processGuestReservationBatch();
-  assert.equal((await Order.findById(broken.result._id)).reservationRetryAt.getTime(), retryAt.getTime());
+  assert.equal(
+    (await Order.findById(broken.result._id)).reservationRetryAt.getTime(),
+    retryAt.getTime()
+  );
 });
 
 test('product news preserves selected order, filters publication/category and rejects stale or invalid selections', async () => {
   const entry = await product(3);
-  const managed = await PostCategory.create({ name: 'Related news fixture', slug: `news-${randomUUID()}`, isActive: true });
-  const posts = await Article.create(['published', 'published', 'scheduled', 'scheduled', 'draft', 'published'].map((status, index) => ({
-    title: `Fixture ${index}`, slug: `news-${randomUUID()}`, category: managed.name, categoryId: managed._id,
-    type: index === 5 ? 'blog' : 'news', excerpt: 'Summary', content: 'Private long content', authorName: 'Fixture',
-    status, publishAt: status === 'scheduled' ? new Date(Date.now() + (index === 2 ? -60000 : 60000)) : null,
-    createdBy: actor.id, updatedBy: actor.id,
-  })));
+  const managed = await PostCategory.create({
+    name: 'Related news fixture',
+    slug: `news-${randomUUID()}`,
+    isActive: true,
+  });
+  const posts = await Article.create(
+    [
+      'published',
+      'published',
+      'scheduled',
+      'scheduled',
+      'draft',
+      'published',
+    ].map((status, index) => ({
+      title: `Fixture ${index}`,
+      slug: `news-${randomUUID()}`,
+      category: managed.name,
+      categoryId: managed._id,
+      type: index === 5 ? 'blog' : 'news',
+      excerpt: 'Summary',
+      content: 'Private long content',
+      authorName: 'Fixture',
+      status,
+      publishAt:
+        status === 'scheduled'
+          ? new Date(Date.now() + (index === 2 ? -60000 : 60000))
+          : null,
+      createdBy: actor.id,
+      updatedBy: actor.id,
+    }))
+  );
   try {
-    const articleIds = [1, 4, 0, 3, 2].map(index => String(posts[index]._id));
-    const saved = await productNews.updateProductNews(String(entry._id), { articleIds, expectedVersion: entry.__v });
+    const articleIds = [1, 4, 0, 3, 2].map((index) => String(posts[index]._id));
+    const saved = await productNews.updateProductNews(String(entry._id), {
+      articleIds,
+      expectedVersion: entry.__v,
+    });
     assert.ok(saved.expectedVersion > entry.__v);
-    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [], expectedVersion: entry.__v }), { status: 409, businessCode: 'VERSION_CONFLICT' });
-    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [String(posts[5]._id)], expectedVersion: saved.expectedVersion }), { status: 400 });
-    await assert.rejects(productNews.updateProductNews(String(entry._id), { articleIds: [String(new mongoose.Types.ObjectId())], expectedVersion: saved.expectedVersion }), { status: 400 });
-    assert.deepEqual((await productNews.getProductNews(String(entry._id))).articleIds, articleIds);
+    await assert.rejects(
+      productNews.updateProductNews(String(entry._id), {
+        articleIds: [],
+        expectedVersion: entry.__v,
+      }),
+      { status: 409, businessCode: 'VERSION_CONFLICT' }
+    );
+    await assert.rejects(
+      productNews.updateProductNews(String(entry._id), {
+        articleIds: [String(posts[5]._id)],
+        expectedVersion: saved.expectedVersion,
+      }),
+      { status: 400 }
+    );
+    await assert.rejects(
+      productNews.updateProductNews(String(entry._id), {
+        articleIds: [String(new mongoose.Types.ObjectId())],
+        expectedVersion: saved.expectedVersion,
+      }),
+      { status: 400 }
+    );
+    assert.deepEqual(
+      (await productNews.getProductNews(String(entry._id))).articleIds,
+      articleIds
+    );
     const visible = await productNews.publicProductNews(entry.slug);
-    assert.deepEqual(visible.map(value => String(value._id)), [1, 0, 2].map(index => String(posts[index]._id)));
-    for (const value of visible) for (const key of ['content', 'status', '__v', 'createdBy', 'updatedBy']) assert.equal(key in value, false);
-    await Article.updateOne({ _id: posts[1]._id }, { $set: { status: 'archived' } });
+    assert.deepEqual(
+      visible.map((value) => String(value._id)),
+      [1, 0, 2].map((index) => String(posts[index]._id))
+    );
+    for (const value of visible)
+      for (const key of ['content', 'status', '__v', 'createdBy', 'updatedBy'])
+        assert.equal(key in value, false);
+    await Article.updateOne(
+      { _id: posts[1]._id },
+      { $set: { status: 'archived' } }
+    );
     assert.equal((await productNews.publicProductNews(entry.slug)).length, 2);
-    await PostCategory.updateOne({ _id: managed._id }, { $set: { isActive: false } });
+    await PostCategory.updateOne(
+      { _id: managed._id },
+      { $set: { isActive: false } }
+    );
     assert.deepEqual(await productNews.publicProductNews(entry.slug), []);
-    await PostCategory.updateOne({ _id: managed._id }, { $set: { isActive: true } });
+    await PostCategory.updateOne(
+      { _id: managed._id },
+      { $set: { isActive: true } }
+    );
     await Article.deleteOne({ _id: posts[0]._id });
-    assert.deepEqual((await productNews.publicProductNews(entry.slug)).map(value => String(value._id)), [String(posts[2]._id)]);
+    assert.deepEqual(
+      (await productNews.publicProductNews(entry.slug)).map((value) =>
+        String(value._id)
+      ),
+      [String(posts[2]._id)]
+    );
     await Product.updateOne({ _id: entry._id }, { $set: { on_sale: false } });
-    await assert.rejects(productNews.publicProductNews(entry.slug), { status: 404 });
+    await assert.rejects(productNews.publicProductNews(entry.slug), {
+      status: 404,
+    });
     await Product.updateOne({ _id: entry._id }, { $set: { is_active: false } });
-    await assert.rejects(productNews.publicProductNews(entry.slug), { status: 404 });
-    await productNews.updateProductNews(String(entry._id), { articleIds: [], expectedVersion: saved.expectedVersion });
+    await assert.rejects(productNews.publicProductNews(entry.slug), {
+      status: 404,
+    });
+    await productNews.updateProductNews(String(entry._id), {
+      articleIds: [],
+      expectedVersion: saved.expectedVersion,
+    });
   } finally {
-    await Article.deleteMany({ _id: { $in: posts.map(value => value._id) } });
+    await Article.deleteMany({ _id: { $in: posts.map((value) => value._id) } });
     await PostCategory.deleteOne({ _id: managed._id });
   }
 });
@@ -603,74 +1221,165 @@ test('product news preserves selected order, filters publication/category and re
 test('on_sale controls all public product visibility regardless of merchandising flags', async () => {
   const entry = await product(3);
   entry.product_name = `Visibility-${randomUUID()}`;
-  entry.set({ is_home: true, is_hot: true, is_new: true, is_best_seller: true });
+  entry.set({
+    is_home: true,
+    is_hot: true,
+    is_new: true,
+    is_best_seller: true,
+  });
   await entry.save();
-  assert.equal((await storeProducts.listStoreProducts({ search: entry.product_name })).pagination.total, 1);
-  const version = entry.__v, updatedAt = entry.updatedAt.getTime();
-  assert.equal((await storeProducts.recordStoreProductView(entry.slug)).count_view, 1);
+  assert.equal(
+    (await storeProducts.listStoreProducts({ search: entry.product_name }))
+      .pagination.total,
+    1
+  );
+  const version = entry.__v,
+    updatedAt = entry.updatedAt.getTime();
+  assert.equal(
+    (await storeProducts.recordStoreProductView(entry.slug)).count_view,
+    1
+  );
   const counted = await Product.findById(entry._id);
   assert.equal(counted.__v, version);
   assert.equal(counted.updatedAt.getTime(), updatedAt);
   await Product.updateOne({ _id: entry._id }, { $set: { on_sale: false } });
-  assert.equal((await storeProducts.listStoreProducts({ search: entry.product_name })).pagination.total, 0);
+  assert.equal(
+    (await storeProducts.listStoreProducts({ search: entry.product_name }))
+      .pagination.total,
+    0
+  );
   assert.equal(await storeProducts.getStoreProduct(entry.slug), null);
   assert.equal(await storeProducts.recordStoreProductView(entry.slug), null);
   assert.equal(await getStorefrontProduct(entry.slug), null);
-  await assert.rejects(addStoreProductReview(String(entry._id), { rating: 5, reviewerName: 'Fixture', comment: 'Fixture' }), { status: 404 });
+  await assert.rejects(
+    addStoreProductReview(String(entry._id), {
+      rating: 5,
+      reviewerName: 'Fixture',
+      comment: 'Fixture',
+    }),
+    { status: 404 }
+  );
   const other = await product(3);
-  assert.ok(!(await storeProducts.relatedStoreProducts(other)).some(row => String(row._id) === String(entry._id)));
+  assert.ok(
+    !(await storeProducts.relatedStoreProducts(other)).some(
+      (row) => String(row._id) === String(entry._id)
+    )
+  );
   await Product.updateOne({ _id: entry._id }, { $unset: { on_sale: 1 } });
-  assert.ok(await storeProducts.getStoreProduct(entry.slug), 'Legacy missing flag retains the existing default-on behavior');
+  assert.ok(
+    await storeProducts.getStoreProduct(entry.slug),
+    'Legacy missing flag retains the existing default-on behavior'
+  );
 });
-
 
 test('warranty eligibility and creation enforce owner, expiry, duplicate exclusion and concurrent claims in MongoDB', async () => {
   const entry = await product(5);
   const eligible = await order([item(entry)]);
   const expired = await order([item(entry)]);
-  await Order.updateOne({ _id: eligible._id }, { $set: { orderStatus: 4, orderDate: new Date() } });
-  await Order.updateOne({ _id: expired._id }, { $set: {
-    orderStatus: 4, orderDate: new Date(Date.now() - warrantyService.WARRANTY_WINDOW_MS - 1000),
-  } });
+  await Order.updateOne(
+    { _id: eligible._id },
+    { $set: { orderStatus: 4, orderDate: new Date() } }
+  );
+  await Order.updateOne(
+    { _id: expired._id },
+    {
+      $set: {
+        orderStatus: 4,
+        orderDate: new Date(
+          Date.now() - warrantyService.WARRANTY_WINDOW_MS - 1000
+        ),
+      },
+    }
+  );
   const customerId = String(customer._id);
   const query = { page: 1, limit: 1 };
-  const before = await warrantyService.eligibleWarrantyOrders(customerId, query);
+  const before = await warrantyService.eligibleWarrantyOrders(
+    customerId,
+    query
+  );
   assert.equal(before.pagination.total, 1);
   assert.equal(String(before.data[0]._id), String(eligible._id));
-  assert.equal((await warrantyService.eligibleWarrantyOrders(String(new mongoose.Types.ObjectId()), query)).data.length, 0);
-  const payload = { requestId: randomUUID(), orderId: String(eligible._id), itemIndex: 0, description: 'Product stopped working.' };
-  await assert.rejects(warrantyService.createWarranty(customer, { ...payload, orderId: String(expired._id) }), { status: 409 });
+  assert.equal(
+    (
+      await warrantyService.eligibleWarrantyOrders(
+        String(new mongoose.Types.ObjectId()),
+        query
+      )
+    ).data.length,
+    0
+  );
+  const payload = {
+    requestId: randomUUID(),
+    orderId: String(eligible._id),
+    itemIndex: 0,
+    description: 'Product stopped working.',
+  };
+  await assert.rejects(
+    warrantyService.createWarranty(customer, {
+      ...payload,
+      orderId: String(expired._id),
+    }),
+    { status: 409 }
+  );
   const payloads = [payload, { ...payload, requestId: randomUUID() }];
-  const claims = await Promise.allSettled(payloads.map(body => warrantyService.createWarranty(customer, body)));
-  assert.equal(claims.filter(result => result.status === 'fulfilled').length, 1);
-  assert.equal(claims.find(result => result.status === 'rejected').reason.status, 409);
-  assert.equal(await WarrantyRequest.countDocuments({ orderId: eligible._id }), 1);
+  const claims = await Promise.allSettled(
+    payloads.map((body) => warrantyService.createWarranty(customer, body))
+  );
+  assert.equal(
+    claims.filter((result) => result.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    claims.find((result) => result.status === 'rejected').reason.status,
+    409
+  );
+  assert.equal(
+    await WarrantyRequest.countDocuments({ orderId: eligible._id }),
+    1
+  );
   const after = await warrantyService.eligibleWarrantyOrders(customerId, query);
   assert.equal(after.data.length, 0);
   assert.equal(after.pagination.total, 0);
-  const winningIndex = claims.findIndex(result => result.status === 'fulfilled');
-  const replay = await warrantyService.createWarranty(customer, payloads[winningIndex]);
+  const winningIndex = claims.findIndex(
+    (result) => result.status === 'fulfilled'
+  );
+  const replay = await warrantyService.createWarranty(
+    customer,
+    payloads[winningIndex]
+  );
   assert.equal(String(replay._id), String(claims[winningIndex].value._id));
-
 });
 
-
-test('durable OTP jobs isolate enqueue from SMTP and concurrent workers deliver once under a lease', async t => {
+test('durable OTP jobs isolate enqueue from SMTP and concurrent workers deliver once under a lease', async (t) => {
   await CustomerOtpJob.init();
   const previousSecret = process.env.OTP_SECRET;
   process.env.OTP_SECRET = randomUUID() + randomUUID();
-  t.after(() => { if (previousSecret === undefined) delete process.env.OTP_SECRET; else process.env.OTP_SECRET = previousSecret; });
-  const buyer = await Customer.create({ firstName: 'Queue', lastName: 'Fixture', email: `otp-${randomUUID()}@example.com`, accountEnabled: true });
+  t.after(() => {
+    if (previousSecret === undefined) delete process.env.OTP_SECRET;
+    else process.env.OTP_SECRET = previousSecret;
+  });
+  const buyer = await Customer.create({
+    firstName: 'Queue',
+    lastName: 'Fixture',
+    email: `otp-${randomUUID()}@example.com`,
+    accountEnabled: true,
+  });
   fixtures.customers.push(buyer._id);
   const unknownEmail = `unknown-${randomUUID()}@example.com`;
   const jobIds = [];
-  t.after(async () => { await CustomerOtpJob.deleteMany({ _id: { $in: jobIds } }); });
+  t.after(async () => {
+    await CustomerOtpJob.deleteMany({ _id: { $in: jobIds } });
+  });
   let release;
   let entered;
-  const started = new Promise(resolve => { entered = resolve; });
-  const blocked = new Promise(resolve => { release = resolve; });
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
   let delivered = 0;
-  t.mock.method(emailService, 'send', async email => {
+  t.mock.method(emailService, 'send', async (email) => {
     assert.equal(email, buyer.email);
     delivered++;
     entered();
@@ -678,26 +1387,58 @@ test('durable OTP jobs isolate enqueue from SMTP and concurrent workers deliver 
   });
   await sendCustomerOtp(buyer.email);
   await sendCustomerOtp(unknownEmail);
-  jobIds.push(...(await CustomerOtpJob.find({ email: { $in: [buyer.email, unknownEmail] } }).select('_id')).map(job => job._id));
+  jobIds.push(
+    ...(
+      await CustomerOtpJob.find({
+        email: { $in: [buyer.email, unknownEmail] },
+      }).select('_id')
+    ).map((job) => job._id)
+  );
   assert.equal(jobIds.length, 2);
   assert.equal(delivered, 0);
-  const workers = Promise.all([processCustomerOtpBatch(), processCustomerOtpBatch()]);
+  const workers = Promise.all([
+    processCustomerOtpBatch(),
+    processCustomerOtpBatch(),
+  ]);
   try {
-    await Promise.race([started, workers.then(() => { throw new Error('Workers finished before delivery started'); })]);
-    const pending = await Customer.findById(buyer._id).select('+passwordRecovery');
+    await Promise.race([
+      started,
+      workers.then(() => {
+        throw new Error('Workers finished before delivery started');
+      }),
+    ]);
+    const pending = await Customer.findById(buyer._id).select(
+      '+passwordRecovery'
+    );
     assert.equal(pending.passwordRecovery.status, 'pending');
     // Both enqueue calls already completed even though delivery is still blocked.
     assert.equal(delivered, 1);
-    const jobs = await CustomerOtpJob.find({ _id: { $in: jobIds }, leaseToken: { $exists: true } });
+    const jobs = await CustomerOtpJob.find({
+      _id: { $in: jobIds },
+      leaseToken: { $exists: true },
+    });
     assert.ok(jobs.length >= 1);
-  } finally { release(); await workers; }
+  } finally {
+    release();
+    await workers;
+  }
   assert.equal(delivered, 1);
-  assert.equal(await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }), 0);
+  assert.equal(
+    await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }),
+    0
+  );
   const active = await Customer.findById(buyer._id).select('+passwordRecovery');
   assert.equal(active.passwordRecovery.status, 'active');
   await sendCustomerOtp(buyer.email);
-  jobIds.push(...(await CustomerOtpJob.find({ email: buyer.email }).select('_id')).map(job => job._id));
+  jobIds.push(
+    ...(await CustomerOtpJob.find({ email: buyer.email }).select('_id')).map(
+      (job) => job._id
+    )
+  );
   await processCustomerOtpBatch();
   assert.equal(delivered, 1); // A queued resend still respects the persisted cooldown.
-  assert.equal(await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }), 0);
+  assert.equal(
+    await CustomerOtpJob.countDocuments({ _id: { $in: jobIds } }),
+    0
+  );
 });

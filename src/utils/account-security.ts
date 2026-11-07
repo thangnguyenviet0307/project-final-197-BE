@@ -14,7 +14,17 @@ export function securityDigest(purpose: string, value: string): string {
 
 export const newOtp = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
 export const newSecret = () => randomBytes(32).toString('hex');
-export const newTemporaryPassword = () => `Aa1!${randomBytes(18).toString('base64url')}`;
+export function newTemporaryPassword(): string {
+  const groups = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '!@#$%'];
+  const alphabet = groups.join('');
+  const characters = groups.map(group => group[randomInt(group.length)]!);
+  while (characters.length < 8) characters.push(alphabet[randomInt(alphabet.length)]!);
+  for (let index = characters.length - 1; index > 0; index--) {
+    const other = randomInt(index + 1);
+    [characters[index], characters[other]] = [characters[other]!, characters[index]!];
+  }
+  return characters.join('');
+}
 
 export function assertTemporaryPasswordValid(user: {
   mustChangePassword?: boolean;

@@ -44,3 +44,7 @@ export const updateCategoriesSchema = createCategoriesSchema
   .refine(hasUpdateFields, {
     error: UPDATE_REQUIRED_MESSAGE,
   }) satisfies z.ZodType<UpdateCategoriesInput>;
+
+export const deleteCategorySchema = z.object({
+  childIds: z.array(objectId).max(399).refine(ids => new Set(ids.map(id => id.toLowerCase())).size === ids.length, 'Duplicate child IDs').default([]),
+}).strict();

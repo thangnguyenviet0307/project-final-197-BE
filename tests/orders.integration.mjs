@@ -176,6 +176,27 @@ test('concurrent category reparenting cannot create an ancestor cycle', async ()
   assert.equal(results.find(result => result.status === 'rejected').reason.status, 409);
 });
 
+test('selective deletion persists and atomically promotes surviving children', async () => {
+  const root = await Categories.create({ name: 'Delete root', slug: 'delete-root' });
+  const selected = await Categories.create({ name: 'Delete child', slug: 'delete-child', parent: root._id });
+  const survivor = await Categories.create({ name: 'Keep child', slug: 'keep-child', parent: root._id });
+  const grandchild = await Categories.create({ name: 'Keep grandchild', slug: 'keep-grandchild', parent: selected._id });
+  fixtures.categories.push(root._id, selected._id, survivor._id, grandchild._id);
+  const reference = await Product.create({ product_name: 'Delete guard', slug: 'delete-guard', category: selected._id, brand: brand._id, model_year: 2025, stock: 0 });
+  fixtures.products.push(reference._id);
+  await assert.rejects(CategoriesService.deleteCategory(String(root._id), [String(selected._id)]), { status: 409 });
+  assert.ok(await Categories.exists({ _id: root._id }));
+  assert.equal(String((await Categories.findById(survivor._id)).parent), String(root._id));
+  assert.equal(String((await Categories.findById(grandchild._id)).parent), String(selected._id));
+  await Product.deleteOne({ _id: reference._id });
+  const result = await CategoriesService.deleteCategory(String(root._id), [String(selected._id)]);
+  assert.equal(result.deletedIds.length, 2);
+  assert.equal(result.promotedCount, 2);
+  assert.equal(await Categories.countDocuments({ _id: { $in: [root._id, selected._id] } }), 0);
+  assert.equal((await Categories.findById(survivor._id)).parent, null);
+  assert.equal((await Categories.findById(grandchild._id)).parent, null);
+});
+
 test('concurrent category deletion and product creation cannot leave a dangling reference', async () => {
   const category = await Categories.create({ name: 'Race category', slug: 'race-category' });
   fixtures.categories.push(category._id);

@@ -10,6 +10,7 @@ import { Permission } from '../../types/permissions.type.js';
 import { idParamSchema } from '../../validations/common.validation.js';
 import {
   createCategoriesSchema,
+  deleteCategorySchema,
   updateCategoriesSchema,
 } from '../../validations/categories.validation.js';
 
@@ -48,7 +49,7 @@ router
   )
   .delete(
     requirePermission(Permission.CategoryDelete),
-    validate({ params: idParamSchema }),
+    validate({ params: idParamSchema, body: deleteCategorySchema.optional() }),
     CategoriesController.deleteCategories
   );
 

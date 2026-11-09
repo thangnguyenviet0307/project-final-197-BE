@@ -71,10 +71,11 @@ export class CategoriesController {
   // 5. Delete categories
   public static deleteCategories: RequestHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
-      await CategoriesService.deleteCategory(req.params['id'] as string);
+      const result = await CategoriesService.deleteCategory(req.params['id'] as string, req.body?.childIds ?? []);
       sendResponse(res, 200, {
         success: true,
         message: 'Categories deleted successfully',
+        data: result,
       });
     }
   );

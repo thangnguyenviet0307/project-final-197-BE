@@ -1,3 +1,4 @@
+import { categoryMembership } from '../dist/utils/catalog-reference.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -51,11 +52,11 @@ test('related products match only the same category, exclude self and return at 
     assert.deepEqual(query._id, { $ne: 'current' });
     assert.equal(query.is_active, true);
     assert.deepEqual(query.$and[0].category, { $in: ['active-id'] });
-    assert.deepEqual(query.$and[1], { category: 'category-id' });
+    assert.deepEqual(query.$and[1], categoryMembership(['category-id']));
     return chain;
   });
   await relatedStoreProducts({ _id: 'current', category: { _id: 'category-id' }, tags: ['wireless', 'audio'] });
   find.mock.restore();
-  t.mock.method(Product, 'find', query => { assert.deepEqual(query.$and[1], { category: 'category-id' }); return chain; });
+  t.mock.method(Product, 'find', query => { assert.deepEqual(query.$and[1], categoryMembership(['category-id'])); return chain; });
   await relatedStoreProducts({ _id: 'current', category: 'category-id', tags: [] });
 });

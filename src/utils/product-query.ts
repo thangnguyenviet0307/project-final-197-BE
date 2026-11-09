@@ -1,3 +1,4 @@
+import { categoryMembership } from './catalog-reference.js';
 import { Categories } from '../models/categories.model.js';
 import { BrandModel } from '../models/brands.model.js';
 import Product from '../models/products.model.js';
@@ -56,7 +57,8 @@ export function buildProductQuery(
   for (const field of ['category', 'brand'] as const) {
     if (!filters[field]) continue;
     const ids = [...new Set(filters[field].split(','))];
-    query[field] = ids.length === 1 ? ids[0] : { $in: ids };
+    if (field === 'category') query['$and'] = [categoryMembership(ids)];
+    else query[field] = ids.length === 1 ? ids[0] : { $in: ids };
   }
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined)
     query['$expr'] = {
@@ -119,15 +121,24 @@ export const effectivePriceExpression = {
 };
 
 export async function buildProductSearchQuery(
-  filters: Partial<GetProductsQuery>
+  filters: Partial<GetProductsQuery>,
+  publicOnly = false
 ) {
   const query = buildProductQuery(filters);
   if (!filters.search?.trim()) return query;
   delete query['product_name'];
   const name = { $regex: escapeRegex(filters.search.trim()), $options: 'i' };
   const [brands, categories] = await Promise.all([
-    BrandModel.distinct('_id', { name, isDeleted: { $ne: true } }),
-    Categories.distinct('_id', { name, isDeleted: { $ne: true } }),
+    BrandModel.distinct('_id', {
+      name,
+      isDeleted: { $ne: true },
+      ...(publicOnly ? { isActive: true } : {}),
+    }),
+    Categories.distinct('_id', {
+      name,
+      isDeleted: { $ne: true },
+      ...(publicOnly ? { isActive: true } : {}),
+    }),
   ]);
   // Keep SKU, explicit brand/category and search as independent AND conditions.
   return {
@@ -137,7 +148,7 @@ export async function buildProductSearchQuery(
         $or: [
           { product_name: name },
           { brand: { $in: brands } },
-          { category: { $in: categories } },
+          categoryMembership(categories),
         ],
       },
     ],

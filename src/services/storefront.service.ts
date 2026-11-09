@@ -19,10 +19,15 @@ export async function getStorefrontProduct(slug: string) {
     on_sale: { $ne: false },
   })
     .select(
-      'on_sale product_name slug description model_year thumbnail images price discount stock variants category brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity'
+      'on_sale product_name slug description model_year thumbnail images price discount stock variants category categories brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity'
     )
     .populate<{ category: PublicReference | null }>({
       path: 'category',
+      select: 'name slug',
+      match: activeReference,
+    })
+    .populate<{ categories: PublicReference[] }>({
+      path: 'categories',
       select: 'name slug',
       match: activeReference,
     })
@@ -84,6 +89,11 @@ export async function getStorefrontProduct(slug: string) {
       name: product.brand.name,
       slug: product.brand.slug,
     },
+    categories: (product.categories ?? []).map((category) => ({
+      id: String(category._id),
+      name: category.name,
+      slug: category.slug,
+    })),
     price: cheapest?.price ?? unitPrice(product.price, discount),
     compareAtPrice: cheapest?.compareAtPrice ?? product.price,
     available:

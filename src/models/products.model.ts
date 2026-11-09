@@ -164,6 +164,7 @@ const productSchema = new Schema(
       min: [0, 'Giảm giá không được nhỏ hơn 0'],
       max: [70, 'Giảm giá không được vượt quá 70%'],
     },
+    categories: { type: [{ type: Schema.Types.ObjectId, ref: 'Categories' }], default: undefined },
     category: {
       type: Schema.Types.ObjectId,
       ref: 'Categories',
@@ -265,5 +266,6 @@ productSchema.index(
   }
 );
 
+productSchema.index({ categories: 1 });
 const Product = mongoose.model('Product', productSchema);
 export default Product;

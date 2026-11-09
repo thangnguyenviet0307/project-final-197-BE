@@ -27,3 +27,26 @@ export async function assertActiveCatalog(
   if (!(await categoryQuery))
     throw createHttpError(409, 'Category is missing or inactive');
 }
+
+export async function assertAdditionalCategories(
+  categories: string[],
+  session: ClientSession
+) {
+  for (const id of categories) {
+    if (
+      !(await Categories.exists({
+        _id: id,
+        isDeleted: { $ne: true },
+        isActive: { $ne: false },
+      }).session(session))
+    )
+      throw createHttpError(409, 'Category is missing or inactive');
+  }
+}
+
+export function categoryMembership(ids: unknown[]) {
+  const values = ids.filter((value) => value != null).map(String);
+  return {
+    $or: [{ category: { $in: values } }, { categories: { $in: values } }],
+  };
+}

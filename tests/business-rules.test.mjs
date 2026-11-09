@@ -35,6 +35,14 @@ test('category delete body rejects duplicate, malformed and unknown fields', () 
   assert.equal(deleteCategorySchema.safeParse({ childIds: ['bad'] }).success, false);
   assert.equal(deleteCategorySchema.safeParse({ deleteAll: true }).success, false);
 });
+test('additional category writes validate IDs and reject duplicates or inactive references', async t => {
+  const value = String(id());
+  assert.equal(updateProductSchema.safeParse({ categories: [value, value.toUpperCase()] }).success, false);
+  assert.equal(updateProductSchema.safeParse({ categories: ['invalid'] }).success, false);
+  const { assertAdditionalCategories } = await import('../dist/utils/catalog-reference.js');
+  t.mock.method(Categories, 'exists', () => query(null));
+  await assert.rejects(assertAdditionalCategories([value], session), { status: 409 });
+});
 beforeEach((t) => {
   t.mock.method(mongoose.connection, 'transaction', async (work) => work(session));
   t.mock.method(SystemLock, 'updateOne', async () => ({ acknowledged: true }));
@@ -134,7 +142,7 @@ test('category deletion removes only selected children and promotes surviving de
     return query([selected]);
   });
   t.mock.method(Product, 'exists', (filter) => {
-    assert.deepEqual(filter.category.$in, ids);
+    assert.deepEqual(filter.$or[0].category.$in, ids);
     return query(null);
   });
   const promote = t.mock.method(Categories, 'updateMany', async (filter, update, options) => {

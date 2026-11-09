@@ -1,3 +1,4 @@
+import { categoryMembership } from '../utils/catalog-reference.js';
 import Product from '../models/products.model.js';
 import {
   buildProductSearchQuery,
@@ -11,9 +12,14 @@ import { BrandModel } from '../models/brands.model.js';
 
 // Explicit public fields: import provenance and optimistic concurrency stay private.
 export const publicProductFields =
-  '_id product_name slug sku price discount category brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency';
+  '_id product_name slug sku price discount category categories brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency';
 const references = [
   { path: 'category', select: '_id name' },
+  {
+    path: 'categories',
+    select: '_id name',
+    match: { isActive: true, isDeleted: { $ne: true } },
+  },
   { path: 'brand', select: '_id name' },
 ];
 
@@ -31,11 +37,46 @@ export async function visibleCatalogFilter(): Promise<Record<string, unknown>> {
 }
 
 export async function listStoreProducts(filters: Partial<GetProductsQuery>) {
+  if (filters.category) {
+    const categories = await Categories.find({
+      isActive: true,
+      isDeleted: { $ne: true },
+    })
+      .select('_id parent')
+      .lean();
+    const requested = new Set(
+      filters.category.split(',').map((id) => id.toLowerCase())
+    );
+    const selected = new Set(
+      categories
+        .filter((item) => requested.has(String(item._id)))
+        .map((item) => String(item._id))
+    );
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const category of categories) {
+        const id = String(category._id);
+        if (
+          category.parent &&
+          selected.has(String(category.parent)) &&
+          !selected.has(id)
+        ) {
+          selected.add(id);
+          expanded = true;
+        }
+      }
+    }
+    filters = {
+      ...filters,
+      category: [...selected].join(',') || '000000000000000000000000',
+    };
+  }
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 12;
   const query: Record<string, unknown> = {
     $and: [
-      await buildProductSearchQuery(filters),
+      await buildProductSearchQuery(filters, true),
       await visibleCatalogFilter(),
     ],
     is_active: true,
@@ -82,6 +123,7 @@ export async function getStoreProduct(slug: string) {
 export async function relatedStoreProducts(product: {
   _id: unknown;
   category: unknown;
+  categories?: unknown[] | null;
   tags?: string[];
 }) {
   const category =
@@ -93,7 +135,17 @@ export async function relatedStoreProducts(product: {
   const query: Record<string, unknown> = {
     _id: { $ne: product._id },
     is_active: true,
-    $and: [await visibleCatalogFilter(), { category }],
+    $and: [
+      await visibleCatalogFilter(),
+      categoryMembership([
+        category,
+        ...(product.categories ?? []).map((value) =>
+          value && typeof value === 'object' && '_id' in value
+            ? value._id
+            : value
+        ),
+      ]),
+    ],
   };
   return Product.find(query)
     .select(publicProductFields)

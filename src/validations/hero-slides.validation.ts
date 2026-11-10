@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { z } from 'zod';
 import {
   objectId,
@@ -12,7 +13,7 @@ import type {
 const heroSlideShape = {
   category: objectId,
   title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(1000),
+  description: z.string().trim().max(DESCRIPTION_MAX_LENGTH),
   imageUrl: z
     .url()
     .trim()

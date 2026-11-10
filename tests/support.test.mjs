@@ -83,7 +83,7 @@ test('targeted eligible-order lookup always scopes to the signed-in customer and
 
 test('support inputs reject forged identity, missing publication content, invalid URL filters and oversized text', () => {
   assert.equal(createWarrantySchema.safeParse(input).success, true);
-  for (const extra of [{ customerId: other }, { status: 'resolved' }, { itemIndex: -1 }, { orderId: 'bad' }, { description: 'x'.repeat(3001) }]) assert.equal(createWarrantySchema.safeParse({ ...input, ...extra }).success, false);
+  for (const extra of [{ customerId: other }, { status: 'resolved' }, { itemIndex: -1 }, { orderId: 'bad' }, { description: 'x'.repeat(100001) }]) assert.equal(createWarrantySchema.safeParse({ ...input, ...extra }).success, false);
   assert.equal(savePolicySchema.safeParse({ content, expectedVersion: 0, publish: true }).success, true);
   assert.equal(savePolicySchema.safeParse({ content: { ...content, privacy: '' }, expectedVersion: 0, publish: true }).success, false);
   assert.equal(savePolicySchema.safeParse({ content: { ...content, warranty: '' }, expectedVersion: 0, publish: true }).success, false);
@@ -244,8 +244,8 @@ test('policy is anonymous; staff cannot manage policy and customer/admin authent
 });
 
 
-test('policy sections accept 30,000 characters including markup and reject overflow', () => {
-  const html = '<p>' + 'a'.repeat(29993) + '</p>';
+test('policy sections accept 100,000 characters including markup and reject overflow', () => {
+  const html = '<p>' + 'a'.repeat(99993) + '</p>';
   for (const key of Object.keys(content)) {
     const sections = { ...content, [key]: html };
     assert.equal(savePolicySchema.safeParse({ content: sections, expectedVersion: 0, publish: true }).success, true);

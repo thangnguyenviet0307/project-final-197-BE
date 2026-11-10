@@ -1,3 +1,4 @@
+import { LONG_TEXT_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { z } from 'zod';
 import {
   hasUpdateFields,
@@ -56,8 +57,8 @@ const articleFields = {
     .optional(),
   sortOrder: z.int().min(0).max(10000).optional(),
   category: z.string().trim().min(1).max(80),
-  excerpt: z.string().trim().min(1).max(1000),
-  content: z.string().trim().min(1).max(100000),
+  excerpt: z.string().trim().min(1).max(DESCRIPTION_MAX_LENGTH),
+  content: z.string().trim().min(1).max(LONG_TEXT_MAX_LENGTH),
   imageUrl: imageUrlSchema,
   tags: z.array(z.string().trim().min(1).max(40)).max(20),
   authorName: z.string().trim().min(1).max(120),

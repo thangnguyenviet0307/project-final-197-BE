@@ -1,15 +1,16 @@
+import { POLICY_SECTION_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { hasReadableContent } from './information.validation.js';
 import { z } from 'zod';
 import { objectId } from './common.validation.js';
 
 export const policyContentSchema = z
   .object({
-    privacy: z.string().trim().max(30000),
-    warranty: z.string().trim().max(30000),
-    returns: z.string().trim().max(30000),
-    shipping: z.string().trim().max(30000),
-    payment: z.string().trim().max(30000),
-    support: z.string().trim().max(30000),
+    privacy: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
+    warranty: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
+    returns: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
+    shipping: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
+    payment: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
+    support: z.string().trim().max(POLICY_SECTION_MAX_LENGTH),
   })
   .strict();
 export const savePolicySchema = z
@@ -46,7 +47,7 @@ export const createWarrantySchema = z
     requestId: z.uuid(),
     orderId: objectId,
     itemIndex: z.number().int().min(0).max(9999),
-    description: z.string().trim().min(10).max(3000),
+    description: z.string().trim().min(10).max(DESCRIPTION_MAX_LENGTH),
   })
   .strict();
 export const eligibleWarrantyOrdersSchema = supportListSchema.omit({ status: true }).extend({ orderId: objectId.optional() }).strict();

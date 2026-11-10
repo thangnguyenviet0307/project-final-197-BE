@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import {
   hasUpdateFields,
   UPDATE_REQUIRED_MESSAGE,
@@ -28,7 +29,7 @@ export const createBrandSchema = z
       .min(1, 'Brand name is required')
       .max(100, 'Brand name must not exceed 100 characters'),
 
-    description: z.string().trim().optional(),
+    description: z.string().trim().max(DESCRIPTION_MAX_LENGTH).optional(),
   })
   .strict() satisfies z.ZodType<BrandInput>;
 

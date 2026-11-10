@@ -9,7 +9,7 @@ test('information validates slugs, versions, publication content and strict fiel
   assert.equal(informationParams.safeParse({ slug: '$where' }).success, false);
   const input = { content: '<h2>FAQ</h2><p>Answer</p>', expectedVersion: 0, publish: true };
   assert.equal(saveInformationSchema.safeParse(input).success, true);
-  for (const change of [{ content: '<p><br></p>' }, { content: '<p>&nbsp;</p>' }, { content: 'x'.repeat(30001) }, { expectedVersion: -1 }, { role: 'admin' }]) {
+  for (const change of [{ content: '<p><br></p>' }, { content: '<p>&nbsp;</p>' }, { content: 'x'.repeat(1000001) }, { expectedVersion: -1 }, { role: 'admin' }]) {
     assert.equal(saveInformationSchema.safeParse({ ...input, ...change }).success, false);
   }
   assert.equal(saveInformationSchema.safeParse({ ...input, content: '', publish: false }).success, true);

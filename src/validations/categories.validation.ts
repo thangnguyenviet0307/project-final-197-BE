@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import {
   hasUpdateFields,
   UPDATE_REQUIRED_MESSAGE,
@@ -31,7 +32,7 @@ export const createCategoriesSchema = z
       .trim()
       .min(1, 'Category name cannot be empty'),
 
-    description: z.string('Description must be a string').trim().optional(),
+    description: z.string('Description must be a string').trim().max(DESCRIPTION_MAX_LENGTH).optional(),
 
     parent: objectId.nullable().optional(),
 

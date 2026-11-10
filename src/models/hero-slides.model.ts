@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { model, Schema } from 'mongoose';
 
 const schema = new Schema(
@@ -8,7 +9,7 @@ const schema = new Schema(
       required: true,
     },
     title: { type: String, required: true, trim: true, maxlength: 200 },
-    description: { type: String, trim: true, maxlength: 1000, default: '' },
+    description: { type: String, trim: true, maxlength: DESCRIPTION_MAX_LENGTH, default: '' },
     imageUrl: { type: String, maxlength: 2048, default: null },
     sortOrder: {
       type: Number,

@@ -84,7 +84,7 @@ test('stale writes/deletes and oversized sections are rejected before changing s
   const h = harness(t, StorePolicy, { _id: 'store-policy', __v: 5, content: { privacy: 'Draft' } });
   await assert.rejects(service.writeDocument('privacy', { content: 'Changed', expectedVersion: 4, publish: false }), { status: 409 });
   await assert.rejects(service.writeDocument('privacy', { content: '', expectedVersion: 4, publish: false }, true), { status: 409 });
-  await assert.rejects(service.writeDocument('privacy', { content: 'x'.repeat(30001), expectedVersion: 5, publish: false }), { status: 400 });
+  await assert.rejects(service.writeDocument('privacy', { content: 'x'.repeat(100001), expectedVersion: 5, publish: false }), { status: 400 });
   assert.equal(h.write.mock.callCount(), 0);
 });
 test('atomic conflict and duplicate first insert cannot overwrite another editor', async t => {
@@ -121,7 +121,7 @@ test('managed APIs enforce authentication/roles and validate keys before writes'
 
 test('managed policy saves accept long formatted content and reject overflow', async t => {
   harness(t, StorePolicy, { _id: 'store-policy', __v: 0, content: {} });
-  const content = '<p>' + 'a'.repeat(29993) + '</p>';
+  const content = '<p>' + 'a'.repeat(99993) + '</p>';
   const saved = await service.writeDocument('privacy', { content, expectedVersion: 0, publish: false });
   assert.equal(saved.content, content);
   await assert.rejects(service.writeDocument('privacy', { content: content + 'a', expectedVersion: 1, publish: false }), { status: 400 });

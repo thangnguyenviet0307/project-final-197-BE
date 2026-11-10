@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { model, Schema } from 'mongoose';
 import type { IBrand } from '../types/brands.js';
 
@@ -11,7 +12,7 @@ const brandSchema = new Schema<IBrand>(
     },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, trim: true, unique: true },
-    description: { type: String },
+    description: { type: String, maxlength: DESCRIPTION_MAX_LENGTH },
     logoUrl: { type: String },
     imagePublicId: { type: String },
     isActive: { type: Boolean, default: true },

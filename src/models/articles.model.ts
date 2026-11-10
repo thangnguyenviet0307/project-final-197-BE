@@ -1,3 +1,4 @@
+import { LONG_TEXT_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../config/text-limits.js';
 import { model, Schema } from 'mongoose';
 import type { ArticleStatus, ArticleType } from '../types/articles.type.js';
 
@@ -34,8 +35,8 @@ const articleSchema = new Schema(
     },
     sortOrder: { type: Number, min: 0, max: 10000, default: 0 },
     category: { type: String, required: true, trim: true, maxlength: 80 },
-    excerpt: { type: String, required: true, trim: true, maxlength: 1000 },
-    content: { type: String, required: true, maxlength: 100000 },
+    excerpt: { type: String, required: true, trim: true, maxlength: DESCRIPTION_MAX_LENGTH },
+    content: { type: String, required: true, maxlength: LONG_TEXT_MAX_LENGTH },
     imageUrl: { type: String, maxlength: 2048, default: null },
     tags: { type: [String], default: [] },
     authorName: { type: String, required: true, trim: true, maxlength: 120 },

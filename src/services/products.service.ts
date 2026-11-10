@@ -242,6 +242,9 @@ const getProductById = async (id: string) => {
   return Product.findById(id).populate('brand category categories').lean();
 };
 
+export const getAdministrativeProductBySlug = async (slug: string) =>
+  Product.findOne({ slug }).populate('brand category categories').lean();
+
 async function findAvailableProductSlug(
   baseSlug: string,
   excludeId?: string

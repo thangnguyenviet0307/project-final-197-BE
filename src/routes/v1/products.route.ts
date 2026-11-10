@@ -10,6 +10,7 @@ import productsController, {
   productReviews,
   createReview,
   removeReview,
+  getProductBySlug,
 } from '../../controllers/products.controller.js';
 import {
   authenticate,
@@ -103,6 +104,9 @@ router.get(
 );
 
 router.use(authenticate);
+router.get('/by-slug/:slug', requirePermission(Permission.ProductView),
+  validate({ params: z.object({ slug: z.string().min(1).max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) }) }),
+  getProductBySlug);
 router.get(
   '/:id/news',
   requirePermission(Permission.ArticleManage),

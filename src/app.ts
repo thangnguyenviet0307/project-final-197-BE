@@ -22,6 +22,7 @@ import orderRoutes from './routes/v1/orders.route.js';
 import customerRoutes from './routes/v1/customers.route.js';
 import userRoutes from './routes/v1/users.route.js';
 import authRoutes from './routes/v1/auth.route.js';
+import dataSyncRoutes from './routes/v1/data-sync.route.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import { trustedProxyAddresses } from './utils/trusted-proxy.js';
 
@@ -59,6 +60,7 @@ app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/data-sync', dataSyncRoutes);
 app.use('/api/v1/customer-auth', customerAuthRoutes);
 
 app.use((_req: Request, _res: Response, next: NextFunction) => {

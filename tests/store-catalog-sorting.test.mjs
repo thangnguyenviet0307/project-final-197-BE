@@ -1,3 +1,4 @@
+import { categoryMembership } from '../dist/utils/products/catalog-reference.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getProductsQuerySchema } from '../dist/validations/products/products.validation.js';
@@ -52,16 +53,8 @@ test('catalog sorts featured, best seller and discount across the complete filte
 test('multiple catalog choices use OR within groups and AND with price', () => {
   const brand = ['a'.repeat(24), 'b'.repeat(24)];
   const category = ['c'.repeat(24), 'd'.repeat(24)];
-  const params = getProductsQuerySchema.parse({
-    brand: brand.join(','),
-    category: category.join(','),
-    maxPrice: '2000000',
-  });
-  assert.deepEqual(buildProductQuery(params), {
-    brand: { $in: brand },
-    category: { $in: category },
-    $expr: { $and: [{ $lte: [effectivePriceExpression, 2000000] }] },
-  });
+  const params = getProductsQuerySchema.parse({ brand: brand.join(','), category: category.join(','), maxPrice: '2000000' });
+  assert.deepEqual(buildProductQuery(params), { brand: { $in: brand }, $and: [categoryMembership(category)], $expr: { $and: [{ $lte: [effectivePriceExpression, 2000000] }] } });
   for (const value of ['', brand[0] + ',', brand[0] + ',$ne', 'invalid']) {
     assert.equal(
       getProductsQuerySchema.safeParse({ brand: value }).success,

@@ -93,16 +93,8 @@ export function validateCleanup(data, selected) {
     )
       blockers.push(`Retained order ${id(order)} references selected data`);
   }
-  for (const product of data.products.filter(
-    (row) => !sets.products.has(id(row))
-  )) {
-    if (
-      sets.brands.has(id(product.brand)) ||
-      sets.categories.has(id(product.category))
-    )
-      blockers.push(
-        `Retained product ${id(product)} references selected catalog`
-      );
+  for (const product of data.products.filter(row => !sets.products.has(id(row)))) {
+    if (sets.brands.has(id(product.brand)) || [product.category, ...(product.categories ?? [])].some(category => sets.categories.has(id(category)))) blockers.push(`Retained product ${id(product)} references selected catalog`);
   }
   for (const category of data.categories.filter(
     (row) => !sets.categories.has(id(row))

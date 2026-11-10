@@ -1,3 +1,4 @@
+import { LONG_TEXT_MAX_LENGTH, POLICY_SECTION_MAX_LENGTH } from '../../config/text-limits.js';
 import createHttpError from 'http-errors';
 import { StorePolicy } from '../../models/support/support.model.js';
 import { StoreInformation } from '../../models/support/information.model.js';
@@ -78,10 +79,11 @@ export async function writeDocument(
   input: { content: string; publish: boolean; expectedVersion: number },
   remove = false
 ) {
-  if (isPolicy(key) && input.content.length > 30000)
+  const maxLength = isPolicy(key) ? POLICY_SECTION_MAX_LENGTH : LONG_TEXT_MAX_LENGTH;
+  if (input.content.length > maxLength)
     throw createHttpError(
       400,
-      'Chính sách tối đa 30000 ký tự bao gồm định dạng.'
+      `Nội dung tối đa ${maxLength} ký tự bao gồm định dạng.`
     );
   const current = await readDocument(key, true);
   if (!current || !('__v' in current) || current.__v !== input.expectedVersion)

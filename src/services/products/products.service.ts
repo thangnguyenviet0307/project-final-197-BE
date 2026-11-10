@@ -12,7 +12,10 @@ import {
 import Product from '../../models/products/products.model.js';
 import { buildSlug } from '../../helpers/buildSlug.helper.js';
 import { withRelationsTransaction } from '../../utils/shared/relations-transaction.js';
-import { assertActiveCatalog } from '../../utils/products/catalog-reference.js';
+import {
+  assertActiveCatalog,
+  assertAdditionalCategories,
+} from '../../utils/products/catalog-reference.js';
 import type { ClientSession } from 'mongoose';
 import { ProductReview } from '../../models/products/product-reviews.model.js';
 
@@ -162,13 +165,13 @@ const getAllProducts = async (filters: Partial<GetProductsQuery> = {}) => {
   const [data, total] = await Promise.all([
     priceIds
       ? Product.find({ $and: [query, { _id: { $in: priceIds } }] })
-          .populate('brand category')
+          .populate('brand category categories')
           .lean()
       : Product.find(query)
           .sort(buildProductSort(filters))
           .skip((page - 1) * limit)
           .limit(limit)
-          .populate('brand category')
+          .populate('brand category categories')
           .lean(),
     Product.countDocuments(query),
   ]);
@@ -208,7 +211,7 @@ const getProductBySku = async (sku: string) => {
   return Product.findOne({
     $or: [{ sku: normalizedSku }, { 'variants.sku': normalizedSku }],
   })
-    .populate('brand category')
+    .populate('brand category categories')
     .lean();
 };
 
@@ -217,7 +220,7 @@ const getVariantByProductAndVariantId = async (
   variantId: string
 ) => {
   const product = await Product.findById(productId)
-    .populate('brand category')
+    .populate('brand category categories')
     .lean();
 
   if (!product || !Array.isArray(product.variants)) {
@@ -236,8 +239,11 @@ const getVariantByProductAndVariantId = async (
 };
 
 const getProductById = async (id: string) => {
-  return Product.findById(id).populate('brand category').lean();
+  return Product.findById(id).populate('brand category categories').lean();
 };
+
+export const getAdministrativeProductBySlug = async (slug: string) =>
+  Product.findOne({ slug }).populate('brand category categories').lean();
 
 async function findAvailableProductSlug(
   baseSlug: string,
@@ -270,6 +276,12 @@ export const createProductInSession = async (
 ) => {
   payload = normalizeBadgeSelection(payload);
   await assertActiveCatalog(payload.brand, payload.category, session);
+  if (payload.categories) {
+    payload.categories = payload.categories.filter(
+      (id) => id.toLowerCase() !== payload.category.toLowerCase()
+    );
+    await assertAdditionalCategories(payload.categories, session);
+  }
   const name = payload.product_name?.trim();
 
   if (!name) {
@@ -347,6 +359,16 @@ const updateProduct = async (id: string, payload: UpdateProductInput) =>
         'Product changed while you were editing. Reload and review the latest data before saving.'
       );
     }
+    if (
+      payload.categories !== undefined ||
+      payload.category !== undefined ||
+      payload.is_active === true
+    ) {
+      await assertAdditionalCategories(
+        payload.categories ?? (existing.categories ?? []).map(String),
+        session
+      );
+    }
     if (payload.brand || payload.category || payload.is_active === true) {
       await assertActiveCatalog(
         payload.brand ?? existing.brand,
@@ -360,6 +382,14 @@ const updateProduct = async (id: string, payload: UpdateProductInput) =>
     const updated: UpdateProductInput = {
       ...fields,
     };
+    if (payload.categories !== undefined || payload.category !== undefined) {
+      const primary = String(
+        payload.category ?? existing.category
+      ).toLowerCase();
+      updated.categories = (
+        payload.categories ?? (existing.categories ?? []).map(String)
+      ).filter((id) => id.toLowerCase() !== primary);
+    }
 
     if (nextName) {
       updated.product_name = nextName;

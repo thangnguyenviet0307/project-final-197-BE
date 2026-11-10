@@ -455,39 +455,18 @@ test('private security fields are excluded from both model serialization paths',
   assert.notEqual(securityDigest('a', '123456'), securityDigest('b', '123456'));
 });
 
-test('SMTP adapter requires validated recipients, TLS and bounded timeouts, and hides upstream errors', async (t) => {
-  const keys = [
-    'SMTP_HOST',
-    'SMTP_PORT',
-    'SMTP_USER',
-    'SMTP_PASSWORD',
-    'SMTP_FROM',
-  ];
-  const previous = Object.fromEntries(
-    keys.map((key) => [key, process.env[key]])
-  );
-  t.after(() => {
-    for (const key of keys) {
-      if (previous[key] === undefined) delete process.env[key];
-      else process.env[key] = previous[key];
-    }
-  });
-  Object.assign(process.env, {
-    SMTP_HOST: 'smtp-relay.brevo.com',
-    SMTP_PORT: '587',
-    SMTP_USER: 'login',
-    SMTP_PASSWORD: 'private-key',
-    SMTP_FROM: 'sender@example.com',
-  });
-  let deliveries = 0,
-    closed = 0,
-    rejected = false;
-  t.mock.method(nodemailer, 'createTransport', (options) => {
-    assert.equal(options.requireTLS, true);
-    assert.equal(options.logger, false);
-    assert.equal(options.debug, false);
-    assert.ok(options.socketTimeout <= 15_000);
-    assert.ok(options.connectionTimeout <= 10_000);
+test('SMTP adapter requires validated recipients, TLS and bounded timeouts, and hides upstream errors', async t => {
+  const keys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM', 'BREVO_API_KEY'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  t.after(() => { for (const key of keys) {
+    if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
+  } });
+  delete process.env.BREVO_API_KEY;
+  Object.assign(process.env, { SMTP_HOST: 'smtp-relay.brevo.com', SMTP_PORT: '587', SMTP_USER: 'login', SMTP_PASSWORD: 'private-key', SMTP_FROM: 'sender@example.com' });
+  let deliveries = 0, closed = 0, rejected = false;
+  t.mock.method(nodemailer, 'createTransport', options => {
+    assert.equal(options.requireTLS, true); assert.equal(options.logger, false); assert.equal(options.debug, false);
+    assert.ok(options.socketTimeout <= 15_000); assert.ok(options.connectionTimeout <= 10_000);
     return {
       async sendMail(message) {
         deliveries++;

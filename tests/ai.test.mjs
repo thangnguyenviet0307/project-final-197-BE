@@ -16,10 +16,53 @@ import { validateAiEnvironment } from '../dist/services/ai/environment.js';
 import { Permission } from '../dist/types/shared/permissions.type.js';
 import { hasPermission } from '../dist/config/rolePermissions.js';
 import { EventEmitter } from 'node:events';
+import { initializeAiSession, aiIdentity, aiOrigin } from '../dist/services/ai/identity.service.js';
+import express from 'express';
+import { once } from 'node:events';
 import {
   httpAiTask,
   AI_HTTP_TIMEOUT_MS,
 } from '../dist/services/ai/request-lifecycle.js';
+
+test('production guest sessions support cross-site cookies and preserve signed identity with origin checks', async () => {
+  const previous = { NODE_ENV: process.env.NODE_ENV, JWT_SECRET: process.env.JWT_SECRET, FRONTEND_ORIGINS: process.env.FRONTEND_ORIGINS };
+  process.env.NODE_ENV = 'production';
+  process.env.JWT_SECRET = 'test-ai-cookie-secret';
+  process.env.FRONTEND_ORIGINS = 'https://shop.example';
+  const app = express();
+  app.use(aiOrigin);
+  app.post('/session', initializeAiSession, (_req, res) => res.json(res.locals.aiOwner));
+  app.post('/identity', aiIdentity, (_req, res) => res.json(res.locals.aiOwner));
+  app.use((error, _req, res, _next) => res.status(error.status || 500).end());
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const url = `http://127.0.0.1:${server.address().port}`;
+    const headers = { Origin: 'https://shop.example' };
+    const session = await fetch(url + '/session', { method: 'POST', headers });
+    const cookie = session.headers.get('set-cookie');
+    assert.match(cookie, /SameSite=None/i);
+    assert.match(cookie, /; Secure/i);
+    assert.match(cookie, /; HttpOnly/i);
+    const owner = await session.json();
+    const identity = await fetch(url + '/identity', { method: 'POST', headers: { ...headers, Cookie: cookie.split(';')[0] } });
+    assert.deepEqual(await identity.json(), owner);
+    const rejected = await fetch(url + '/session', { method: 'POST', headers: { Origin: 'https://untrusted.example' } });
+    assert.equal(rejected.status, 403);
+    assert.equal(rejected.headers.get('set-cookie'), null);
+    process.env.NODE_ENV = 'development';
+    const local = await fetch(url + '/session', { method: 'POST', headers });
+    assert.match(local.headers.get('set-cookie'), /SameSite=Strict/i);
+    assert.doesNotMatch(local.headers.get('set-cookie'), /; Secure/i);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 test('guest retention starts at explicit completion or effective idle deadline', () => {
   const now = new Date('2026-11-07T00:00:00Z');
   assert.equal(guestExpiry(now).getTime(), now.getTime() + HOUR + DAY);

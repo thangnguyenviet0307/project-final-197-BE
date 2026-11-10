@@ -1,3 +1,5 @@
+import { DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
+import { PRODUCT_DESCRIPTION_MAX_LENGTH } from '../../config/product-limits.js';
 import { discountSchema } from '../shared/common.validation.js';
 import {
   hasUpdateFields,
@@ -61,9 +63,9 @@ export const productDetailsShape = {
     })
     .nullable()
     .optional(), // centimetres
-  warrantyInformation: z.string().trim().max(2000).nullable().optional(),
-  shippingInformation: z.string().trim().max(2000).nullable().optional(),
-  returnPolicy: z.string().trim().max(2000).nullable().optional(),
+  warrantyInformation: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
+  shippingInformation: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
+  returnPolicy: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
   minimumOrderQuantity: z
     .int()
     .positive()
@@ -124,8 +126,16 @@ export const createProductSchema = z.object({
   price: z.number().min(0).optional(),
   discount: discountSchema.optional().default(0),
   category: objectId,
+  categories: z
+    .array(objectId)
+    .max(50)
+    .refine(
+      (ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length,
+      'Duplicate categories'
+    )
+    .optional(),
   brand: objectId,
-  description: z.string().trim().max(2000).nullable().optional(),
+  description: z.string().trim().max(PRODUCT_DESCRIPTION_MAX_LENGTH).nullable().optional(),
   model_year: z
     .int()
     .min(1900)

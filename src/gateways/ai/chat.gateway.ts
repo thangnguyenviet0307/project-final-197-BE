@@ -8,6 +8,7 @@ import {
 import { frontendOrigins } from '../../config/frontend-origins.js';
 import { chatEventSchema } from '../../validations/ai/ai.validation.js';
 import { runChat } from '../../services/ai/chat.service.js';
+import { cancelTurn } from '../../services/ai/conversation.service.js';
 import type { AiOwner, AiEvent } from '../../types/ai/ai.types.js';
 
 export function attachAiGateway(server: HttpServer) {
@@ -54,7 +55,7 @@ export function attachAiGateway(server: HttpServer) {
   });
   io.on('connection', (socket) => {
     const owner = socket.data['owner'] as AiOwner;
-    let running: { requestId: string; controller: AbortController } | undefined;
+    let running: { requestId: string; conversationId: string; content: string; controller: AbortController } | undefined;
     let messages = 0;
     let windowStart = Date.now();
     let pendingBytes = 0;
@@ -99,12 +100,15 @@ export function attachAiGateway(server: HttpServer) {
         throw new Error('Invalid payload');
       const input = chatEventSchema.parse({ ...payload, type: name });
       if (input.type === 'chat:cancel') {
-        if (running?.requestId === input.requestId) running.controller.abort();
+        if (running?.requestId === input.requestId) {
+          const result = await cancelTurn(running.conversationId, owner, input.requestId, running.content);
+          emit({ type: 'chat:cancel-result', requestId: input.requestId, data: result });
+        }
         return;
       }
       if (running) throw new Error('Already processing');
       const controller = new AbortController();
-      running = { requestId: input.requestId, controller };
+      running = { requestId: input.requestId, conversationId: input.conversationId, content: input.content, controller };
       const timeout = setTimeout(() => controller.abort(), 75000);
       timeout.unref();
       try {

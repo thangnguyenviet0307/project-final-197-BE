@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
 import {
   hasUpdateFields,
   UPDATE_REQUIRED_MESSAGE,
@@ -31,7 +32,7 @@ export const createCategoriesSchema = z
       .trim()
       .min(1, 'Category name cannot be empty'),
 
-    description: z.string('Description must be a string').trim().optional(),
+    description: z.string('Description must be a string').trim().max(DESCRIPTION_MAX_LENGTH).optional(),
 
     parent: objectId.nullable().optional(),
 
@@ -44,3 +45,7 @@ export const updateCategoriesSchema = createCategoriesSchema
   .refine(hasUpdateFields, {
     error: UPDATE_REQUIRED_MESSAGE,
   }) satisfies z.ZodType<UpdateCategoriesInput>;
+
+export const deleteCategorySchema = z.object({
+  childIds: z.array(objectId).max(399).refine(ids => new Set(ids.map(id => id.toLowerCase())).size === ids.length, 'Duplicate child IDs').default([]),
+}).strict();

@@ -68,6 +68,127 @@ after(async () => {
   await mongoose.connection.dropDatabase();
   await mongoose.disconnect();
 });
+test('durable cancellation survives delayed sends, rejects other owners and keeps terminal results immutable', async () => {
+  const owner = { kind: 'guest', id: randomUUID() };
+  const c = await chat.createConversation(owner);
+  const id = String(c._id);
+  const requestId = randomUUID();
+  await assert.rejects(chat.cancelTurn(id, guest, requestId, 'cancel me'), e => e.statusCode === 404);
+  assert.equal((await chat.cancelTurn(id, owner, requestId, 'cancel me')).status, 'cancelled');
+  const delayed = await chat.beginTurn(id, owner, requestId, 'cancel me');
+  assert.equal(delayed.replay, true);
+  assert.equal(delayed.turn.status, 'cancelled');
+  await assert.rejects(chat.cancelTurn(id, owner, requestId, 'different'), e => e.statusCode === 409);
+  assert.equal((await AiTurn.updateOne({ _id: delayed.turn._id, status: 'processing' }, { $set: { status: 'completed' } })).modifiedCount, 0);
+  const completedId = randomUUID();
+  const completed = await chat.beginTurn(id, owner, completedId, 'done');
+  await AiTurn.updateOne({ _id: completed.turn._id, status: 'processing' }, { $set: { status: 'completed', answer: 'saved answer' } });
+  const result = await chat.cancelTurn(id, owner, completedId, 'done');
+  assert.equal(result.status, 'completed');
+  assert.equal(result.answer, 'saved answer');
+  assert.equal((await chat.cancelTurn(id, owner, completedId, 'done')).status, 'completed');
+});
+
+test('HTTP cancellation validates origin, identity, payload and confirms the matching request', async () => {
+  const post = (path, cookie, body = {}, origin = 'http://localhost:5173') => fetch(base + path, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+    body: JSON.stringify(body),
+  });
+  const session = await post('/session');
+  const cookie = session.headers.get('set-cookie').split(';')[0];
+  const conversation = (await (await post('/conversations', cookie)).json()).data.id;
+  const path = `/conversations/${conversation}/cancel`;
+  const body = { requestId: randomUUID(), content: 'cancel through HTTP' };
+  assert.equal((await post(path, null, body)).status, 428);
+  assert.equal((await post(path, cookie, body, 'https://untrusted.example')).status, 403);
+  assert.equal((await post(path, cookie, { requestId: body.requestId })).status, 400);
+  const otherSession = await post('/session');
+  const otherCookie = otherSession.headers.get('set-cookie').split(';')[0];
+  assert.equal((await post(path, otherCookie, body)).status, 404);
+  const response = await post(path, cookie, body);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, { requestId: body.requestId, status: 'cancelled', answer: '', sources: [] });
+});
+
+test('concurrent cancellation and completion choose exactly one immutable terminal result', async () => {
+  const c = await chat.createConversation(guest);
+  for (let i = 0; i < 8; i++) {
+    const requestId = randomUUID();
+    // A separate DB write competes with the cancel transaction, as on another instance.
+    const { turn } = await chat.beginTurn(String(c._id), guest, requestId, 'race');
+    const [cancelled, completed] = await Promise.all([
+      chat.cancelTurn(String(c._id), guest, requestId, 'race'),
+      AiTurn.updateOne({ _id: turn._id, status: 'processing' }, { $set: { status: 'completed', answer: 'winner' } }),
+    ]);
+    const saved = await AiTurn.findById(turn._id);
+    assert.equal(saved.status, completed.modifiedCount ? 'completed' : 'cancelled');
+    assert.equal(cancelled.status, saved.status);
+    assert.equal((await chat.cancelTurn(String(c._id), guest, requestId, 'race')).status, saved.status);
+    // A completed worker normally releases the conversation lock in finally.
+    await AiConversation.updateOne({ _id: c._id, activeRequestId: requestId }, { $set: { activeRequestId: null, busyUntil: null } });
+  }
+});
+
+test('replay distinguishes processing/completed/cancelled/failed without starting another provider call', async (t) => {
+  const answer = t.mock.method(aiProvider, 'answerStream', async function* () { throw new Error('Unexpected paid generation'); });
+  for (const status of ['processing', 'completed', 'cancelled', 'failed']) {
+    const owner = { kind: 'guest', id: randomUUID() };
+    const c = await chat.createConversation(owner);
+    const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'replay' };
+    const { turn } = await chat.beginTurn(input.conversationId, owner, input.requestId, input.content);
+    await AiTurn.updateOne({ _id: turn._id }, { $set: { status, answer: status === 'completed' ? 'saved' : '' } });
+    const events = [];
+    await runChat(owner, input, new AbortController().signal, e => events.push(e));
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, status === 'processing' ? 'chat:processing' : status === 'completed' ? 'chat:completed' : 'chat:error');
+    assert.equal(events[0].data.status, status);
+  }
+  assert.equal(answer.mock.callCount(), 0);
+});
+
+test('cancellation during the final database check cannot complete the turn', async (t) => {
+  const owner = { kind: 'guest', id: randomUUID() };
+  const c = await chat.createConversation(owner);
+  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'final check' };
+  const controller = new AbortController();
+  t.mock.method(aiProvider, 'answerStream', async function* () { yield 'answer'; });
+  const original = AiConversation.exists;
+  t.mock.method(AiConversation, 'exists', async function(filter) {
+    const result = await original.call(this, filter);
+    controller.abort();
+    return result;
+  });
+  const events = [];
+  await runChat(owner, input, controller.signal, e => events.push(e));
+  assert.equal((await AiTurn.findOne({ conversationId: c._id, requestId: input.requestId })).status, 'cancelled');
+  assert.equal(events.some(e => e.type === 'chat:completed'), false);
+});
+
+test('a remote cancellation in DB stops generation even without an in-process abort', async (t) => {
+  const owner = { kind: 'guest', id: randomUUID() };
+  const c = await chat.createConversation(owner);
+  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'remote cancellation' };
+  let started;
+  const first = new Promise(resolve => { started = resolve; });
+  t.mock.method(aiProvider, 'answerStream', async function* (_a, _b, _c, signal) {
+    yield 'partial';
+    await new Promise(resolve => {
+      started();
+      if (signal.aborted) resolve();
+      else signal.addEventListener('abort', resolve, { once: true });
+    });
+    signal.throwIfAborted();
+  });
+  const events = [];
+  const running = runChat(owner, input, AbortSignal.timeout(5000), e => events.push(e));
+  await first;
+  await AiTurn.updateOne({ conversationId: c._id, requestId: input.requestId, status: 'processing' }, { $set: { status: 'cancelled' } });
+  await running;
+  assert.equal(events.some(e => e.type === 'chat:completed'), false);
+  assert.equal(events.at(-1).data.status, 'cancelled');
+});
+
 test('ending guest chat is idempotent, closes sends and gives all messages 24h from completion', async () => {
   const now = new Date();
   const c = await chat.createConversation(guest, now);
@@ -527,20 +648,56 @@ test('search batches 100 candidates without per-product metrics and handles long
       category: category._id,
       brand: brand._id,
       stock: 1,
+      description: i === 99
+        ? '<p>' + '😀'.repeat(499_996) + '</p>'
+        : '<p>Batch description</p>',
+      warrantyInformation: 'w'.repeat(100_000),
     }))
   );
   t.mock.method(mongoose.Aggregate.prototype, 'exec', async () => {
     throw new Error('Unexpected metrics aggregation');
   });
   let finds = 0;
+  const cardReads = [];
   const original = mongoose.Query.prototype.exec;
-  t.mock.method(mongoose.Query.prototype, 'exec', function (...args) {
-    if (this.model.modelName === 'Product' && this.op === 'find') finds++;
-    return original.apply(this, args);
+  t.mock.method(mongoose.Query.prototype, 'exec', async function (...args) {
+    const isExcerpt = this.model.modelName === 'Product' && this.op === 'find' && this.projection()?.description?.$substrCP;
+    if (this.model.modelName === 'Product' && this.op === 'find') {
+      finds++;
+      if (this.projection()?.description?.$substrCP) {
+        cardReads.push(this.getFilter().slug.$in);
+        assert.deepEqual(this.projection().description, { $substrCP: [{ $ifNull: ['$description', ''] }, 0, 12000] });
+        assert.deepEqual(this.projection().warrantyInformation, { $substrCP: [{ $ifNull: ['$warrantyInformation', ''] }, 0, 1800] });
+      } else {
+        for (const field of ['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'])
+          assert.equal(this.projection()?.[field], undefined);
+      }
+    }
+    const documents = await original.apply(this, args);
+    if (isExcerpt) {
+      for (const document of documents) {
+        assert.ok([...document.description].length <= 12000);
+        assert.equal(document.warrantyInformation.length, 1800);
+        assert.equal(document.shippingInformation, '');
+      }
+    }
+    return documents;
   });
   const result = await searchProducts({ q: 'Batch', page: 1, limit: 10 });
   assert.equal(result.rows.length, 10);
-  assert.ok(finds <= 3, `Expected bounded batch queries, got ${finds}`);
+  assert.ok(finds <= 4, `Expected bounded batch queries, got ${finds}`);
+  assert.equal(result.total, 100);
+  assert.equal(cardReads.length, 1);
+  assert.equal(cardReads[0].length, 10);
+  assert.deepEqual(result.rows.map(p => p.slug), cardReads[0]);
+  assert.ok(result.rows.every(p => p.description.length <= 1800));
+  assert.equal(result.rows.find(p => p.slug === 'batch-99').description, '😀'.repeat(900));
+  const second = await searchProducts({ q: 'Batch', page: 2, limit: 10 });
+  assert.equal(second.total, 100);
+  assert.equal(cardReads.length, 2);
+  assert.equal(cardReads[1].length, 10);
+  assert.deepEqual(second.rows.map(p => p.slug), cardReads[1]);
+  assert.equal(new Set([...result.rows, ...second.rows].map(p => p.id)).size, 20);
   const long = await Product.create({
     product_name: 'x'.repeat(255),
     slug: 'long-valid-product',
@@ -872,4 +1029,30 @@ test('index pruning removes inactive products and hidden catalog references with
   for (const p of rows.slice(1))
     assert.equal(await AiChunk.countDocuments({ key: 'product:' + p._id }), 0);
   assert.equal(provider.mock.callCount(), 0);
+});
+
+test('AI keyword and semantic candidates share storefront descendant and additional-category rules', async () => {
+  const brand = await BrandModel.create({ name: 'Merge AI Brand', slug: 'merge-ai-brand' });
+  const parent = await Categories.create({ name: 'Merge Parent', slug: 'merge-parent' });
+  const child = await Categories.create({ name: 'Merge Child', slug: 'merge-child', parent: parent._id });
+  const other = await Categories.create({ name: 'Merge Other', slug: 'merge-other' });
+  const first = await Product.create({ product_name: 'Mergefixture secondary', slug: 'mergefixture-secondary', brand: brand._id, category: other._id, categories: [child._id], price: 100, stock: 1 });
+  const second = await Product.create({ product_name: 'Mergefixture child', slug: 'mergefixture-child', brand: brand._id, category: child._id, price: 110, stock: 1 });
+  const outside = await Product.create({ product_name: 'Mergefixture outside', slug: 'mergefixture-outside', brand: brand._id, category: other._id, price: 120, stock: 1 });
+  const matches = Promise.resolve([first, second, outside].map(product => ({ key: 'product:' + product._id, text: 'matched', score: 1 })));
+  const expected = [String(first._id), String(second._id)].sort();
+  for (const category of [parent, child]) {
+    for (const q of ['Mergefixture', 'semantic-only-no-keyword-match']) {
+      const result = await searchProducts({ q, category: String(category._id), page: 1, limit: 20 }, matches, false);
+      assert.deepEqual(result.rows.map(product => product.id).sort(), expected);
+    }
+  }
+  await Categories.updateOne({ _id: child._id }, { $set: { isActive: false } });
+  const hidden = await searchProducts({ q: 'Mergefixture', category: String(child._id), page: 1, limit: 20 }, matches, false);
+  assert.equal(hidden.total, 0);
+  const unknown = await searchProducts({ q: 'Mergefixture', category: '000000000000000000000000', page: 1, limit: 20 }, matches, false);
+  assert.equal(unknown.total, 0);
+  const controller = new AbortController();
+  controller.abort(new Error('cancelled merge search'));
+  await assert.rejects(searchProducts({ q: 'Mergefixture', category: String(parent._id), page: 1, limit: 20 }, matches, false, controller.signal), /cancelled merge search/);
 });

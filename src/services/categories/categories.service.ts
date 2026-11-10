@@ -1,3 +1,4 @@
+import { categoryMembership } from '../../utils/products/catalog-reference.js';
 import createHttpError from 'http-errors';
 import type { ClientSession } from 'mongoose';
 import { Categories } from '../../models/categories/categories.model.js';
@@ -127,25 +128,55 @@ export class CategoriesService {
     );
   }
 
-  public static async deleteCategory(id: string): Promise<void> {
-    let previous: string | undefined;
-    await withRelationsTransaction(async (session) => {
+  public static async deleteCategory(id: string, childIds: string[] = []) {
+    const result = await withRelationsTransaction(async (session) => {
       const category = await Categories.findById(id).session(session);
       if (!category) throw createHttpError(404, 'Categories not found');
-      if (await Product.exists({ category: id }).session(session)) {
+      const ids = [
+        ...new Set([id, ...childIds].map((value) => value.toLowerCase())),
+      ];
+      if (await Product.exists(categoryMembership(ids)).session(session)) {
         throw createHttpError(
           409,
           'Cannot delete a category referenced by products'
         );
       }
-      await Categories.updateMany(
-        { parent: id },
+      const selected = childIds.length
+        ? await Categories.find({ _id: { $in: childIds }, parent: id }).session(
+            session
+          )
+        : [];
+      if (selected.length !== childIds.length)
+        throw createHttpError(
+          409,
+          'Selected child categories changed; reload before deleting'
+        );
+      const promoted = await Categories.updateMany(
+        { parent: { $in: ids }, _id: { $nin: ids } },
         { $set: { parent: null } },
         { session }
       );
-      await Categories.findByIdAndDelete(id, { session });
-      previous = category.imagePublicId;
+      const deleted = await Categories.deleteMany(
+        { _id: { $in: ids } },
+        { session }
+      );
+      if (deleted.deletedCount !== ids.length)
+        throw createHttpError(
+          409,
+          'Categories changed; reload before deleting'
+        );
+      return {
+        deletedIds: ids,
+        promotedCount: promoted.modifiedCount,
+        imageIds: [category, ...selected].map((item) => item.imagePublicId),
+      };
     });
-    await cleanupCatalogImage(previous);
+    await Promise.all(
+      result.imageIds.map((image) => cleanupCatalogImage(image))
+    );
+    return {
+      deletedIds: result.deletedIds,
+      promotedCount: result.promotedCount,
+    };
   }
 }

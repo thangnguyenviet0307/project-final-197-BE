@@ -65,7 +65,7 @@ function identify(initialize: boolean): RequestHandler {
       res.cookie('aiGuest', token + '.' + sign(token), {
         httpOnly: true,
         secure: process.env['NODE_ENV'] === 'production',
-        sameSite: 'strict',
+        sameSite: process.env['NODE_ENV'] === 'production' ? 'none' : 'strict',
         path: '/api/v1/ai',
         maxAge: 2 * 86400000,
       });

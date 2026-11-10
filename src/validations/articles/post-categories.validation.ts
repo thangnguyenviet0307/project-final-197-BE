@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
 import { z } from 'zod';
 import { hasUpdateFields } from '../shared/common.validation.js';
 const fields = {
@@ -8,7 +9,7 @@ const fields = {
     .min(1)
     .max(255)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  description: z.string().trim().max(500),
+  description: z.string().trim().max(DESCRIPTION_MAX_LENGTH),
   isActive: z.boolean(),
 };
 export const createPostCategorySchema = z.strictObject({

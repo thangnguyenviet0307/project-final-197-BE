@@ -39,3 +39,7 @@ export const chatEventSchema = z.discriminatedUnion('type', [
 export const historyQuery = z
   .object({ page: z.coerce.number().int().min(1).max(10000).default(1) })
   .strict();
+export const cancelTurnSchema = z.object({
+  requestId: z.uuid(),
+  content: z.string().trim().min(1).max(2000),
+}).strict();

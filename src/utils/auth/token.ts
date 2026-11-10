@@ -53,7 +53,7 @@ function verify(token: string, key: string): TokenPayload {
 function signToken(
   user: TokenSubject,
   secretName: 'JWT_SECRET' | 'JWT_REFRESH_SECRET',
-  expiresIn: '15m' | '7d'
+  expiresIn: '15m' | '7d' | '30d'
 ): string {
   return jwt.sign(
     {
@@ -69,7 +69,9 @@ export function generateAccessToken(user: TokenSubject): string {
   return signToken(user, 'JWT_SECRET', '15m');
 }
 export function generateRefreshToken(user: TokenSubject): string {
-  return signToken(user, 'JWT_REFRESH_SECRET', '7d');
+  // Administrative cookies survive browser/server restarts. Each successful
+  // rotation renews this window; customer sessions retain their existing policy.
+  return signToken(user, 'JWT_REFRESH_SECRET', user.accountType === 'customer' ? '7d' : '30d');
 }
 export function generateTokenPair(user: TokenSubject): TokenPair {
   return {

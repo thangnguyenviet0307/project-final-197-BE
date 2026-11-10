@@ -1,3 +1,4 @@
+import { POLICY_SECTION_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
 import {
   Schema,
   model,
@@ -9,12 +10,12 @@ import { publicationSchema } from './publication.schema.js';
 
 const contentSchema = new Schema(
   {
-    privacy: { type: String, default: '', maxlength: 30000 },
-    warranty: { type: String, default: '', maxlength: 30000 },
-    returns: { type: String, default: '', maxlength: 30000 },
-    shipping: { type: String, default: '', maxlength: 30000 },
-    payment: { type: String, default: '', maxlength: 30000 },
-    support: { type: String, default: '', maxlength: 30000 },
+    privacy: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
+    warranty: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
+    returns: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
+    shipping: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
+    payment: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
+    support: { type: String, default: '', maxlength: POLICY_SECTION_MAX_LENGTH },
   },
   { _id: false }
 );
@@ -64,7 +65,7 @@ const warrantySchema = new Schema(
     itemIndex: { type: Number, required: true },
     productName: { type: String, required: true },
     variantName: { type: String, default: '' },
-    description: { type: String, required: true, maxlength: 3000 },
+    description: { type: String, required: true, maxlength: DESCRIPTION_MAX_LENGTH },
     fingerprint: { type: String, required: true, select: false },
     status: {
       type: String,

@@ -11,6 +11,7 @@ export async function runChat(
   signal: AbortSignal,
   emit: (event: AiEvent) => void
 ) {
+  signal.throwIfAborted();
   await reserveUsage(`chat:${owner.kind}:${owner.id}`, 20, 60000);
   const { turn, replay } = await beginTurn(
     input.conversationId,
@@ -21,6 +22,12 @@ export async function runChat(
   const send = (type: string, data?: unknown) =>
     emit({ type, requestId: input.requestId, data });
   if (replay) {
+    if (turn.status !== 'completed') {
+      send(turn.status === 'processing' ? 'chat:processing' : 'chat:error', {
+        status: turn.status,
+      });
+      return;
+    }
     send('chat:completed', {
       answer: turn.answer,
       status: turn.status,
@@ -33,16 +40,16 @@ export async function runChat(
     return;
   }
   const controller = new AbortController();
-  const release = registerTurn(input.conversationId, controller);
+  const release = registerTurn(input.conversationId, input.requestId, controller);
   signal = AbortSignal.any([signal, controller.signal]);
   const monitor = setInterval(() => {
-    void AiConversation.exists({
+    void Promise.all([AiConversation.exists({
       _id: input.conversationId,
       status: 'active',
       activeRequestId: input.requestId,
-    })
-      .then((active) => {
-        if (!active) controller.abort();
+    }), AiTurn.exists({ _id: turn._id, status: 'processing' })])
+      .then(([active, processing]) => {
+        if (!active || !processing) controller.abort();
       })
       .catch(() => controller.abort());
   }, 1000);
@@ -51,6 +58,7 @@ export async function runChat(
   let answer = '';
   let status: 'completed' | 'cancelled' | 'failed' = 'failed';
   try {
+    signal.throwIfAborted();
     send('chat:status', 'Đang tìm thông tin cửa hàng…');
     const old = await AiTurn.find({
       conversationId: input.conversationId,
@@ -90,6 +98,7 @@ export async function runChat(
       activeRequestId: input.requestId,
     });
     if (!active) throw new Error('Conversation ended');
+    signal.throwIfAborted();
     const saved = await AiTurn.updateOne(
       { _id: turn._id, status: 'processing' },
       {
@@ -123,6 +132,9 @@ export async function runChat(
       { _id: turn._id, status: 'processing' },
       { $set: { answer, status } }
     );
+    const current = await AiTurn.findById(turn._id).select('status');
+    if (current?.status === 'cancelled' || current?.status === 'failed')
+      status = current.status;
     send('chat:error', {
       message:
         status === 'cancelled'

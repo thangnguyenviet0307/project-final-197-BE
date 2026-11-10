@@ -22,10 +22,7 @@ test('search combines product, brand and category names without overriding expli
   assert.equal(query.$and[0].brand, 'a'.repeat(24));
   assert.equal(query.$and[0].product_name, undefined);
   assert.equal(query.$and[0].$or.length, 2);
-  assert.deepEqual(query.$and[1].$or.slice(1), [
-    { brand: { $in: ['b'.repeat(24)] } },
-    { category: { $in: ['c'.repeat(24)] } },
-  ]);
+  assert.deepEqual(query.$and[1].$or.slice(1), [{ brand: { $in: ['b'.repeat(24)] } }, { $or: [{ category: { $in: ['c'.repeat(24)] } }, { categories: { $in: ['c'.repeat(24)] } }] }]);
 });
 test('price ranking computes discounted variant price before stable sorting and pagination and casts reference IDs', async (t) => {
   t.mock.method(Product, 'aggregate', async (pipeline) => {

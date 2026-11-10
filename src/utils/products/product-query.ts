@@ -1,3 +1,4 @@
+import { categoryMembership } from './catalog-reference.js';
 import { Categories } from '../../models/categories/categories.model.js';
 import { BrandModel } from '../../models/brands/brands.model.js';
 import Product from '../../models/products/products.model.js';
@@ -56,7 +57,8 @@ export function buildProductQuery(
   for (const field of ['category', 'brand'] as const) {
     if (!filters[field]) continue;
     const ids = [...new Set(filters[field].split(','))];
-    query[field] = ids.length === 1 ? ids[0] : { $in: ids };
+    if (field === 'category') query['$and'] = [categoryMembership(ids)];
+    else query[field] = ids.length === 1 ? ids[0] : { $in: ids };
   }
   if (filters.minPrice !== undefined || filters.maxPrice !== undefined)
     query['$expr'] = {
@@ -120,26 +122,31 @@ export const effectivePriceExpression = {
 
 export async function buildProductSearchQuery(
   filters: Partial<GetProductsQuery>,
+  publicOnly = false,
   signal?: AbortSignal
 ) {
+  signal?.throwIfAborted();
   const query = buildProductQuery(filters);
   if (!filters.search?.trim()) return query;
   delete query['product_name'];
   const name = { $regex: escapeRegex(filters.search.trim()), $options: 'i' };
+  const active = publicOnly ? { isActive: true } : {};
   const brandQuery = BrandModel.distinct('_id', {
     name,
     isDeleted: { $ne: true },
+    ...active,
   });
   const categoryQuery = Categories.distinct('_id', {
     name,
     isDeleted: { $ne: true },
+    ...active,
   });
   if (signal) {
-    signal.throwIfAborted();
     brandQuery.setOptions({ signal, maxTimeMS: 5000 });
     categoryQuery.setOptions({ signal, maxTimeMS: 5000 });
   }
   const [brands, categories] = await Promise.all([brandQuery, categoryQuery]);
+  signal?.throwIfAborted();
   // Keep SKU, explicit brand/category and search as independent AND conditions.
   return {
     $and: [
@@ -148,7 +155,7 @@ export async function buildProductSearchQuery(
         $or: [
           { product_name: name },
           { brand: { $in: brands } },
-          { category: { $in: categories } },
+          categoryMembership(categories),
         ],
       },
     ],
@@ -159,11 +166,13 @@ export async function discountedPricePageIds(
   query: Record<string, unknown>,
   filters: Partial<GetProductsQuery>,
   page: number,
-  limit: number
+  limit: number,
+  signal?: AbortSignal
 ) {
   const match = Product.find(query).cast();
   const direction = filters.sortOrder === 'asc' ? 1 : -1;
-  const rows = await Product.aggregate<{ _id: unknown }>([
+  signal?.throwIfAborted();
+  const aggregation = Product.aggregate<{ _id: unknown }>([
     { $match: match },
     { $set: { sellingPrice: effectivePriceExpression } },
     { $sort: { sellingPrice: direction, _id: direction } },
@@ -171,5 +180,8 @@ export async function discountedPricePageIds(
     { $limit: limit },
     { $project: { _id: 1 } },
   ]);
+  if (signal) aggregation.option({ signal, maxTimeMS: 5000 });
+  const rows = await aggregation;
+  signal?.throwIfAborted();
   return rows.map((row) => row._id);
 }

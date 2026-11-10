@@ -70,6 +70,7 @@ All paths start with `/api/v1/ai`. Mutating browser requests require an allowed 
 | POST /conversations | Create; body {} |
 | GET /conversations/:id/messages?page=1 | Most recent twenty turns on page 1, displayed chronologically |
 | POST /conversations/:id/end | Idempotent completion; body {} |
+| POST /conversations/:id/cancel | Owner-scoped durable cancellation; body { requestId, content }; returns the matching terminal status, answer and sources |
 | POST /socket-ticket | Single-use, 30-second socket ticket; body {} |
 | GET /search?q=... | Hybrid search; page/limit/category/brand/minPrice/maxPrice |
 | GET /recommendations/:slug | Public similar/alternative products |
@@ -81,6 +82,10 @@ Use `socket.io-client` with the API origin, `path: '/api/v1/ai/socket'`, `transp
 Emit the Socket.IO event `chat:send` with `{ conversationId, requestId, content }` (UUID requestId and 1–2000 characters), or `chat:cancel` with `{ requestId }`. Listen to named events chat:accepted, chat:status, chat:delta, chat:completed, chat:error; each carries the existing `{ type, requestId?, data? }` envelope. Stream errors are safe event payloads, not HTTP stack traces. Payload size, event frequency, backpressure, shared request limits, generation timeout and socket lifetime are bounded.
 
 Each question uses a short-lived Socket.IO connection with autoConnect false, forceNew true and reconnection false. On disconnect, generation is cancelled and the UI refreshes persisted history. Reconnect requires a new ticket; the UI does not blindly resubmit and incur another charge. Exact request replay returns saved state; an in-progress replay is not a second generation. Explicitly sending a new question starts a new request. Cancelled/failed answers can retain partial text. No token-by-token stream replay is promised. Long-polling fallback and automatic connection-state recovery are not enabled.
+
+Cancellation and completion compete through conditional updates from `processing` on the same message. A committed terminal status is immutable. Cancellation is serialized with send on the owned conversation; if it arrives first, a cancelled receipt prevents the delayed request from generating an answer. The cancellation response can legitimately report `completed` when completion won first. The browser shows cancellation pending until a matching validated response arrives; a failed request/disconnect is uncertain and requires history reconciliation. Other API instances observe cancellation through the durable message/conversation state, with a one-second cooperative abort monitor. In-flight provider usage cannot be undone.
+
+Replay events follow persisted status: `processing` emits `chat:processing`, `completed` emits `chat:completed`, and `cancelled`/`failed` emit `chat:error` with that status. No replay starts another provider call. The frontend refreshes history after `chat:processing` without treating it as completion or automatically resubmitting. Socket `chat:cancel` remains supported for its running request and emits `chat:cancel-result` after durable cancellation; the browser uses the HTTP cancellation endpoint so confirmation can survive the streaming socket closing.
 
 Direct dependencies are socket.io on the backend and socket.io-client in the frontend and backend integration tests. The application no longer imports ws or @types/ws. Socket.IO/Engine.IO may retain ws as an internal transitive dependency; do not remove it from the lockfile manually. Deploy the Socket.IO client and server together; the previous raw WebSocket protocol is incompatible.
 

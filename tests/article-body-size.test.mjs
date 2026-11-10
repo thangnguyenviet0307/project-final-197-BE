@@ -12,13 +12,7 @@ test('editorial JSON budget accepts Unicode/escaped schema boundaries but stays 
     server.close();
   });
   const base = `http://127.0.0.1:${server.address().port}/api/v1`;
-  const input = {
-    title: 'Article boundary',
-    category: 'News',
-    excerpt: 'Summary',
-    authorName: 'Editor',
-    content: '\u1ec7'.repeat(100000),
-  };
+  const input = { title: 'Article boundary', category: 'News', excerpt: 'Summary', authorName: 'Editor', content: '\u1ec7'.repeat(1000000) };
   assert.equal(createArticleSchema.safeParse(input).success, true);
   const send = (route, body) =>
     fetch(base + route, {
@@ -37,15 +31,8 @@ test('editorial JSON budget accepts Unicode/escaped schema boundaries but stays 
       'Valid article passes parsing and reaches authentication'
     );
   }
-  assert.equal(
-    createArticleSchema.safeParse({ ...input, content: input.content + 'x' })
-      .success,
-    false
-  );
-  const oversized = await send(
-    '/articles',
-    JSON.stringify({ ...input, content: 'x'.repeat(1024 * 1024) })
-  );
+  assert.equal(createArticleSchema.safeParse({ ...input, content: input.content + 'x' }).success, false);
+  const oversized = await send('/articles', JSON.stringify({ ...input, content: 'x'.repeat(8 * 1024 * 1024) }));
   assert.equal(oversized.status, 413);
   assert.equal((await oversized.json()).success, false);
   assert.equal(

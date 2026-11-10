@@ -8,7 +8,7 @@ import {
 } from '../products/store-products.service.js';
 import { readDocument } from '../support/managed-document.service.js';
 import { documentKeys } from '../../validations/support/managed-document.validation.js';
-import { plainText } from './retrieval.service.js';
+import { plainText } from '../../utils/shared/plain-text.js';
 import { aiProvider } from './providers/openai.provider.js';
 import { aiConfig } from './config.js';
 import mongoose, { type ClientSession } from 'mongoose';
@@ -121,7 +121,11 @@ export async function synchronizeKnowledge(context: IndexContext = {}) {
   let page = 1;
   while (true) {
     await checkLease(context);
-    const result = await listStoreProducts({ page, limit: 50 }, context.signal);
+    const result = await listStoreProducts(
+      { page, limit: 50 },
+      context.signal,
+      { includeContent: true }
+    );
     for (const p of result.data)
       await indexSource(
         'product:' + p._id,
@@ -132,6 +136,7 @@ export async function synchronizeKnowledge(context: IndexContext = {}) {
           JSON.stringify(p.tags),
           JSON.stringify(p.brand),
           JSON.stringify(p.category),
+          JSON.stringify(p.categories),
           JSON.stringify(
             p.variants.map((v) => ({
               name: v.variant_name,

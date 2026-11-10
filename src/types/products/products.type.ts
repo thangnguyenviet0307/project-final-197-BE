@@ -41,6 +41,7 @@ export interface ProductInput {
   price?: number | undefined;
   discount?: number | undefined;
   category: string;
+  categories?: string[] | undefined;
   brand: string;
   description?: string | null | undefined;
   model_year?: number | null | undefined;

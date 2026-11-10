@@ -13,7 +13,32 @@ const unitPrice = (price: number, discount: number) =>
   calculateOrderTotal([{ price, discount, quantity: 1 }]);
 
 const storefrontFields =
-  'on_sale product_name slug description model_year thumbnail images price discount stock variants category brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity';
+  'on_sale product_name slug description model_year thumbnail images price discount stock variants category categories brand sku barcode currency tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity';
+interface BatchReadOptions {
+  content?: 'full' | 'none' | 'excerpt';
+}
+function batchProjection(
+  options: BatchReadOptions
+): Record<string, number | object> {
+  const fields: Record<string, number | object> = Object.fromEntries(
+    storefrontFields.split(' ').map((field) => [field, 1])
+  );
+  if (options.content && options.content !== 'full') {
+    for (const field of [
+      'description', 'warrantyInformation', 'shippingInformation', 'returnPolicy',
+    ]) {
+      if (options.content === 'none') delete fields[field];
+      else fields[field] = {
+        $substrCP: [
+          { $ifNull: ['$' + field, ''] },
+          0,
+          field === 'description' ? 12000 : 1800,
+        ],
+      };
+    }
+  }
+  return fields;
+}
 async function readStorefrontProduct(slug: string) {
   return Product.findOne({
     slug,
@@ -23,6 +48,11 @@ async function readStorefrontProduct(slug: string) {
     .select(storefrontFields)
     .populate<{ category: PublicReference | null }>({
       path: 'category',
+      select: 'name slug',
+      match: activeReference,
+    })
+    .populate<{ categories: PublicReference[] }>({
+      path: 'categories',
       select: 'name slug',
       match: activeReference,
     })
@@ -86,6 +116,11 @@ function mapStorefrontProduct(
       name: product.brand.name,
       slug: product.brand.slug,
     },
+    categories: (product.categories ?? []).map((category) => ({
+      id: String(category._id),
+      name: category.name,
+      slug: category.slug,
+    })),
     price: cheapest?.price ?? unitPrice(product.price, discount),
     compareAtPrice: cheapest?.compareAtPrice ?? product.price,
     available:
@@ -106,7 +141,8 @@ export async function getStorefrontProduct(slug: string) {
 // Batch public DTOs reuse the same prices/variants without per-product review/order queries.
 async function readStorefrontProducts(
   filter: { slug?: { $in: string[] }; _id?: { $in: string[] } },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  readOptions: BatchReadOptions = {}
 ) {
   signal?.throwIfAborted();
   const options = { maxTimeMS: 5000, ...(signal ? { signal } : {}) };
@@ -116,9 +152,15 @@ async function readStorefrontProducts(
     on_sale: { $ne: false },
   })
     .setOptions(options)
-    .select(storefrontFields)
+    .select(batchProjection(readOptions))
     .populate<{ category: PublicReference | null }>({
       path: 'category',
+      select: 'name slug',
+      match: activeReference,
+      options,
+    })
+    .populate<{ categories: PublicReference[] }>({
+      path: 'categories',
       select: 'name slug',
       match: activeReference,
       options,
@@ -137,17 +179,19 @@ async function readStorefrontProducts(
 }
 export async function getStorefrontProducts(
   slugs: string[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: BatchReadOptions = {}
 ) {
   if (!slugs.length) return [];
-  return readStorefrontProducts({ slug: { $in: slugs } }, signal);
+  return readStorefrontProducts({ slug: { $in: slugs } }, signal, options);
 }
 export async function getStorefrontProductsByIds(
   ids: string[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: BatchReadOptions = {}
 ) {
   if (!ids.length) return [];
-  return readStorefrontProducts({ _id: { $in: ids } }, signal);
+  return readStorefrontProducts({ _id: { $in: ids } }, signal, options);
 }
 
 export async function getStorefrontRecommendations(excludeSlug: string) {

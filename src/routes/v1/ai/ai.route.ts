@@ -20,6 +20,7 @@ import {
   aiSearchSchema,
   conversationParams,
   historyQuery,
+  cancelTurnSchema,
 } from '../../../validations/ai/ai.validation.js';
 const router: ExpressRouter = Router();
 router.use(aiOrigin);
@@ -66,6 +67,12 @@ router.get(
   aiIdentity,
   validate({ params: conversationParams, query: historyQuery }),
   controller.history
+);
+router.post(
+  '/conversations/:id/cancel',
+  aiIdentity,
+  validate({ params: conversationParams, body: cancelTurnSchema }),
+  controller.cancel
 );
 router.post(
   '/conversations/:id/end',

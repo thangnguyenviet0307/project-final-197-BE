@@ -1,3 +1,7 @@
+import {
+  categoryMembership,
+  expandPublicCategoryFilter,
+} from '../../utils/products/catalog-reference.js';
 import { z } from 'zod';
 import Product from '../../models/products/products.model.js';
 import { BrandModel } from '../../models/brands/brands.model.js';
@@ -20,14 +24,9 @@ import { aiConfig } from './config.js';
 import { buildProductQuery } from '../../utils/products/product-query.js';
 import { escapeRegex } from '../../utils/shared/search.js';
 import { cachedAiValue } from './cache.js';
+import { plainText } from '../../utils/shared/plain-text.js';
+export { plainText } from '../../utils/shared/plain-text.js';
 export type AiSearch = z.infer<typeof aiSearchSchema>;
-export const plainText = (value: string) =>
-  value
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 function mapCards(
   products: Awaited<ReturnType<typeof getStorefrontProducts>>
 ): AiProduct[] {
@@ -58,13 +57,17 @@ export async function productCards(
   slugs: string[],
   signal?: AbortSignal
 ): Promise<AiProduct[]> {
-  return mapCards(await getStorefrontProducts(slugs, signal));
+  return mapCards(
+    await getStorefrontProducts(slugs, signal, { content: 'excerpt' })
+  );
 }
 export async function productCardsByIds(
   ids: string[],
   signal?: AbortSignal
 ): Promise<AiProduct[]> {
-  return mapCards(await getStorefrontProductsByIds(ids, signal));
+  return mapCards(
+    await getStorefrontProductsByIds(ids, signal, { content: 'excerpt' })
+  );
 }
 export async function productCard(slug: string) {
   return (await productCards([slug]))[0] ?? null;
@@ -178,11 +181,15 @@ export async function searchProducts(
       /* Deterministic catalog search remains available. */
     }
   }
+  const categoryFilter = await expandPublicCategoryFilter(
+    input.category,
+    signal
+  );
   const [keyword, semantic] = await Promise.all([
     listStoreProducts(
       {
         search: search || undefined,
-        category: input.category,
+        category: categoryFilter,
         brand: input.brand,
         minPrice: input.minPrice,
         maxPrice: input.maxPrice,
@@ -203,7 +210,7 @@ export async function searchProducts(
       $and: [
         await visibleCatalogFilter(signal),
         buildProductQuery({
-          category: input.category,
+          category: categoryFilter,
           brand: input.brand,
           minPrice: input.minPrice,
           maxPrice: input.maxPrice,
@@ -241,7 +248,9 @@ export async function searchProducts(
         $and: [
           await visibleCatalogFilter(signal),
           ...(input.brand ? [{ brand: input.brand }] : []),
-          ...(input.category ? [{ category: input.category }] : []),
+          ...(categoryFilter
+            ? [categoryMembership(categoryFilter.split(','))]
+            : []),
         ],
       })
         .setOptions({ maxTimeMS: 5000, ...(signal ? { signal } : {}) })
@@ -255,18 +264,28 @@ export async function searchProducts(
     );
   signal?.throwIfAborted();
   const ordered = [...scores].sort((a, b) => b[1] - a[1]).map(([slug]) => slug);
-  const cards = await productCards(ordered, signal);
-  const bySlug = new Map(cards.map((p) => [p.slug, p]));
+  // Recheck live visibility/prices with no editorial content before pagination.
+  const candidatesWithoutContent = await getStorefrontProducts(ordered, signal, {
+    content: 'none',
+  });
+  const bySlug = new Map(candidatesWithoutContent.map((p) => [p.slug, p]));
   const candidates = ordered.map((slug) => bySlug.get(slug));
   const rows = candidates.filter(
-    (p): p is AiProduct =>
+    (p): p is NonNullable<typeof p> =>
       !!p &&
       (input.minPrice === undefined || p.price >= input.minPrice) &&
       (input.maxPrice === undefined || p.price <= input.maxPrice)
   );
   signal?.throwIfAborted();
+  const pageSlugs = rows
+    .slice((input.page - 1) * input.limit, input.page * input.limit)
+    .map((p) => p.slug);
+  const cards = await productCards(pageSlugs, signal);
+  const pageCards = new Map(cards.map((p) => [p.slug, p]));
   return {
-    rows: rows.slice((input.page - 1) * input.limit, input.page * input.limit),
+    rows: pageSlugs
+      .map((slug) => pageCards.get(slug))
+      .filter((p): p is AiProduct => !!p),
     total: rows.length,
     page: input.page,
     limit: input.limit,
@@ -320,7 +339,7 @@ export async function retrieveKnowledge(
 }
 export async function recommendProducts(slug: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  const product = (await getStorefrontProducts([slug], signal))[0];
+  const product = (await getStorefrontProducts([slug], signal, { content: 'none' }))[0];
   if (!product) return [];
   const result = await searchProducts(
     aiSearchSchema.parse({

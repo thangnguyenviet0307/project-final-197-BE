@@ -1,3 +1,4 @@
+import { DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
 import mongoose from 'mongoose';
 import type { ICategories } from '../../types/categories/categories.js';
 
@@ -12,7 +13,7 @@ const categoriesSchema = new mongoose.Schema<ICategories>(
     },
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, trim: true, unique: true },
-    description: { type: String },
+    description: { type: String, maxlength: DESCRIPTION_MAX_LENGTH },
     icon: { type: String },
     imagePublicId: { type: String },
     parent: { type: mongoose.Schema.Types.ObjectId, ref: 'Categories' },

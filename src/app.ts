@@ -26,6 +26,7 @@ import userRoutes from './routes/v1/users/users.route.js';
 import authRoutes from './routes/v1/auth/auth.route.js';
 import { errorMiddleware } from './middlewares/shared/error.middleware.js';
 import { trustedProxyAddresses } from './utils/shared/trusted-proxy.js';
+import dataSyncRoutes from './routes/v1/data-sync/data-sync.route.js';
 
 const app: Express = express();
 app.set('trust proxy', trustedProxyAddresses());
@@ -37,11 +38,21 @@ app.use(
     credentials: true,
   })
 );
-// A 100,000-character article can exceed 100 KB in UTF-8 (or JSON escapes).
-// Keep the larger, bounded budget scoped to editorial requests.
-app.use('/api/v1/articles', express.json({ limit: '1mb' }));
-// Six 30,000-character policy sections need room for JSON-escaped Unicode.
-app.use('/api/v1/support', express.json({ limit: '2mb' }));
+// Long editorial/information content and six policy sections need Unicode headroom.
+app.use('/api/v1/articles', express.json({ limit: '8mb' }));
+app.use('/api/v1/support', express.json({ limit: '8mb' }));
+// Descriptions can occupy 600 KB when JSON-escaped; multipart has its own field budget.
+app.use(['/api/v1/categories', '/api/v1/brands', '/api/v1/hero-slides'], express.json({ limit: '1mb' }));
+// One million description characters may occupy 6 MB when JSON-escaped.
+// Keep this budget exclusive to product creation/editing, not public reviews.
+const productWriteJson = express.json({ limit: '8mb' });
+app.use('/api/v1/products', (req, res, next) => {
+  if ((req.method === 'POST' && req.path === '/') ||
+      (req.method === 'PUT' && /^\/[^/]+\/?$/.test(req.path))) {
+    return productWriteJson(req, res, next);
+  }
+  return next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(observeRisk);
@@ -63,6 +74,7 @@ app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/data-sync', dataSyncRoutes);
 app.use('/api/v1/customer-auth', customerAuthRoutes);
 
 app.use((_req: Request, _res: Response, next: NextFunction) => {

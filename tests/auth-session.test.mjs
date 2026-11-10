@@ -70,12 +70,62 @@ test('/me requires authentication', async () => {
   assert.equal((await fetch(base + '/api/v1/auth/me')).status, 401);
 });
 
-test('temporary-password accounts cannot access business APIs, even if they are admin', async (t) => {
-  const headers = authenticate(
-    t,
-    account({ role: 'admin', mustChangePassword: true })
-  );
-  assert.equal((await fetch(base + '/api/v1/users', { headers })).status, 403);
+test("fresh admin login cookie restores the session across repeated reloads and rejects the rotated cookie", async (t) => {
+  const user = account({ role: "super_admin" });
+  t.mock.method(User, "findOne", () => ({ select: async () => user }));
+  t.mock.method(User, "findById", () => ({ select: async () => user }));
+  t.mock.method(User, "findOneAndUpdate", async (filter, update) => {
+    if (filter.refreshToken && filter.refreshToken !== user.refreshToken) return null;
+    Object.assign(user, update.$set);
+    return user;
+  });
+  const headers = {
+    Origin: "http://localhost:5173",
+    "X-Auth-Transport": "cookie",
+    "X-Login-Area": "admin",
+  };
+  const login = await post("/api/v1/auth/login", { email: user.email, password }, headers);
+  assert.equal(login.status, 200);
+  const expiry = login.headers.get('set-cookie').match(/Expires=([^;]+)/i)?.[1];
+  const remaining = new Date(expiry).getTime() - Date.now();
+  assert.ok(remaining > 29 * 24 * 60 * 60 * 1000);
+  assert.ok(remaining <= 30 * 24 * 60 * 60 * 1000);
+  assert.match(login.headers.get('set-cookie'), /HttpOnly/);
+  assert.equal((await login.json()).data.refreshToken, undefined);
+  let cookie = login.headers.get("set-cookie").split(";")[0];
+  const originalCookie = cookie;
+  const diagnostic = t.mock.method(console, "warn", () => {});
+  for (let reload = 0; reload < 2; reload++) {
+    const refreshed = await post("/api/v1/auth/refresh", {}, { ...headers, Cookie: cookie });
+    assert.equal(refreshed.status, 200);
+    const { data } = await refreshed.json();
+    assert.equal(data.refreshToken, undefined);
+    const nextCookie = refreshed.headers.get("set-cookie").split(";")[0];
+    assert.notEqual(nextCookie, cookie);
+    cookie = nextCookie;
+    const profile = await fetch(base + "/api/v1/auth/me", {
+      headers: { Authorization: `Bearer ${data.accessToken}` },
+    });
+    assert.equal(profile.status, 200);
+    assert.equal((await profile.json()).data.role, "super_admin");
+  }
+  const replay = await post("/api/v1/auth/refresh", {}, { ...headers, Cookie: originalCookie });
+  assert.equal(replay.status, 401);
+  assert.equal((await replay.json()).code, "AUTH_REFRESH_REVOKED");
+  assert.deepEqual(diagnostic.mock.calls[0].arguments, ["Administrative refresh rejected", {
+    code: "AUTH_REFRESH_REVOKED",
+    accountFound: true,
+    roleAllowed: true,
+    accountActive: true,
+    sessionVersionMatches: true,
+    storedRefreshTokenPresent: true,
+    refreshTokenMatches: false,
+  }]);
+});
+
+test("temporary-password accounts cannot access business APIs, even if they are admin", async (t) => {
+  const headers = authenticate(t, account({ role: "admin", mustChangePassword: true }));
+  assert.equal((await fetch(base + "/api/v1/users", { headers })).status, 403);
 });
 
 test("staff cannot create users or reset another user's password", async (t) => {

@@ -1,3 +1,4 @@
+import { categoryMembership } from '../dist/utils/products/catalog-reference.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -5,6 +6,8 @@ import app from '../dist/app.js';
 import Product from '../dist/models/products/products.model.js';
 import {
   publicProductFields,
+  publicProductListFields,
+  listStoreProducts,
   relatedStoreProducts,
 } from '../dist/services/products/store-products.service.js';
 import { Categories } from '../dist/models/categories/categories.model.js';
@@ -19,6 +22,31 @@ function mockReferences(t) {
     });
 }
 
+test('catalog lists exclude large editorial fields in MongoDB, including price sorting; indexing opts in', async (t) => {
+  for (const model of [Categories, BrandModel])
+    t.mock.method(model, 'distinct', async () => ['a'.repeat(24)]);
+  const originalFind = Product.find.bind(Product);
+  const find = t.mock.method(Product, 'find', () => {
+    const query = originalFind();
+    query.lean = async () => {
+      const projection = query.projection();
+      for (const field of ['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'])
+        assert.equal(projection[field], includeContent ? 1 : undefined);
+      assert.equal(projection.product_name, 1);
+      return [];
+    };
+    return query;
+  });
+  t.mock.method(Product, 'countDocuments', async () => 0);
+  t.mock.method(Product, 'aggregate', async () => []);
+  let includeContent = false;
+  await listStoreProducts({});
+  await listStoreProducts({ sortBy: 'price', sortOrder: 'asc' });
+  includeContent = true;
+  await listStoreProducts({}, undefined, { includeContent: true });
+  assert.ok(find.mock.callCount() >= 3);
+});
+
 test('public catalog is anonymous, paginated and active-only; admin stays protected', async (t) => {
   mockReferences(t);
   const server = app.listen(0, '127.0.0.1');
@@ -27,7 +55,7 @@ test('public catalog is anonymous, paginated and active-only; admin stays protec
   const base = `http://127.0.0.1:${server.address().port}/api/v1/products`;
   const chain = {
     select(fields) {
-      assert.equal(fields, publicProductFields);
+      assert.equal(fields, publicProductListFields);
       return this;
     },
     populate() {
@@ -94,6 +122,7 @@ test('public detail cannot read an inactive product and excludes import/internal
     });
     return {
       select(fields) {
+        assert.equal(fields, publicProductFields);
         assert.ok(!fields.split(' ').includes('__v'));
         assert.ok(!fields.split(' ').includes('external_id'));
         return this;
@@ -142,7 +171,7 @@ test('related products match only the same category, exclude self and return at 
     assert.deepEqual(query._id, { $ne: 'current' });
     assert.equal(query.is_active, true);
     assert.deepEqual(query.$and[0].category, { $in: ['active-id'] });
-    assert.deepEqual(query.$and[1], { category: 'category-id' });
+    assert.deepEqual(query.$and[1], categoryMembership(['category-id']));
     return chain;
   });
   await relatedStoreProducts({
@@ -151,13 +180,6 @@ test('related products match only the same category, exclude self and return at 
     tags: ['wireless', 'audio'],
   });
   find.mock.restore();
-  t.mock.method(Product, 'find', (query) => {
-    assert.deepEqual(query.$and[1], { category: 'category-id' });
-    return chain;
-  });
-  await relatedStoreProducts({
-    _id: 'current',
-    category: 'category-id',
-    tags: [],
-  });
+  t.mock.method(Product, 'find', query => { assert.deepEqual(query.$and[1], categoryMembership(['category-id'])); return chain; });
+  await relatedStoreProducts({ _id: 'current', category: 'category-id', tags: [] });
 });

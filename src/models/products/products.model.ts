@@ -1,3 +1,5 @@
+import { DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
+import { PRODUCT_DESCRIPTION_MAX_LENGTH } from '../../config/product-limits.js';
 import { sumVariantStock } from '../../utils/orders/inventory.js';
 import mongoose, { Schema } from 'mongoose';
 
@@ -122,9 +124,9 @@ const productSchema = new Schema(
       ),
       default: null,
     },
-    warrantyInformation: { type: String, maxlength: 2000, default: null },
-    shippingInformation: { type: String, maxlength: 2000, default: null },
-    returnPolicy: { type: String, maxlength: 2000, default: null },
+    warrantyInformation: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
+    shippingInformation: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
+    returnPolicy: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
     minimumOrderQuantity: {
       type: Number,
       min: 1,
@@ -164,6 +166,7 @@ const productSchema = new Schema(
       min: [0, 'Giảm giá không được nhỏ hơn 0'],
       max: [70, 'Giảm giá không được vượt quá 70%'],
     },
+    categories: { type: [{ type: Schema.Types.ObjectId, ref: 'Categories' }], default: undefined },
     category: {
       type: Schema.Types.ObjectId,
       ref: 'Categories',
@@ -176,6 +179,7 @@ const productSchema = new Schema(
     },
     description: {
       type: String,
+      maxlength: PRODUCT_DESCRIPTION_MAX_LENGTH,
       trim: true,
       default: null,
     },
@@ -265,5 +269,6 @@ productSchema.index(
   }
 );
 
+productSchema.index({ categories: 1 });
 const Product = mongoose.model('Product', productSchema);
 export default Product;

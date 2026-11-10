@@ -10,6 +10,7 @@ import {
 import {
   aiSearchSchema,
   historyQuery,
+  cancelTurnSchema,
 } from '../../validations/ai/ai.validation.js';
 import {
   AiChunk,
@@ -21,6 +22,12 @@ import {
 import { aiConfig } from '../../services/ai/config.js';
 import { httpAiTask } from '../../services/ai/request-lifecycle.js';
 const owner = (locals: Record<string, unknown>) => locals['aiOwner'] as AiOwner;
+export const cancel: RequestHandler = asyncHandler(async (req, res) => {
+  const input = cancelTurnSchema.parse(req.body);
+  sendResponse(res, 200, { data: await conversations.cancelTurn(
+    String(req.params['id']), owner(res.locals), input.requestId, input.content
+  ) });
+});
 export const create: RequestHandler = asyncHandler(async (_req, res) => {
   const doc = await conversations.createConversation(owner(res.locals));
   sendResponse(res, 201, { data: { id: String(doc._id), status: doc.status } });

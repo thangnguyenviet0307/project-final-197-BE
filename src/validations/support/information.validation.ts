@@ -1,3 +1,4 @@
+import { LONG_TEXT_MAX_LENGTH } from '../../config/text-limits.js';
 import { z } from 'zod';
 
 export const informationParams = z
@@ -12,7 +13,7 @@ export const hasReadableContent = (value: string) =>
     .trim().length > 0;
 export const saveInformationSchema = z
   .object({
-    content: z.string().trim().max(30000),
+    content: z.string().trim().max(LONG_TEXT_MAX_LENGTH),
     expectedVersion: z.number().int().nonnegative(),
     publish: z.boolean(),
   })

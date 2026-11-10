@@ -1,3 +1,7 @@
+import {
+  categoryMembership,
+  expandPublicCategoryFilter,
+} from '../../utils/products/catalog-reference.js';
 import Product from '../../models/products/products.model.js';
 import {
   buildProductSearchQuery,
@@ -11,11 +15,25 @@ import { BrandModel } from '../../models/brands/brands.model.js';
 
 // Explicit public fields: import provenance and optimistic concurrency stay private.
 export const publicProductFields =
-  '_id product_name slug sku price discount category brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency';
+  '_id product_name slug sku price discount category categories brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency';
 const references = [
   { path: 'category', select: '_id name' },
+  {
+    path: 'categories',
+    select: '_id name',
+    match: { isActive: true, isDeleted: { $ne: true } },
+  },
   { path: 'brand', select: '_id name' },
 ];
+
+// Lists do not render editorial content. Exclude it in MongoDB, before loading
+// documents into memory; detail reads and internal indexing retain full content.
+export const publicProductListFields = publicProductFields
+  .split(' ')
+  .filter((field) =>
+    !['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'].includes(field)
+  )
+  .join(' ');
 
 export async function visibleCatalogFilter(
   signal?: AbortSignal
@@ -38,21 +56,28 @@ export async function visibleCatalogFilter(
 
 export async function listStoreProducts(
   filters: Partial<GetProductsQuery>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: { includeContent?: boolean } = {}
 ) {
   signal?.throwIfAborted();
+  if (filters.category) {
+    filters = {
+      ...filters,
+      category: (await expandPublicCategoryFilter(filters.category, signal))!,
+    };
+  }
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 12;
   const query: Record<string, unknown> = {
     $and: [
-      await buildProductSearchQuery(filters, signal),
+      await buildProductSearchQuery(filters, true, signal),
       await visibleCatalogFilter(signal),
     ],
     is_active: true,
   };
   const priceIds =
     filters.sortBy === 'price'
-      ? await discountedPricePageIds(query, filters, page, limit)
+      ? await discountedPricePageIds(query, filters, page, limit, signal)
       : null;
   const populate = signal
     ? references.map((reference) => ({
@@ -60,13 +85,16 @@ export async function listStoreProducts(
         options: { signal, maxTimeMS: 5000 },
       }))
     : references;
+  const fields = options.includeContent
+    ? publicProductFields
+    : publicProductListFields;
   const dataQuery = priceIds
     ? Product.find({ $and: [query, { _id: { $in: priceIds } }] })
-        .select(publicProductFields)
+        .select(fields)
         .populate(populate)
         .lean()
     : Product.find(query)
-        .select(publicProductFields)
+        .select(fields)
         .populate(populate)
         .sort(buildProductSort(filters))
         .skip((page - 1) * limit)
@@ -103,6 +131,7 @@ export async function getStoreProduct(slug: string) {
 export async function relatedStoreProducts(product: {
   _id: unknown;
   category: unknown;
+  categories?: unknown[] | null;
   tags?: string[];
 }) {
   const category =
@@ -114,10 +143,20 @@ export async function relatedStoreProducts(product: {
   const query: Record<string, unknown> = {
     _id: { $ne: product._id },
     is_active: true,
-    $and: [await visibleCatalogFilter(), { category }],
+    $and: [
+      await visibleCatalogFilter(),
+      categoryMembership([
+        category,
+        ...(product.categories ?? []).map((value) =>
+          value && typeof value === 'object' && '_id' in value
+            ? value._id
+            : value
+        ),
+      ]),
+    ],
   };
   return Product.find(query)
-    .select(publicProductFields)
+    .select(publicProductListFields)
     .populate(references)
     .sort({ createdAt: -1, _id: -1 })
     .limit(5)

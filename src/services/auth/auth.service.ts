@@ -143,6 +143,22 @@ export async function refresh(refreshToken: string, area?: LoginArea) {
     user.refreshToken !== hashToken(refreshToken) ||
     (user.tokenVersion ?? 0) !== decoded.version
   ) {
+    // Keep rejection details server-side without logging credentials or identity.
+    console.warn('Administrative refresh rejected', {
+      code: 'AUTH_REFRESH_REVOKED',
+      accountFound: Boolean(user),
+      roleAllowed: Boolean(
+        user && ['super_admin', 'admin', 'staff'].includes(user.role)
+      ),
+      accountActive: user?.active === true,
+      sessionVersionMatches: Boolean(
+        user && (user.tokenVersion ?? 0) === decoded.version
+      ),
+      storedRefreshTokenPresent: Boolean(user?.refreshToken),
+      refreshTokenMatches: Boolean(
+        user && user.refreshToken === hashToken(refreshToken)
+      ),
+    });
     throw createHttpError(401, 'Refresh token không hợp lệ', {
       authCode: 'AUTH_REFRESH_REVOKED',
     });

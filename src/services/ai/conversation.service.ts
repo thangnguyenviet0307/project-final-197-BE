@@ -9,7 +9,7 @@ import {
 import type { AiOwner } from '../../types/ai/ai.types.js';
 import { DAY, HOUR, guestExpiry, messageExpiry } from './config.js';
 import { digest } from './identity.service.js';
-import { cancelConversation } from './active-turns.js';
+import { cancelConversation, cancelRegisteredTurn } from './active-turns.js';
 import { productCardsByIds } from './retrieval.service.js';
 const ownerFilter = (owner: AiOwner) => ({
   ownerKind: owner.kind,
@@ -241,6 +241,57 @@ export async function beginTurn(
     );
     return { turn: turn!, replay: false };
   });
+}
+
+export async function cancelTurn(
+  id: string,
+  owner: AiOwner,
+  requestId: string,
+  content: string
+) {
+  const result = await mongoose.connection.transaction(async (session) => {
+    // Serialize with beginTurn on the conversation, including cancellation
+    // arriving before the send transaction has created its message.
+    const conversation = await AiConversation.findOneAndUpdate(
+      { _id: id, ...ownerFilter(owner), expiresAt: { $gt: new Date() } },
+      { $inc: { __v: 1 } },
+      { session, returnDocument: 'after' }
+    );
+    if (!conversation) throw createError(404, 'Conversation not found');
+    let turn = await AiTurn.findOne({ conversationId: id, requestId }).session(session);
+    if (turn && turn.content !== content)
+      throw createError(409, 'Request ID belongs to different content');
+    if (!turn) {
+      if (conversation.status !== 'active') throw createError(409, 'Conversation ended');
+      // Durable cancellation receipt: a delayed send replays cancelled and
+      // never starts a paid generation, even on another API instance.
+      const created = await AiTurn.create([{
+        conversationId: id, requestId, content,
+        status: 'cancelled', expiresAt: conversation.expiresAt,
+      }], { session });
+      turn = created[0] ?? null;
+    } else if (turn.status === 'processing') {
+      turn = await AiTurn.findOneAndUpdate(
+        { _id: turn._id, status: 'processing' },
+        { $set: { status: 'cancelled' } },
+        { session, returnDocument: 'after' }
+      );
+    }
+    if (!turn) throw createError(409, 'Turn changed; reload history');
+    if (turn.status === 'cancelled') {
+      await AiConversation.updateOne(
+        { _id: id, activeRequestId: requestId },
+        { $set: { activeRequestId: null, busyUntil: null } },
+        { session }
+      );
+    }
+    return {
+      requestId: turn.requestId, status: turn.status,
+      answer: turn.answer, sources: turn.sources,
+    };
+  });
+  if (result.status === 'cancelled') cancelRegisteredTurn(id, requestId);
+  return result;
 }
 export async function socketTicket(owner: AiOwner) {
   const token = randomBytes(32).toString('hex');

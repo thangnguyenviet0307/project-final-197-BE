@@ -93,7 +93,7 @@ test('product query validates range, sort fields and catalog references', () => 
     ],
   });
   assert.equal(query.product_name.$regex, 'Case\\.\\*');
-  assert.equal(query.category, id);
+  assert.deepEqual(query.$and[0].$or, [{ category: { $in: [id] } }, { categories: { $in: [id] } }]);
   assert.equal(query.variants.$elemMatch.sku, 'ABC-1');
   assert.ok(query.variants.$elemMatch.color && query.variants.$elemMatch.size);
   assert.deepEqual(buildProductSort(parsed), { price: 1, _id: 1 });

@@ -68,11 +68,15 @@ const getVariantByProductAndVariantId: RequestHandler = asyncHandler(
   }
 );
 
-export const getProductBySlug: RequestHandler = asyncHandler(async (req, res) => {
-  const product = await getAdministrativeProductBySlug(req.params['slug'] as string);
-  assertFound(product, 'Không tìm thấy sản phẩm');
-  sendResponse(res, 200, { success: true, data: product });
-});
+export const getProductBySlug: RequestHandler = asyncHandler(
+  async (req, res) => {
+    const product = await getAdministrativeProductBySlug(
+      req.params['slug'] as string
+    );
+    assertFound(product, 'Không tìm thấy sản phẩm');
+    sendResponse(res, 200, { success: true, data: product });
+  }
+);
 
 const getProductById: RequestHandler = asyncHandler(
   async (req: Request, res: Response) => {

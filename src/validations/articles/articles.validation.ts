@@ -1,4 +1,7 @@
-import { LONG_TEXT_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
+import {
+  LONG_TEXT_MAX_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
+} from '../../config/text-limits.js';
 import { z } from 'zod';
 import {
   hasUpdateFields,

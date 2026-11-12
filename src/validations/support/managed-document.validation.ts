@@ -19,7 +19,10 @@ export const documentVersion = z
   .object({ expectedVersion: z.number().int().nonnegative() })
   .strict();
 export const documentInput = documentVersion
-  .extend({ content: z.string().trim().max(LONG_TEXT_MAX_LENGTH), publish: z.boolean() })
+  .extend({
+    content: z.string().trim().max(LONG_TEXT_MAX_LENGTH),
+    publish: z.boolean(),
+  })
   .strict()
   .refine((input) => !input.publish || hasReadableContent(input.content), {
     message: 'Vui lòng nhập nội dung trước khi công bố.',

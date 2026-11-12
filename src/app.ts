@@ -42,13 +42,18 @@ app.use(
 app.use('/api/v1/articles', express.json({ limit: '8mb' }));
 app.use('/api/v1/support', express.json({ limit: '8mb' }));
 // Descriptions can occupy 600 KB when JSON-escaped; multipart has its own field budget.
-app.use(['/api/v1/categories', '/api/v1/brands', '/api/v1/hero-slides'], express.json({ limit: '1mb' }));
+app.use(
+  ['/api/v1/categories', '/api/v1/brands', '/api/v1/hero-slides'],
+  express.json({ limit: '1mb' })
+);
 // One million description characters may occupy 6 MB when JSON-escaped.
 // Keep this budget exclusive to product creation/editing, not public reviews.
 const productWriteJson = express.json({ limit: '8mb' });
 app.use('/api/v1/products', (req, res, next) => {
-  if ((req.method === 'POST' && req.path === '/') ||
-      (req.method === 'PUT' && /^\/[^/]+\/?$/.test(req.path))) {
+  if (
+    (req.method === 'POST' && req.path === '/') ||
+    (req.method === 'PUT' && /^\/[^/]+\/?$/.test(req.path))
+  ) {
     return productWriteJson(req, res, next);
   }
   return next();

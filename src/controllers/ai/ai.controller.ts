@@ -9,9 +9,7 @@ import { asyncHandler } from '../../utils/shared/async-handler.util.js';
 import { sendResponse } from '../../helpers/response.helper.js';
 import type { AiOwner } from '../../types/ai/ai.types.js';
 import * as conversations from '../../services/ai/conversation.service.js';
-import {
-  searchProducts,
-} from '../../services/ai/retrieval.service.js';
+import { searchProducts } from '../../services/ai/retrieval.service.js';
 import {
   aiSearchSchema,
   historyQuery,

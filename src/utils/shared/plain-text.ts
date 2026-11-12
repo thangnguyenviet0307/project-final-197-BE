@@ -26,7 +26,9 @@ export function plainText(value: string): string {
       else if (character === '>') break;
     }
     if (end === value.length) break;
-    const tag = /^\s*(script|style)(?=[\s/>]|$)/i.exec(value.slice(start + 1, end));
+    const tag = /^\s*(script|style)(?=[\s/>]|$)/i.exec(
+      value.slice(start + 1, end)
+    );
     cursor = end + 1;
     if (tag) {
       const name = tag[1]!.toLowerCase();
@@ -40,5 +42,9 @@ export function plainText(value: string): string {
       cursor = closeEnd + 1;
     }
   }
-  return parts.join('').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  return parts
+    .join('')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

@@ -143,14 +143,71 @@ test('targeted eligible-order lookup always scopes to the signed-in customer and
 
 test('support inputs reject forged identity, missing publication content, invalid URL filters and oversized text', () => {
   assert.equal(createWarrantySchema.safeParse(input).success, true);
-  for (const extra of [{ customerId: other }, { status: 'resolved' }, { itemIndex: -1 }, { orderId: 'bad' }, { description: 'x'.repeat(100001) }]) assert.equal(createWarrantySchema.safeParse({ ...input, ...extra }).success, false);
-  assert.equal(savePolicySchema.safeParse({ content, expectedVersion: 0, publish: true }).success, true);
-  assert.equal(savePolicySchema.safeParse({ content: { ...content, privacy: '' }, expectedVersion: 0, publish: true }).success, false);
-  assert.equal(savePolicySchema.safeParse({ content: { ...content, warranty: '' }, expectedVersion: 0, publish: true }).success, false);
-  assert.equal(savePolicySchema.safeParse({ content: { ...content, warranty: '' }, expectedVersion: 0, publish: false }).success, true);
-  assert.equal(updateWarrantySchema.safeParse({ status: 'resolved', note: ' ', expectedVersion: 0 }).success, false);
-  assert.equal(updateWarrantySchema.safeParse({ status: 'resolved', note: 'Đã xử lý', expectedVersion: 0, handlerId: other }).success, false);
-  for (const query of [{ page: 0 }, { page: 'bad' }, { limit: 51 }, { status: 'unknown' }, { customerId: other }]) assert.equal(supportListSchema.safeParse(query).success, false);
+  for (const extra of [
+    { customerId: other },
+    { status: 'resolved' },
+    { itemIndex: -1 },
+    { orderId: 'bad' },
+    { description: 'x'.repeat(100001) },
+  ])
+    assert.equal(
+      createWarrantySchema.safeParse({ ...input, ...extra }).success,
+      false
+    );
+  assert.equal(
+    savePolicySchema.safeParse({ content, expectedVersion: 0, publish: true })
+      .success,
+    true
+  );
+  assert.equal(
+    savePolicySchema.safeParse({
+      content: { ...content, privacy: '' },
+      expectedVersion: 0,
+      publish: true,
+    }).success,
+    false
+  );
+  assert.equal(
+    savePolicySchema.safeParse({
+      content: { ...content, warranty: '' },
+      expectedVersion: 0,
+      publish: true,
+    }).success,
+    false
+  );
+  assert.equal(
+    savePolicySchema.safeParse({
+      content: { ...content, warranty: '' },
+      expectedVersion: 0,
+      publish: false,
+    }).success,
+    true
+  );
+  assert.equal(
+    updateWarrantySchema.safeParse({
+      status: 'resolved',
+      note: ' ',
+      expectedVersion: 0,
+    }).success,
+    false
+  );
+  assert.equal(
+    updateWarrantySchema.safeParse({
+      status: 'resolved',
+      note: 'Đã xử lý',
+      expectedVersion: 0,
+      handlerId: other,
+    }).success,
+    false
+  );
+  for (const query of [
+    { page: 0 },
+    { page: 'bad' },
+    { limit: 51 },
+    { status: 'unknown' },
+    { customerId: other },
+  ])
+    assert.equal(supportListSchema.safeParse(query).success, false);
 });
 
 test('public policy contains only the last published snapshot; draft is private', async (t) => {
@@ -603,7 +660,6 @@ test('policy is anonymous; staff cannot manage policy and customer/admin authent
     400
   );
 });
-
 
 test('policy sections accept 100,000 characters including markup and reject overflow', () => {
   const html = '<p>' + 'a'.repeat(99993) + '</p>';

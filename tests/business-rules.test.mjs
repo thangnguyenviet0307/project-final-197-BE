@@ -15,7 +15,11 @@ import { UserService } from '../dist/services/users/users.service.js';
 import { CategoriesService } from '../dist/services/categories/categories.service.js';
 import { BrandService } from '../dist/services/brands/brands.service.js';
 import { deleteCustomer } from '../dist/services/customers/customers.service.js';
-import { assignOrder, createOrder, updateOrderStatus } from '../dist/services/orders/orders.services.js';
+import {
+  assignOrder,
+  createOrder,
+  updateOrderStatus,
+} from '../dist/services/orders/orders.services.js';
 import { verifyPassword } from '../dist/utils/auth/password.js';
 import { calculateOrderTotal } from '../dist/utils/orders/order-total.js';
 import { createAuthRateLimit } from '../dist/middlewares/auth/auth-rate-limit.middleware.js';
@@ -38,17 +42,37 @@ const actor = { id: String(id()), role: 'admin' };
 test('category delete body rejects duplicate, malformed and unknown fields', () => {
   const child = String(id());
   assert.deepEqual(deleteCategorySchema.parse({}), { childIds: [] });
-  assert.equal(deleteCategorySchema.safeParse({ childIds: [child, child.toUpperCase()] }).success, false);
-  assert.equal(deleteCategorySchema.safeParse({ childIds: ['bad'] }).success, false);
-  assert.equal(deleteCategorySchema.safeParse({ deleteAll: true }).success, false);
+  assert.equal(
+    deleteCategorySchema.safeParse({ childIds: [child, child.toUpperCase()] })
+      .success,
+    false
+  );
+  assert.equal(
+    deleteCategorySchema.safeParse({ childIds: ['bad'] }).success,
+    false
+  );
+  assert.equal(
+    deleteCategorySchema.safeParse({ deleteAll: true }).success,
+    false
+  );
 });
-test('additional category writes validate IDs and reject duplicates or inactive references', async t => {
+test('additional category writes validate IDs and reject duplicates or inactive references', async (t) => {
   const value = String(id());
-  assert.equal(updateProductSchema.safeParse({ categories: [value, value.toUpperCase()] }).success, false);
-  assert.equal(updateProductSchema.safeParse({ categories: ['invalid'] }).success, false);
-  const { assertAdditionalCategories } = await import('../dist/utils/products/catalog-reference.js');
+  assert.equal(
+    updateProductSchema.safeParse({ categories: [value, value.toUpperCase()] })
+      .success,
+    false
+  );
+  assert.equal(
+    updateProductSchema.safeParse({ categories: ['invalid'] }).success,
+    false
+  );
+  const { assertAdditionalCategories } =
+    await import('../dist/utils/products/catalog-reference.js');
   t.mock.method(Categories, 'exists', () => query(null));
-  await assert.rejects(assertAdditionalCategories([value], session), { status: 409 });
+  await assert.rejects(assertAdditionalCategories([value], session), {
+    status: 409,
+  });
 });
 beforeEach((t) => {
   t.mock.method(mongoose.connection, 'transaction', async (work) =>
@@ -259,7 +283,11 @@ test('catalog references prevent deleting a used brand or category and inactive 
 
 test('category deletion removes only selected children and promotes surviving descendants in one transaction', async (t) => {
   const root = new Categories({ name: 'Root', slug: 'root' });
-  const selected = new Categories({ name: 'Selected', slug: 'selected', parent: root._id });
+  const selected = new Categories({
+    name: 'Selected',
+    slug: 'selected',
+    parent: root._id,
+  });
   const ids = [String(root._id), String(selected._id)];
   t.mock.method(Categories, 'findById', () => query(root));
   t.mock.method(Categories, 'find', (filter) => {
@@ -270,37 +298,55 @@ test('category deletion removes only selected children and promotes surviving de
     assert.deepEqual(filter.$or[0].category.$in, ids);
     return query(null);
   });
-  const promote = t.mock.method(Categories, 'updateMany', async (filter, update, options) => {
-    assert.deepEqual(filter.parent.$in, ids);
-    assert.deepEqual(filter._id.$nin, ids);
-    assert.equal(update.$set.parent, null);
-    assert.equal(options.session, session);
-    return { modifiedCount: 2 };
-  });
+  const promote = t.mock.method(
+    Categories,
+    'updateMany',
+    async (filter, update, options) => {
+      assert.deepEqual(filter.parent.$in, ids);
+      assert.deepEqual(filter._id.$nin, ids);
+      assert.equal(update.$set.parent, null);
+      assert.equal(options.session, session);
+      return { modifiedCount: 2 };
+    }
+  );
   t.mock.method(Categories, 'deleteMany', async (filter, options) => {
     assert.deepEqual(filter._id.$in, ids);
     assert.equal(options.session, session);
     return { deletedCount: 2 };
   });
-  assert.deepEqual(await CategoriesService.deleteCategory(ids[0], [ids[1]]), { deletedIds: ids, promotedCount: 2 });
+  assert.deepEqual(await CategoriesService.deleteCategory(ids[0], [ids[1]]), {
+    deletedIds: ids,
+    promotedCount: 2,
+  });
   assert.equal(promote.mock.callCount(), 1);
 });
 
 test('stale or unrelated child selection blocks every category write', async (t) => {
-  t.mock.method(Categories, 'findById', () => query(new Categories({ name: 'Root', slug: 'root' })));
+  t.mock.method(Categories, 'findById', () =>
+    query(new Categories({ name: 'Root', slug: 'root' }))
+  );
   t.mock.method(Product, 'exists', () => query(null));
   t.mock.method(Categories, 'find', () => query([]));
-  const write = t.mock.method(Categories, 'updateMany', async () => { throw new Error('Must not write'); });
-  await assert.rejects(CategoriesService.deleteCategory(String(id()), [String(id())]), { status: 409 });
+  const write = t.mock.method(Categories, 'updateMany', async () => {
+    throw new Error('Must not write');
+  });
+  await assert.rejects(
+    CategoriesService.deleteCategory(String(id()), [String(id())]),
+    { status: 409 }
+  );
   assert.equal(write.mock.callCount(), 0);
 });
 
 test('category deletion requires the confirmed deleted count', async (t) => {
-  t.mock.method(Categories, 'findById', () => query(new Categories({ name: 'Root', slug: 'root' })));
+  t.mock.method(Categories, 'findById', () =>
+    query(new Categories({ name: 'Root', slug: 'root' }))
+  );
   t.mock.method(Product, 'exists', () => query(null));
   t.mock.method(Categories, 'updateMany', async () => ({ modifiedCount: 0 }));
   t.mock.method(Categories, 'deleteMany', async () => ({ deletedCount: 0 }));
-  await assert.rejects(CategoriesService.deleteCategory(String(id())), { status: 409 });
+  await assert.rejects(CategoriesService.deleteCategory(String(id())), {
+    status: 409,
+  });
 });
 
 test('order reassignment preserves status, uses the transaction and blocks staff/final orders', async (t) => {

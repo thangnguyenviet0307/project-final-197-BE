@@ -1,4 +1,7 @@
-import { LONG_TEXT_MAX_LENGTH, POLICY_SECTION_MAX_LENGTH } from '../../config/text-limits.js';
+import {
+  LONG_TEXT_MAX_LENGTH,
+  POLICY_SECTION_MAX_LENGTH,
+} from '../../config/text-limits.js';
 import createHttpError from 'http-errors';
 import { StorePolicy } from '../../models/support/support.model.js';
 import { StoreInformation } from '../../models/support/information.model.js';
@@ -79,7 +82,9 @@ export async function writeDocument(
   input: { content: string; publish: boolean; expectedVersion: number },
   remove = false
 ) {
-  const maxLength = isPolicy(key) ? POLICY_SECTION_MAX_LENGTH : LONG_TEXT_MAX_LENGTH;
+  const maxLength = isPolicy(key)
+    ? POLICY_SECTION_MAX_LENGTH
+    : LONG_TEXT_MAX_LENGTH;
   if (input.content.length > maxLength)
     throw createHttpError(
       400,

@@ -71,7 +71,11 @@ export function generateAccessToken(user: TokenSubject): string {
 export function generateRefreshToken(user: TokenSubject): string {
   // Administrative cookies survive browser/server restarts. Each successful
   // rotation renews this window; customer sessions retain their existing policy.
-  return signToken(user, 'JWT_REFRESH_SECRET', user.accountType === 'customer' ? '7d' : '30d');
+  return signToken(
+    user,
+    'JWT_REFRESH_SECRET',
+    user.accountType === 'customer' ? '7d' : '30d'
+  );
 }
 export function generateTokenPair(user: TokenSubject): TokenPair {
   return {

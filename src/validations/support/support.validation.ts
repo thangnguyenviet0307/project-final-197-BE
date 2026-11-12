@@ -1,4 +1,7 @@
-import { POLICY_SECTION_MAX_LENGTH, DESCRIPTION_MAX_LENGTH } from '../../config/text-limits.js';
+import {
+  POLICY_SECTION_MAX_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
+} from '../../config/text-limits.js';
 import { hasReadableContent } from './information.validation.js';
 import { z } from 'zod';
 import { objectId } from '../shared/common.validation.js';

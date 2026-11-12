@@ -30,7 +30,12 @@ test('catalog lists exclude large editorial fields in MongoDB, including price s
     const query = originalFind();
     query.lean = async () => {
       const projection = query.projection();
-      for (const field of ['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'])
+      for (const field of [
+        'description',
+        'warrantyInformation',
+        'shippingInformation',
+        'returnPolicy',
+      ])
         assert.equal(projection[field], includeContent ? 1 : undefined);
       assert.equal(projection.product_name, 1);
       return [];
@@ -180,6 +185,13 @@ test('related products match only the same category, exclude self and return at 
     tags: ['wireless', 'audio'],
   });
   find.mock.restore();
-  t.mock.method(Product, 'find', query => { assert.deepEqual(query.$and[1], categoryMembership(['category-id'])); return chain; });
-  await relatedStoreProducts({ _id: 'current', category: 'category-id', tags: [] });
+  t.mock.method(Product, 'find', (query) => {
+    assert.deepEqual(query.$and[1], categoryMembership(['category-id']));
+    return chain;
+  });
+  await relatedStoreProducts({
+    _id: 'current',
+    category: 'category-id',
+    tags: [],
+  });
 });

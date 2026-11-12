@@ -8,7 +8,11 @@ export const StoreInformation = model(
     {
       _id: { type: String, required: true },
       content: { type: String, default: '', maxlength: LONG_TEXT_MAX_LENGTH },
-      publishedContent: { type: String, default: null, maxlength: LONG_TEXT_MAX_LENGTH },
+      publishedContent: {
+        type: String,
+        default: null,
+        maxlength: LONG_TEXT_MAX_LENGTH,
+      },
       publishedAt: { type: Date, default: null },
       publication: { type: publicationSchema, default: undefined },
     },

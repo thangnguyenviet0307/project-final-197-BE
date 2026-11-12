@@ -22,8 +22,17 @@ test('information validates slugs, versions, publication content and strict fiel
     publish: true,
   };
   assert.equal(saveInformationSchema.safeParse(input).success, true);
-  for (const change of [{ content: '<p><br></p>' }, { content: '<p>&nbsp;</p>' }, { content: 'x'.repeat(1000001) }, { expectedVersion: -1 }, { role: 'admin' }]) {
-    assert.equal(saveInformationSchema.safeParse({ ...input, ...change }).success, false);
+  for (const change of [
+    { content: '<p><br></p>' },
+    { content: '<p>&nbsp;</p>' },
+    { content: 'x'.repeat(1000001) },
+    { expectedVersion: -1 },
+    { role: 'admin' },
+  ]) {
+    assert.equal(
+      saveInformationSchema.safeParse({ ...input, ...change }).success,
+      false
+    );
   }
   assert.equal(
     saveInformationSchema.safeParse({ ...input, content: '', publish: false })

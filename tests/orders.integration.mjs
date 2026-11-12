@@ -318,44 +318,111 @@ test('concurrent category reparenting cannot create an ancestor cycle', async ()
 });
 
 test('selective deletion persists and atomically promotes surviving children', async () => {
-  const root = await Categories.create({ name: 'Delete root', slug: 'delete-root' });
-  const selected = await Categories.create({ name: 'Delete child', slug: 'delete-child', parent: root._id });
-  const survivor = await Categories.create({ name: 'Keep child', slug: 'keep-child', parent: root._id });
-  const grandchild = await Categories.create({ name: 'Keep grandchild', slug: 'keep-grandchild', parent: selected._id });
-  fixtures.categories.push(root._id, selected._id, survivor._id, grandchild._id);
-  const reference = await Product.create({ product_name: 'Delete guard', slug: 'delete-guard', category: selected._id, brand: brand._id, model_year: 2025, stock: 0 });
+  const root = await Categories.create({
+    name: 'Delete root',
+    slug: 'delete-root',
+  });
+  const selected = await Categories.create({
+    name: 'Delete child',
+    slug: 'delete-child',
+    parent: root._id,
+  });
+  const survivor = await Categories.create({
+    name: 'Keep child',
+    slug: 'keep-child',
+    parent: root._id,
+  });
+  const grandchild = await Categories.create({
+    name: 'Keep grandchild',
+    slug: 'keep-grandchild',
+    parent: selected._id,
+  });
+  fixtures.categories.push(
+    root._id,
+    selected._id,
+    survivor._id,
+    grandchild._id
+  );
+  const reference = await Product.create({
+    product_name: 'Delete guard',
+    slug: 'delete-guard',
+    category: selected._id,
+    brand: brand._id,
+    model_year: 2025,
+    stock: 0,
+  });
   fixtures.products.push(reference._id);
-  await assert.rejects(CategoriesService.deleteCategory(String(root._id), [String(selected._id)]), { status: 409 });
+  await assert.rejects(
+    CategoriesService.deleteCategory(String(root._id), [String(selected._id)]),
+    { status: 409 }
+  );
   assert.ok(await Categories.exists({ _id: root._id }));
-  assert.equal(String((await Categories.findById(survivor._id)).parent), String(root._id));
-  assert.equal(String((await Categories.findById(grandchild._id)).parent), String(selected._id));
+  assert.equal(
+    String((await Categories.findById(survivor._id)).parent),
+    String(root._id)
+  );
+  assert.equal(
+    String((await Categories.findById(grandchild._id)).parent),
+    String(selected._id)
+  );
   await Product.deleteOne({ _id: reference._id });
-  const result = await CategoriesService.deleteCategory(String(root._id), [String(selected._id)]);
+  const result = await CategoriesService.deleteCategory(String(root._id), [
+    String(selected._id),
+  ]);
   assert.equal(result.deletedIds.length, 2);
   assert.equal(result.promotedCount, 2);
-  assert.equal(await Categories.countDocuments({ _id: { $in: [root._id, selected._id] } }), 0);
+  assert.equal(
+    await Categories.countDocuments({ _id: { $in: [root._id, selected._id] } }),
+    0
+  );
   assert.equal((await Categories.findById(survivor._id)).parent, null);
   assert.equal((await Categories.findById(grandchild._id)).parent, null);
 });
 
 test('products persist multiple categories, filter without duplicates, and protect secondary references', async () => {
-  const extra = await Categories.create({ name: 'Additional catalog', slug: 'additional-catalog' });
+  const extra = await Categories.create({
+    name: 'Additional catalog',
+    slug: 'additional-catalog',
+  });
   fixtures.categories.push(extra._id);
-  const product = await productService.createProduct({ product_name: 'Multiple category fixture',
-    category: String(category._id), categories: [String(extra._id)], brand: String(brand._id), model_year: 2025, stock: 1 });
+  const product = await productService.createProduct({
+    product_name: 'Multiple category fixture',
+    category: String(category._id),
+    categories: [String(extra._id)],
+    brand: String(brand._id),
+    model_year: 2025,
+    stock: 1,
+  });
   fixtures.products.push(product._id);
-  assert.deepEqual((await Product.findById(product._id)).categories.map(String), [String(extra._id)]);
-  for (const filter of [String(category._id), String(extra._id), `${category._id},${extra._id}`]) {
-    const result = await storeProducts.listStoreProducts({ category: filter, search: 'Multiple category fixture' });
+  assert.deepEqual(
+    (await Product.findById(product._id)).categories.map(String),
+    [String(extra._id)]
+  );
+  for (const filter of [
+    String(category._id),
+    String(extra._id),
+    `${category._id},${extra._id}`,
+  ]) {
+    const result = await storeProducts.listStoreProducts({
+      category: filter,
+      search: 'Multiple category fixture',
+    });
     assert.equal(result.pagination.total, 1);
     assert.equal(result.data.length, 1);
     assert.equal(String(result.data[0]._id), String(product._id));
   }
   const detail = await storeProducts.getStoreProduct(product.slug);
   assert.equal(detail.categories[0].name, 'Additional catalog');
-  await assert.rejects(CategoriesService.deleteCategory(String(extra._id)), { status: 409 });
-  await productService.updateProduct(String(product._id), { description: 'Retain categories' });
-  assert.deepEqual((await Product.findById(product._id)).categories.map(String), [String(extra._id)]);
+  await assert.rejects(CategoriesService.deleteCategory(String(extra._id)), {
+    status: 409,
+  });
+  await productService.updateProduct(String(product._id), {
+    description: 'Retain categories',
+  });
+  assert.deepEqual(
+    (await Product.findById(product._id)).categories.map(String),
+    [String(extra._id)]
+  );
   await productService.updateProduct(String(product._id), { categories: [] });
   await CategoriesService.deleteCategory(String(extra._id));
   assert.ok(await Product.exists({ _id: product._id }));
@@ -363,34 +430,88 @@ test('products persist multiple categories, filter without duplicates, and prote
 });
 
 test('store hierarchy filters, count previews and admin exact membership remain consistent', async () => {
-  const root = await Categories.create({ name: 'Filter root', slug: 'filter-root' });
-  const child = await Categories.create({ name: 'Filter child', slug: 'filter-child', parent: root._id });
-  const leaf = await Categories.create({ name: 'Filter leaf', slug: 'filter-leaf', parent: child._id });
+  const root = await Categories.create({
+    name: 'Filter root',
+    slug: 'filter-root',
+  });
+  const child = await Categories.create({
+    name: 'Filter child',
+    slug: 'filter-child',
+    parent: root._id,
+  });
+  const leaf = await Categories.create({
+    name: 'Filter leaf',
+    slug: 'filter-leaf',
+    parent: child._id,
+  });
   fixtures.categories.push(root._id, child._id, leaf._id);
-  const product = await productService.createProduct({ product_name: 'Filter hierarchy fixture',
-    category: String(category._id), categories: [String(child._id), String(leaf._id)], brand: String(brand._id), price: 100, model_year: 2025 });
+  const product = await productService.createProduct({
+    product_name: 'Filter hierarchy fixture',
+    category: String(category._id),
+    categories: [String(child._id), String(leaf._id)],
+    brand: String(brand._id),
+    price: 100,
+    model_year: 2025,
+  });
   fixtures.products.push(product._id);
-  for (const filter of [String(root._id), String(child._id), String(leaf._id), `${root._id},${leaf._id}`]) {
-    const list = await storeProducts.listStoreProducts({ category: filter, brand: String(brand._id), search: 'Filter hierarchy fixture', sortBy: 'price', sortOrder: 'asc', limit: 10 });
-    const count = await storeProducts.listStoreProducts({ category: filter, brand: String(brand._id), search: 'Filter hierarchy fixture', limit: 1 });
+  for (const filter of [
+    String(root._id),
+    String(child._id),
+    String(leaf._id),
+    `${root._id},${leaf._id}`,
+  ]) {
+    const list = await storeProducts.listStoreProducts({
+      category: filter,
+      brand: String(brand._id),
+      search: 'Filter hierarchy fixture',
+      sortBy: 'price',
+      sortOrder: 'asc',
+      limit: 10,
+    });
+    const count = await storeProducts.listStoreProducts({
+      category: filter,
+      brand: String(brand._id),
+      search: 'Filter hierarchy fixture',
+      limit: 1,
+    });
     assert.equal(list.pagination.total, 1);
     assert.equal(count.pagination.total, list.pagination.total);
     assert.equal(list.data.length, 1);
   }
-  const adminParent = await productService.getAllProducts({ category: String(root._id), search: 'Filter hierarchy fixture' });
+  const adminParent = await productService.getAllProducts({
+    category: String(root._id),
+    search: 'Filter hierarchy fixture',
+  });
   assert.equal(adminParent.pagination.total, 0);
-  const adminChild = await productService.getAllProducts({ category: String(child._id), search: 'Filter hierarchy fixture' });
+  const adminChild = await productService.getAllProducts({
+    category: String(child._id),
+    search: 'Filter hierarchy fixture',
+  });
   assert.equal(adminChild.pagination.total, 1);
   await Categories.updateOne({ _id: child._id }, { $set: { isActive: false } });
-  const hidden = await storeProducts.listStoreProducts({ category: String(child._id), search: 'Filter hierarchy fixture' });
+  const hidden = await storeProducts.listStoreProducts({
+    category: String(child._id),
+    search: 'Filter hierarchy fixture',
+  });
   assert.equal(hidden.pagination.total, 0);
-  const rootWithHiddenBranch = await storeProducts.listStoreProducts({ category: String(root._id), search: 'Filter hierarchy fixture' });
+  const rootWithHiddenBranch = await storeProducts.listStoreProducts({
+    category: String(root._id),
+    search: 'Filter hierarchy fixture',
+  });
   assert.equal(rootWithHiddenBranch.pagination.total, 0);
-  const hiddenName = await storeProducts.listStoreProducts({ search: 'Filter child' });
+  const hiddenName = await storeProducts.listStoreProducts({
+    search: 'Filter child',
+  });
   assert.equal(hiddenName.pagination.total, 0);
   const detail = await storeProducts.getStoreProduct(product.slug);
-  assert.equal(detail.categories.some(item => String(item._id) === String(child._id)), false);
-  assert.equal(detail.categories.some(item => String(item._id) === String(leaf._id)), true);
+  assert.equal(
+    detail.categories.some((item) => String(item._id) === String(child._id)),
+    false
+  );
+  assert.equal(
+    detail.categories.some((item) => String(item._id) === String(leaf._id)),
+    true
+  );
 });
 
 test('concurrent category deletion and product creation cannot leave a dangling reference', async () => {

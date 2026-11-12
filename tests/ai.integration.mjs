@@ -42,12 +42,32 @@ import { EventEmitter } from 'node:events';
 import { generateAccessToken } from '../dist/utils/auth/token.js';
 import { AiSettings } from '../dist/models/ai/ai-settings.model.js';
 import * as management from '../dist/services/ai/settings.service.js';
-import { resolveAiRuntime, withAiRuntime, aiConfig, aiApiKey, environmentAiConfig } from '../dist/services/ai/config.js';
+import {
+  resolveAiRuntime,
+  withAiRuntime,
+  aiConfig,
+  aiApiKey,
+  environmentAiConfig,
+} from '../dist/services/ai/config.js';
 import { User } from '../dist/models/users/users.model.js';
-import { AiEmbeddingChunk, AiEmbeddingGeneration } from '../dist/models/ai/ai-embedding.model.js';
-import { createEmbeddingVersion, activateEmbeddingVersion, changeEmbeddingVersion, readEmbeddingVersions } from '../dist/services/ai/embedding-versions.service.js';
-import { runEmbeddingBuild, queueActiveEmbeddingRefresh } from '../dist/services/ai/embedding-worker.js';
-import { vectorInfrastructure, VectorIndexPending } from '../dist/services/ai/vector-infrastructure.js';
+import {
+  AiEmbeddingChunk,
+  AiEmbeddingGeneration,
+} from '../dist/models/ai/ai-embedding.model.js';
+import {
+  createEmbeddingVersion,
+  activateEmbeddingVersion,
+  changeEmbeddingVersion,
+  readEmbeddingVersions,
+} from '../dist/services/ai/embedding-versions.service.js';
+import {
+  runEmbeddingBuild,
+  queueActiveEmbeddingRefresh,
+} from '../dist/services/ai/embedding-worker.js';
+import {
+  vectorInfrastructure,
+  VectorIndexPending,
+} from '../dist/services/ai/vector-infrastructure.js';
 import { knowledgeSourceProvider } from '../dist/services/ai/knowledge-sources.js';
 import { withAiConfig, aiEmbeddingKey } from '../dist/services/ai/config.js';
 import { encryptCredential } from '../dist/services/ai/credentials.js';
@@ -67,94 +87,314 @@ const guest = { kind: 'guest', id: randomUUID() };
 
 test('iPhone cases in a shared-unit budget match live catalog aliases without semantic search', async (t) => {
   clearAiCache();
-  const brand = await BrandModel.create({ name: 'Case fixture Apple', slug: 'case-fixture-apple' });
-  const category = await Categories.create({ name: 'Ốp điện thoại', slug: 'case-fixture-category' });
-  const base = { category: category._id, brand: brand._id, stock: 5, is_active: true };
+  const brand = await BrandModel.create({
+    name: 'Case fixture Apple',
+    slug: 'case-fixture-apple',
+  });
+  const category = await Categories.create({
+    name: 'Ốp điện thoại',
+    slug: 'case-fixture-category',
+  });
+  const base = {
+    category: category._id,
+    brand: brand._id,
+    stock: 5,
+    is_active: true,
+  };
   const fixtures = await Product.insertMany([
-    { ...base, product_name: 'Ốp lưng iPhone 15 Pro/Pro max dodocase', slug: 'case-fixture-15', price: 166000 },
-    { ...base, product_name: 'Ốp lưng iPhone 17/18 kuroma', slug: 'case-fixture-17', price: 157000 },
-    { ...base, product_name: 'Ốp lưng Samsung S25', slug: 'case-fixture-samsung', price: 150000 },
-    { ...base, product_name: 'Ốp lưng iPhone đắt', slug: 'case-fixture-high', price: 250000 },
-    { ...base, product_name: 'Ốp lưng iPhone ẩn', slug: 'case-fixture-hidden', price: 150000, on_sale: false },
+    {
+      ...base,
+      product_name: 'Ốp lưng iPhone 15 Pro/Pro max dodocase',
+      slug: 'case-fixture-15',
+      price: 166000,
+    },
+    {
+      ...base,
+      product_name: 'Ốp lưng iPhone 17/18 kuroma',
+      slug: 'case-fixture-17',
+      price: 157000,
+    },
+    {
+      ...base,
+      product_name: 'Ốp lưng Samsung S25',
+      slug: 'case-fixture-samsung',
+      price: 150000,
+    },
+    {
+      ...base,
+      product_name: 'Ốp lưng iPhone đắt',
+      slug: 'case-fixture-high',
+      price: 250000,
+    },
+    {
+      ...base,
+      product_name: 'Ốp lưng iPhone ẩn',
+      slug: 'case-fixture-hidden',
+      price: 150000,
+      on_sale: false,
+    },
   ]);
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: 'iphone op lung', brand: 'iPhone', category: 'ốp lưng', minPrice: 100, maxPrice: 200 }));
-  const runtime = { config: { ...environmentAiConfig(), enabled: true, semanticEnabled: false }, apiKey: 'mock-only' };
-  const result = await withAiRuntime(runtime, () => searchProducts({ q: 'tôi muốn tìm ốp lưng iphone với giá tầm 100-200k', page: 1, limit: 10 }));
-  assert.deepEqual(new Set(result.rows.map((p) => p.id)), new Set(fixtures.slice(0, 2).map((p) => String(p._id))));
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: 'iphone op lung',
+    brand: 'iPhone',
+    category: 'ốp lưng',
+    minPrice: 100,
+    maxPrice: 200,
+  }));
+  const runtime = {
+    config: { ...environmentAiConfig(), enabled: true, semanticEnabled: false },
+    apiKey: 'mock-only',
+  };
+  const result = await withAiRuntime(runtime, () =>
+    searchProducts({
+      q: 'tôi muốn tìm ốp lưng iphone với giá tầm 100-200k',
+      page: 1,
+      limit: 10,
+    })
+  );
+  assert.deepEqual(
+    new Set(result.rows.map((p) => p.id)),
+    new Set(fixtures.slice(0, 2).map((p) => String(p._id)))
+  );
   assert.equal(result.searchContext.minPrice, 100000);
   assert.equal(result.searchContext.maxPrice, 200000);
-  const sorted = await withAiRuntime(runtime, () => searchProducts({ q: 'op lung iphone 100-200k gia tang dan', page: 1, limit: 10 }));
-  assert.deepEqual(sorted.rows.map((p) => p.price), [157000, 166000]);
+  const sorted = await withAiRuntime(runtime, () =>
+    searchProducts({
+      q: 'op lung iphone 100-200k gia tang dan',
+      page: 1,
+      limit: 10,
+    })
+  );
+  assert.deepEqual(
+    sorted.rows.map((p) => p.price),
+    [157000, 166000]
+  );
   clearAiCache();
 });
 
 test('catalog extrema sort all eligible products by live discounted variant price, not the newest 100', async (t) => {
   clearAiCache();
-  process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
-  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
-  const brand = await BrandModel.create({ name: 'Extrema Brand', slug: 'extrema-brand' });
-  const category = await Categories.create({ name: 'Extrema Category', slug: 'extrema-category' });
-  const baseProduct = { category: category._id, brand: brand._id, stock: 5, is_active: true };
-  const cheapest = await Product.create({ ...baseProduct, product_name: 'Extrema oldest', slug: 'extrema-oldest', price: 999999, discount: 50, variants: [{ sku: 'EXT-OLD', price: 1000, stock: 5 }] });
-  await Product.insertMany(Array.from({ length: 105 }, (_, i) => ({ ...baseProduct, product_name: `Extrema ${i}`, slug: `extrema-${i}`, price: 10000 + i })));
-  await Product.create({ ...baseProduct, product_name: 'Extrema hidden', slug: 'extrema-hidden', price: 1, on_sale: false });
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, sort: 'price_asc' }));
-  const result = await searchProducts({ q: 'Giá thấp nhất trong cửa hàng', brand: String(brand._id), page: 1, limit: 6 });
+  process.env.AI_ENABLED = 'true';
+  process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => {
+    process.env.AI_ENABLED = 'false';
+    delete process.env.GEMINI_API_KEY;
+    clearAiCache();
+  });
+  const brand = await BrandModel.create({
+    name: 'Extrema Brand',
+    slug: 'extrema-brand',
+  });
+  const category = await Categories.create({
+    name: 'Extrema Category',
+    slug: 'extrema-category',
+  });
+  const baseProduct = {
+    category: category._id,
+    brand: brand._id,
+    stock: 5,
+    is_active: true,
+  };
+  const cheapest = await Product.create({
+    ...baseProduct,
+    product_name: 'Extrema oldest',
+    slug: 'extrema-oldest',
+    price: 999999,
+    discount: 50,
+    variants: [{ sku: 'EXT-OLD', price: 1000, stock: 5 }],
+  });
+  await Product.insertMany(
+    Array.from({ length: 105 }, (_, i) => ({
+      ...baseProduct,
+      product_name: `Extrema ${i}`,
+      slug: `extrema-${i}`,
+      price: 10000 + i,
+    }))
+  );
+  await Product.create({
+    ...baseProduct,
+    product_name: 'Extrema hidden',
+    slug: 'extrema-hidden',
+    price: 1,
+    on_sale: false,
+  });
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+    brand: null,
+    category: null,
+    minPrice: null,
+    maxPrice: null,
+    sort: 'price_asc',
+  }));
+  const result = await searchProducts({
+    q: 'Giá thấp nhất trong cửa hàng',
+    brand: String(brand._id),
+    page: 1,
+    limit: 6,
+  });
   assert.equal(result.scope, 'catalog');
   assert.equal(result.total, 106);
   assert.equal(result.rows[0].id, String(cheapest._id));
   assert.equal(result.rows[0].price, 500);
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, sort: 'price_desc' }));
-  const high = await searchProducts({ q: 'Giá cao nhất trong cửa hàng', brand: String(brand._id), page: 1, limit: 1 });
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+    brand: null,
+    category: null,
+    minPrice: null,
+    maxPrice: null,
+    sort: 'price_desc',
+  }));
+  const high = await searchProducts({
+    q: 'Giá cao nhất trong cửa hàng',
+    brand: String(brand._id),
+    page: 1,
+    limit: 1,
+  });
   assert.equal(high.rows[0].price, 10104);
 });
 
 test('follow-up keeps structured filters, reads the full question and never substitutes hidden ordinal products', async (t) => {
-  clearAiCache(); process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
-  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
-  const brand = await BrandModel.create({ name: 'Followup Brand', slug: 'followup-brand' });
-  const category = await Categories.create({ name: 'Followup Category', slug: 'followup-category' });
-  const fixtures = await Product.insertMany([10000, 10001, 20000].map((price, i) => ({ product_name: `Followup ${i}`, slug: `followup-${i}`, brand: brand._id, category: category._id, stock: 1, price, is_active: true })));
-  const previousSearch = { q: '', brand: String(brand._id), minPrice: 10000, page: 1, limit: 6 };
-  const question = 'Tôi muốn tìm thêm sản phẩm. '.repeat(35) + 'Ngân sách tối đa 10001 đồng.';
+  clearAiCache();
+  process.env.AI_ENABLED = 'true';
+  process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => {
+    process.env.AI_ENABLED = 'false';
+    delete process.env.GEMINI_API_KEY;
+    clearAiCache();
+  });
+  const brand = await BrandModel.create({
+    name: 'Followup Brand',
+    slug: 'followup-brand',
+  });
+  const category = await Categories.create({
+    name: 'Followup Category',
+    slug: 'followup-category',
+  });
+  const fixtures = await Product.insertMany(
+    [10000, 10001, 20000].map((price, i) => ({
+      product_name: `Followup ${i}`,
+      slug: `followup-${i}`,
+      brand: brand._id,
+      category: category._id,
+      stock: 1,
+      price,
+      is_active: true,
+    }))
+  );
+  const previousSearch = {
+    q: '',
+    brand: String(brand._id),
+    minPrice: 10000,
+    page: 1,
+    limit: 6,
+  };
+  const question =
+    'Tôi muốn tìm thêm sản phẩm. '.repeat(35) + 'Ngân sách tối đa 10001 đồng.';
   let seen;
-  t.mock.method(aiProvider, 'interpretQuery', async (q, _signal, context) => { seen = { q, context }; return { search: '', brand: null, category: null, minPrice: null, maxPrice: 10001, inherit: true }; });
-  const result = await retrieveKnowledge(question, undefined, { previousSearch });
+  t.mock.method(aiProvider, 'interpretQuery', async (q, _signal, context) => {
+    seen = { q, context };
+    return {
+      search: '',
+      brand: null,
+      category: null,
+      minPrice: null,
+      maxPrice: 10001,
+      inherit: true,
+    };
+  });
+  const result = await retrieveKnowledge(question, undefined, {
+    previousSearch,
+  });
   assert.equal(seen.q, question);
   assert.equal(seen.context.previousSearch.brand, previousSearch.brand);
   assert.equal(result.searchContext.maxPrice, 10001);
   assert.ok(result.products.length > 0);
   assert.ok(result.products.every((p) => p.price >= 10000 && p.price <= 10001));
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, referencePositions: [2] }));
-  const missing = await retrieveKnowledge('Cái thứ hai thì sao?', undefined, { previousProductIds: ['a', 'b'], previousProducts: [] });
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+    brand: null,
+    category: null,
+    minPrice: null,
+    maxPrice: null,
+    referencePositions: [2],
+  }));
+  const missing = await retrieveKnowledge('Cái thứ hai thì sao?', undefined, {
+    previousProductIds: ['a', 'b'],
+    previousProducts: [],
+  });
   assert.equal(missing.products.length, 0);
   assert.match(missing.clarification, /không còn khả dụng/);
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, task: 'compare', productNames: ['Followup 0', 'Followup 2'] }));
-  const comparison = await retrieveKnowledge('So sánh Followup 0 và Followup 2', undefined, {});
-  assert.deepEqual(new Set(comparison.products.map((p) => p.id)), new Set([String(fixtures[0]._id), String(fixtures[2]._id)]));
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+    brand: null,
+    category: null,
+    minPrice: null,
+    maxPrice: null,
+    task: 'compare',
+    productNames: ['Followup 0', 'Followup 2'],
+  }));
+  const comparison = await retrieveKnowledge(
+    'So sánh Followup 0 và Followup 2',
+    undefined,
+    {}
+  );
+  assert.deepEqual(
+    new Set(comparison.products.map((p) => p.id)),
+    new Set([String(fixtures[0]._id), String(fixtures[2]._id)])
+  );
   assert.equal(comparison.clarification, undefined);
 });
 
 test('quick prompts clarify without paid generation and quota failures persist safe feedback for replay', async (t) => {
-  clearAiCache(); process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
-  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
-  const answer = t.mock.method(aiProvider, 'answerStream', async function* () { throw new Error('Unexpected paid generation'); });
-  t.mock.method(aiProvider, 'interpretQuery', async () => { throw Object.assign(new Error('secret-provider-payload'), { status: 429, code: 'insufficient_quota' }); });
+  clearAiCache();
+  process.env.AI_ENABLED = 'true';
+  process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => {
+    process.env.AI_ENABLED = 'false';
+    delete process.env.GEMINI_API_KEY;
+    clearAiCache();
+  });
+  const answer = t.mock.method(aiProvider, 'answerStream', async function* () {
+    throw new Error('Unexpected paid generation');
+  });
+  t.mock.method(aiProvider, 'interpretQuery', async () => {
+    throw Object.assign(new Error('secret-provider-payload'), {
+      status: 429,
+      code: 'insufficient_quota',
+    });
+  });
   const owner = { kind: 'guest', id: randomUUID() };
   const c = await chat.createConversation(owner);
   const events = [];
-  await runChat(owner, { conversationId: String(c._id), requestId: randomUUID(), content: 'So sánh sản phẩm' }, new AbortController().signal, (e) => events.push(e));
+  await runChat(
+    owner,
+    {
+      conversationId: String(c._id),
+      requestId: randomUUID(),
+      content: 'So sánh sản phẩm',
+    },
+    new AbortController().signal,
+    (e) => events.push(e)
+  );
   assert.equal(events.at(-1).type, 'chat:completed');
   assert.match(events.at(-1).data.answer, /ít nhất hai/);
   assert.equal(answer.mock.callCount(), 0);
-  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'Tìm tai nghe dưới 800 nghìn' };
-  await runChat(owner, input, new AbortController().signal, (e) => events.push(e));
+  const input = {
+    conversationId: String(c._id),
+    requestId: randomUUID(),
+    content: 'Tìm tai nghe dưới 800 nghìn',
+  };
+  await runChat(owner, input, new AbortController().signal, (e) =>
+    events.push(e)
+  );
   assert.equal(events.at(-1).data.code, 'AI_CREDIT_EXHAUSTED');
   const saved = await AiTurn.findOne({ requestId: input.requestId }).lean();
   assert.equal(saved.status, 'failed');
   assert.equal(saved.error.code, 'AI_CREDIT_EXHAUSTED');
   assert.ok(!JSON.stringify(saved).includes('secret-provider-payload'));
-  await runChat(owner, input, new AbortController().signal, (e) => events.push(e));
+  await runChat(owner, input, new AbortController().signal, (e) =>
+    events.push(e)
+  );
   assert.equal(events.at(-1).data.message, saved.error.message);
   assert.equal(answer.mock.callCount(), 0);
 });
@@ -184,15 +424,28 @@ test('disabled AI explains availability safely instead of reporting an ambiguous
     if (previous === undefined) delete process.env.AI_ENABLED;
     else process.env.AI_ENABLED = previous;
   });
-  const network = t.mock.method(globalThis, 'fetch', () => { throw new Error('Unexpected paid network request'); });
+  const network = t.mock.method(globalThis, 'fetch', () => {
+    throw new Error('Unexpected paid network request');
+  });
   const owner = { kind: 'guest', id: randomUUID() };
   const c = await chat.createConversation(owner);
   const events = [];
-  await runChat(owner, { conversationId: String(c._id), requestId: randomUUID(), content: 'Tìm tai nghe dưới 500 nghìn' },
-    new AbortController().signal, event => events.push(event));
+  await runChat(
+    owner,
+    {
+      conversationId: String(c._id),
+      requestId: randomUUID(),
+      content: 'Tìm tai nghe dưới 500 nghìn',
+    },
+    new AbortController().signal,
+    (event) => events.push(event)
+  );
   assert.equal(events.at(-1).type, 'chat:error');
   assert.equal(events.at(-1).data.status, 'failed');
-  assert.equal(events.at(-1).data.message, 'Trợ lý AI hiện chưa sẵn sàng. Bạn có thể tìm sản phẩm trong cửa hàng và quay lại sau.');
+  assert.equal(
+    events.at(-1).data.message,
+    'Trợ lý AI hiện chưa sẵn sàng. Bạn có thể tìm sản phẩm trong cửa hàng và quay lại sau.'
+  );
   assert.equal(network.mock.callCount(), 0);
 });
 
@@ -201,42 +454,82 @@ test('durable cancellation survives delayed sends, rejects other owners and keep
   const c = await chat.createConversation(owner);
   const id = String(c._id);
   const requestId = randomUUID();
-  await assert.rejects(chat.cancelTurn(id, guest, requestId, 'cancel me'), e => e.statusCode === 404);
-  assert.equal((await chat.cancelTurn(id, owner, requestId, 'cancel me')).status, 'cancelled');
+  await assert.rejects(
+    chat.cancelTurn(id, guest, requestId, 'cancel me'),
+    (e) => e.statusCode === 404
+  );
+  assert.equal(
+    (await chat.cancelTurn(id, owner, requestId, 'cancel me')).status,
+    'cancelled'
+  );
   const delayed = await chat.beginTurn(id, owner, requestId, 'cancel me');
   assert.equal(delayed.replay, true);
   assert.equal(delayed.turn.status, 'cancelled');
-  await assert.rejects(chat.cancelTurn(id, owner, requestId, 'different'), e => e.statusCode === 409);
-  assert.equal((await AiTurn.updateOne({ _id: delayed.turn._id, status: 'processing' }, { $set: { status: 'completed' } })).modifiedCount, 0);
+  await assert.rejects(
+    chat.cancelTurn(id, owner, requestId, 'different'),
+    (e) => e.statusCode === 409
+  );
+  assert.equal(
+    (
+      await AiTurn.updateOne(
+        { _id: delayed.turn._id, status: 'processing' },
+        { $set: { status: 'completed' } }
+      )
+    ).modifiedCount,
+    0
+  );
   const completedId = randomUUID();
   const completed = await chat.beginTurn(id, owner, completedId, 'done');
-  await AiTurn.updateOne({ _id: completed.turn._id, status: 'processing' }, { $set: { status: 'completed', answer: 'saved answer' } });
+  await AiTurn.updateOne(
+    { _id: completed.turn._id, status: 'processing' },
+    { $set: { status: 'completed', answer: 'saved answer' } }
+  );
   const result = await chat.cancelTurn(id, owner, completedId, 'done');
   assert.equal(result.status, 'completed');
   assert.equal(result.answer, 'saved answer');
-  assert.equal((await chat.cancelTurn(id, owner, completedId, 'done')).status, 'completed');
+  assert.equal(
+    (await chat.cancelTurn(id, owner, completedId, 'done')).status,
+    'completed'
+  );
 });
 
 test('HTTP cancellation validates origin, identity, payload and confirms the matching request', async () => {
-  const post = (path, cookie, body = {}, origin = 'http://localhost:5173') => fetch(base + path, {
-    method: 'POST',
-    headers: { Origin: origin, 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
-    body: JSON.stringify(body),
-  });
+  const post = (path, cookie, body = {}, origin = 'http://localhost:5173') =>
+    fetch(base + path, {
+      method: 'POST',
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/json',
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: JSON.stringify(body),
+    });
   const session = await post('/session');
   const cookie = session.headers.get('set-cookie').split(';')[0];
-  const conversation = (await (await post('/conversations', cookie)).json()).data.id;
+  const conversation = (await (await post('/conversations', cookie)).json())
+    .data.id;
   const path = `/conversations/${conversation}/cancel`;
   const body = { requestId: randomUUID(), content: 'cancel through HTTP' };
   assert.equal((await post(path, null, body)).status, 428);
-  assert.equal((await post(path, cookie, body, 'https://untrusted.example')).status, 403);
-  assert.equal((await post(path, cookie, { requestId: body.requestId })).status, 400);
+  assert.equal(
+    (await post(path, cookie, body, 'https://untrusted.example')).status,
+    403
+  );
+  assert.equal(
+    (await post(path, cookie, { requestId: body.requestId })).status,
+    400
+  );
   const otherSession = await post('/session');
   const otherCookie = otherSession.headers.get('set-cookie').split(';')[0];
   assert.equal((await post(path, otherCookie, body)).status, 404);
   const response = await post(path, cookie, body);
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).data, { requestId: body.requestId, status: 'cancelled', answer: '', sources: [] });
+  assert.deepEqual((await response.json()).data, {
+    requestId: body.requestId,
+    status: 'cancelled',
+    answer: '',
+    sources: [],
+  });
 });
 
 test('concurrent cancellation and completion choose exactly one immutable terminal result', async () => {
@@ -244,32 +537,72 @@ test('concurrent cancellation and completion choose exactly one immutable termin
   for (let i = 0; i < 8; i++) {
     const requestId = randomUUID();
     // A separate DB write competes with the cancel transaction, as on another instance.
-    const { turn } = await chat.beginTurn(String(c._id), guest, requestId, 'race');
+    const { turn } = await chat.beginTurn(
+      String(c._id),
+      guest,
+      requestId,
+      'race'
+    );
     const [cancelled, completed] = await Promise.all([
       chat.cancelTurn(String(c._id), guest, requestId, 'race'),
-      AiTurn.updateOne({ _id: turn._id, status: 'processing' }, { $set: { status: 'completed', answer: 'winner' } }),
+      AiTurn.updateOne(
+        { _id: turn._id, status: 'processing' },
+        { $set: { status: 'completed', answer: 'winner' } }
+      ),
     ]);
     const saved = await AiTurn.findById(turn._id);
-    assert.equal(saved.status, completed.modifiedCount ? 'completed' : 'cancelled');
+    assert.equal(
+      saved.status,
+      completed.modifiedCount ? 'completed' : 'cancelled'
+    );
     assert.equal(cancelled.status, saved.status);
-    assert.equal((await chat.cancelTurn(String(c._id), guest, requestId, 'race')).status, saved.status);
+    assert.equal(
+      (await chat.cancelTurn(String(c._id), guest, requestId, 'race')).status,
+      saved.status
+    );
     // A completed worker normally releases the conversation lock in finally.
-    await AiConversation.updateOne({ _id: c._id, activeRequestId: requestId }, { $set: { activeRequestId: null, busyUntil: null } });
+    await AiConversation.updateOne(
+      { _id: c._id, activeRequestId: requestId },
+      { $set: { activeRequestId: null, busyUntil: null } }
+    );
   }
 });
 
 test('replay distinguishes processing/completed/cancelled/failed without starting another provider call', async (t) => {
-  const answer = t.mock.method(aiProvider, 'answerStream', async function* () { throw new Error('Unexpected paid generation'); });
+  const answer = t.mock.method(aiProvider, 'answerStream', async function* () {
+    throw new Error('Unexpected paid generation');
+  });
   for (const status of ['processing', 'completed', 'cancelled', 'failed']) {
     const owner = { kind: 'guest', id: randomUUID() };
     const c = await chat.createConversation(owner);
-    const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'replay' };
-    const { turn } = await chat.beginTurn(input.conversationId, owner, input.requestId, input.content);
-    await AiTurn.updateOne({ _id: turn._id }, { $set: { status, answer: status === 'completed' ? 'saved' : '' } });
+    const input = {
+      conversationId: String(c._id),
+      requestId: randomUUID(),
+      content: 'replay',
+    };
+    const { turn } = await chat.beginTurn(
+      input.conversationId,
+      owner,
+      input.requestId,
+      input.content
+    );
+    await AiTurn.updateOne(
+      { _id: turn._id },
+      { $set: { status, answer: status === 'completed' ? 'saved' : '' } }
+    );
     const events = [];
-    await runChat(owner, input, new AbortController().signal, e => events.push(e));
+    await runChat(owner, input, new AbortController().signal, (e) =>
+      events.push(e)
+    );
     assert.equal(events.length, 1);
-    assert.equal(events[0].type, status === 'processing' ? 'chat:processing' : status === 'completed' ? 'chat:completed' : 'chat:error');
+    assert.equal(
+      events[0].type,
+      status === 'processing'
+        ? 'chat:processing'
+        : status === 'completed'
+          ? 'chat:completed'
+          : 'chat:error'
+    );
     assert.equal(events[0].data.status, status);
   }
   assert.equal(answer.mock.callCount(), 0);
@@ -278,42 +611,77 @@ test('replay distinguishes processing/completed/cancelled/failed without startin
 test('cancellation during the final database check cannot complete the turn', async (t) => {
   const owner = { kind: 'guest', id: randomUUID() };
   const c = await chat.createConversation(owner);
-  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'final check' };
+  const input = {
+    conversationId: String(c._id),
+    requestId: randomUUID(),
+    content: 'final check',
+  };
   const controller = new AbortController();
-  t.mock.method(aiProvider, 'answerStream', async function* () { yield 'answer'; });
+  t.mock.method(aiProvider, 'answerStream', async function* () {
+    yield 'answer';
+  });
   const original = AiConversation.exists;
-  t.mock.method(AiConversation, 'exists', async function(filter) {
+  t.mock.method(AiConversation, 'exists', async function (filter) {
     const result = await original.call(this, filter);
     controller.abort();
     return result;
   });
   const events = [];
-  await runChat(owner, input, controller.signal, e => events.push(e));
-  assert.equal((await AiTurn.findOne({ conversationId: c._id, requestId: input.requestId })).status, 'cancelled');
-  assert.equal(events.some(e => e.type === 'chat:completed'), false);
+  await runChat(owner, input, controller.signal, (e) => events.push(e));
+  assert.equal(
+    (
+      await AiTurn.findOne({
+        conversationId: c._id,
+        requestId: input.requestId,
+      })
+    ).status,
+    'cancelled'
+  );
+  assert.equal(
+    events.some((e) => e.type === 'chat:completed'),
+    false
+  );
 });
 
 test('a remote cancellation in DB stops generation even without an in-process abort', async (t) => {
   const owner = { kind: 'guest', id: randomUUID() };
   const c = await chat.createConversation(owner);
-  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'remote cancellation' };
+  const input = {
+    conversationId: String(c._id),
+    requestId: randomUUID(),
+    content: 'remote cancellation',
+  };
   let started;
-  const first = new Promise(resolve => { started = resolve; });
-  t.mock.method(aiProvider, 'answerStream', async function* (_a, _b, _c, signal) {
-    yield 'partial';
-    await new Promise(resolve => {
-      started();
-      if (signal.aborted) resolve();
-      else signal.addEventListener('abort', resolve, { once: true });
-    });
-    signal.throwIfAborted();
+  const first = new Promise((resolve) => {
+    started = resolve;
   });
+  t.mock.method(
+    aiProvider,
+    'answerStream',
+    async function* (_a, _b, _c, signal) {
+      yield 'partial';
+      await new Promise((resolve) => {
+        started();
+        if (signal.aborted) resolve();
+        else signal.addEventListener('abort', resolve, { once: true });
+      });
+      signal.throwIfAborted();
+    }
+  );
   const events = [];
-  const running = runChat(owner, input, AbortSignal.timeout(5000), e => events.push(e));
+  const running = runChat(owner, input, AbortSignal.timeout(5000), (e) =>
+    events.push(e)
+  );
   await first;
-  await AiTurn.updateOne({ conversationId: c._id, requestId: input.requestId, status: 'processing' }, { $set: { status: 'cancelled' } });
+  await AiTurn.updateOne(
+    { conversationId: c._id, requestId: input.requestId, status: 'processing' },
+    { $set: { status: 'cancelled' } }
+  );
   await running;
-  assert.equal(events.some(e => e.type === 'chat:completed'), false);
+  assert.equal(
+    events.some((e) => e.type === 'chat:completed'),
+    false
+  );
   assert.equal(events.at(-1).data.status, 'cancelled');
 });
 
@@ -776,9 +1144,10 @@ test('search batches 100 candidates without per-product metrics and handles long
       category: category._id,
       brand: brand._id,
       stock: 1,
-      description: i === 99
-        ? '<p>' + '😀'.repeat(499_996) + '</p>'
-        : '<p>Batch description</p>',
+      description:
+        i === 99
+          ? '<p>' + '😀'.repeat(499_996) + '</p>'
+          : '<p>Batch description</p>',
       warrantyInformation: 'w'.repeat(100_000),
     }))
   );
@@ -789,15 +1158,27 @@ test('search batches 100 candidates without per-product metrics and handles long
   const cardReads = [];
   const original = mongoose.Query.prototype.exec;
   t.mock.method(mongoose.Query.prototype, 'exec', async function (...args) {
-    const isExcerpt = this.model.modelName === 'Product' && this.op === 'find' && this.projection()?.description?.$substrCP;
+    const isExcerpt =
+      this.model.modelName === 'Product' &&
+      this.op === 'find' &&
+      this.projection()?.description?.$substrCP;
     if (this.model.modelName === 'Product' && this.op === 'find') {
       finds++;
       if (this.projection()?.description?.$substrCP) {
         cardReads.push(this.getFilter().slug.$in);
-        assert.deepEqual(this.projection().description, { $substrCP: [{ $ifNull: ['$description', ''] }, 0, 12000] });
-        assert.deepEqual(this.projection().warrantyInformation, { $substrCP: [{ $ifNull: ['$warrantyInformation', ''] }, 0, 1800] });
+        assert.deepEqual(this.projection().description, {
+          $substrCP: [{ $ifNull: ['$description', ''] }, 0, 12000],
+        });
+        assert.deepEqual(this.projection().warrantyInformation, {
+          $substrCP: [{ $ifNull: ['$warrantyInformation', ''] }, 0, 1800],
+        });
       } else {
-        for (const field of ['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'])
+        for (const field of [
+          'description',
+          'warrantyInformation',
+          'shippingInformation',
+          'returnPolicy',
+        ])
           assert.equal(this.projection()?.[field], undefined);
       }
     }
@@ -817,15 +1198,27 @@ test('search batches 100 candidates without per-product metrics and handles long
   assert.equal(result.total, 100);
   assert.equal(cardReads.length, 1);
   assert.equal(cardReads[0].length, 10);
-  assert.deepEqual(result.rows.map(p => p.slug), cardReads[0]);
-  assert.ok(result.rows.every(p => p.description.length <= 1800));
-  assert.equal(result.rows.find(p => p.slug === 'batch-99').description, '😀'.repeat(900));
+  assert.deepEqual(
+    result.rows.map((p) => p.slug),
+    cardReads[0]
+  );
+  assert.ok(result.rows.every((p) => p.description.length <= 1800));
+  assert.equal(
+    result.rows.find((p) => p.slug === 'batch-99').description,
+    '😀'.repeat(900)
+  );
   const second = await searchProducts({ q: 'Batch', page: 2, limit: 10 });
   assert.equal(second.total, 100);
   assert.equal(cardReads.length, 2);
   assert.equal(cardReads[1].length, 10);
-  assert.deepEqual(second.rows.map(p => p.slug), cardReads[1]);
-  assert.equal(new Set([...result.rows, ...second.rows].map(p => p.id)).size, 20);
+  assert.deepEqual(
+    second.rows.map((p) => p.slug),
+    cardReads[1]
+  );
+  assert.equal(
+    new Set([...result.rows, ...second.rows].map((p) => p.id)).size,
+    20
+  );
   const long = await Product.create({
     product_name: 'x'.repeat(255),
     slug: 'long-valid-product',
@@ -834,7 +1227,11 @@ test('search batches 100 candidates without per-product metrics and handles long
     category: category._id,
     brand: brand._id,
   });
-  const longResult = await searchProducts({ q: long.product_name, page: 1, limit: 10 }, undefined, false);
+  const longResult = await searchProducts(
+    { q: long.product_name, page: 1, limit: 10 },
+    undefined,
+    false
+  );
   assert.ok(longResult.rows.some((row) => row.id === String(long._id)));
 });
 test('unknown requested brand stays empty and pagination reuses successful intent/embedding results', async (t) => {
@@ -1161,29 +1558,98 @@ test('index pruning removes inactive products and hidden catalog references with
 });
 
 test('AI keyword and semantic candidates share storefront descendant and additional-category rules', async () => {
-  const brand = await BrandModel.create({ name: 'Merge AI Brand', slug: 'merge-ai-brand' });
-  const parent = await Categories.create({ name: 'Merge Parent', slug: 'merge-parent' });
-  const child = await Categories.create({ name: 'Merge Child', slug: 'merge-child', parent: parent._id });
-  const other = await Categories.create({ name: 'Merge Other', slug: 'merge-other' });
-  const first = await Product.create({ product_name: 'Mergefixture secondary', slug: 'mergefixture-secondary', brand: brand._id, category: other._id, categories: [child._id], price: 100, stock: 1 });
-  const second = await Product.create({ product_name: 'Mergefixture child', slug: 'mergefixture-child', brand: brand._id, category: child._id, price: 110, stock: 1 });
-  const outside = await Product.create({ product_name: 'Mergefixture outside', slug: 'mergefixture-outside', brand: brand._id, category: other._id, price: 120, stock: 1 });
-  const matches = Promise.resolve([first, second, outside].map(product => ({ key: 'product:' + product._id, text: 'matched', score: 1 })));
+  const brand = await BrandModel.create({
+    name: 'Merge AI Brand',
+    slug: 'merge-ai-brand',
+  });
+  const parent = await Categories.create({
+    name: 'Merge Parent',
+    slug: 'merge-parent',
+  });
+  const child = await Categories.create({
+    name: 'Merge Child',
+    slug: 'merge-child',
+    parent: parent._id,
+  });
+  const other = await Categories.create({
+    name: 'Merge Other',
+    slug: 'merge-other',
+  });
+  const first = await Product.create({
+    product_name: 'Mergefixture secondary',
+    slug: 'mergefixture-secondary',
+    brand: brand._id,
+    category: other._id,
+    categories: [child._id],
+    price: 100,
+    stock: 1,
+  });
+  const second = await Product.create({
+    product_name: 'Mergefixture child',
+    slug: 'mergefixture-child',
+    brand: brand._id,
+    category: child._id,
+    price: 110,
+    stock: 1,
+  });
+  const outside = await Product.create({
+    product_name: 'Mergefixture outside',
+    slug: 'mergefixture-outside',
+    brand: brand._id,
+    category: other._id,
+    price: 120,
+    stock: 1,
+  });
+  const matches = Promise.resolve(
+    [first, second, outside].map((product) => ({
+      key: 'product:' + product._id,
+      text: 'matched',
+      score: 1,
+    }))
+  );
   const expected = [String(first._id), String(second._id)].sort();
   for (const category of [parent, child]) {
     for (const q of ['Mergefixture', 'semantic-only-no-keyword-match']) {
-      const result = await searchProducts({ q, category: String(category._id), page: 1, limit: 20 }, matches, false);
-      assert.deepEqual(result.rows.map(product => product.id).sort(), expected);
+      const result = await searchProducts(
+        { q, category: String(category._id), page: 1, limit: 20 },
+        matches,
+        false
+      );
+      assert.deepEqual(
+        result.rows.map((product) => product.id).sort(),
+        expected
+      );
     }
   }
   await Categories.updateOne({ _id: child._id }, { $set: { isActive: false } });
-  const hidden = await searchProducts({ q: 'Mergefixture', category: String(child._id), page: 1, limit: 20 }, matches, false);
+  const hidden = await searchProducts(
+    { q: 'Mergefixture', category: String(child._id), page: 1, limit: 20 },
+    matches,
+    false
+  );
   assert.equal(hidden.total, 0);
-  const unknown = await searchProducts({ q: 'Mergefixture', category: '000000000000000000000000', page: 1, limit: 20 }, matches, false);
+  const unknown = await searchProducts(
+    {
+      q: 'Mergefixture',
+      category: '000000000000000000000000',
+      page: 1,
+      limit: 20,
+    },
+    matches,
+    false
+  );
   assert.equal(unknown.total, 0);
   const controller = new AbortController();
   controller.abort(new Error('cancelled merge search'));
-  await assert.rejects(searchProducts({ q: 'Mergefixture', category: String(parent._id), page: 1, limit: 20 }, matches, false, controller.signal), /cancelled merge search/);
+  await assert.rejects(
+    searchProducts(
+      { q: 'Mergefixture', category: String(parent._id), page: 1, limit: 20 },
+      matches,
+      false,
+      controller.signal
+    ),
+    /cancelled merge search/
+  );
 });
 
 test('dynamic Gemini configuration encrypts credentials, checks activation, fences updates and preserves running snapshots', async (t) => {
@@ -1193,46 +1659,184 @@ test('dynamic Gemini configuration encrypts credentials, checks activation, fenc
   process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
   t.after(async () => {
     await AiSettings.deleteOne({ _id: 'global' });
-    if (previousKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previousKey;
-    if (previousEncryption === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previousEncryption;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+    if (previousEncryption === undefined)
+      delete process.env.AI_CONFIG_ENCRYPTION_KEY;
+    else process.env.AI_CONFIG_ENCRYPTION_KEY = previousEncryption;
   });
-  let state = await management.saveConnection({ revision: 0, name: 'First', provider: 'gemini', model: 'gemini-first', apiKey: 'first-secret-key-12345' }, 'admin-test');
+  let state = await management.saveConnection(
+    {
+      revision: 0,
+      name: 'First',
+      provider: 'gemini',
+      model: 'gemini-first',
+      apiKey: 'first-secret-key-12345',
+    },
+    'admin-test'
+  );
   const first = state.connections[0];
   assert.equal(state.revision, 1);
   assert.ok(!JSON.stringify(state).includes('first-secret-key'));
   const raw = await AiSettings.collection.findOne({ _id: 'global' });
   assert.ok(raw.connections[0].encryptedKey.startsWith('v1.'));
   assert.ok(!JSON.stringify(raw).includes('first-secret-key'));
-  assert.equal((await AiSettings.findById('global').lean()).connections[0].encryptedKey, undefined);
-  await assert.rejects(management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: first.id, enabled: true }, 'admin-test'), (e) => e.statusCode === 400);
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null }));
-  t.mock.method(aiProvider, 'answerStream', async function* () { assert.ok(aiApiKey().includes('secret-key')); yield 'Ready'; });
-  state = await management.testConnection(first.id, state.revision, 'admin-test', new AbortController().signal);
+  assert.equal(
+    (await AiSettings.findById('global').lean()).connections[0].encryptedKey,
+    undefined
+  );
+  await assert.rejects(
+    management.saveAiSettings(
+      {
+        ...state.settings,
+        revision: state.revision,
+        activeConnectionId: first.id,
+        enabled: true,
+      },
+      'admin-test'
+    ),
+    (e) => e.statusCode === 400
+  );
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+    brand: null,
+    category: null,
+    minPrice: null,
+    maxPrice: null,
+  }));
+  t.mock.method(aiProvider, 'answerStream', async function* () {
+    assert.ok(aiApiKey().includes('secret-key'));
+    yield 'Ready';
+  });
+  state = await management.testConnection(
+    first.id,
+    state.revision,
+    'admin-test',
+    new AbortController().signal
+  );
   assert.equal(state.connections[0].checkedOk, true);
-  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: first.id, enabled: true, dailyCalls: 37, riskEnabled: true }, 'admin-test');
+  state = await management.saveAiSettings(
+    {
+      ...state.settings,
+      revision: state.revision,
+      activeConnectionId: first.id,
+      enabled: true,
+      dailyCalls: 37,
+      riskEnabled: true,
+    },
+    'admin-test'
+  );
   const snapshot = await resolveAiRuntime();
-  assert.equal(snapshot.config.enabled, true); assert.equal(snapshot.config.dailyCalls, 37);
+  assert.equal(snapshot.config.enabled, true);
+  assert.equal(snapshot.config.dailyCalls, 37);
   assert.equal(snapshot.apiKey, 'first-secret-key-12345');
-  await assert.rejects(management.deleteConnection(first.id, state.revision, 'admin-test'), (e) => e.statusCode === 409);
-  await assert.rejects(management.saveConnection({ revision: state.revision, name: 'Edit active', provider: 'gemini', model: 'gemini-new' }, 'admin-test', first.id), (e) => e.statusCode === 409);
-  state = await management.saveConnection({ revision: state.revision, name: 'Second', provider: 'gemini', model: 'gemini-second', apiKey: 'second-secret-key-67890' }, 'admin-test');
+  await assert.rejects(
+    management.deleteConnection(first.id, state.revision, 'admin-test'),
+    (e) => e.statusCode === 409
+  );
+  await assert.rejects(
+    management.saveConnection(
+      {
+        revision: state.revision,
+        name: 'Edit active',
+        provider: 'gemini',
+        model: 'gemini-new',
+      },
+      'admin-test',
+      first.id
+    ),
+    (e) => e.statusCode === 409
+  );
+  state = await management.saveConnection(
+    {
+      revision: state.revision,
+      name: 'Second',
+      provider: 'gemini',
+      model: 'gemini-second',
+      apiKey: 'second-secret-key-67890',
+    },
+    'admin-test'
+  );
   const second = state.connections.find((item) => item.name === 'Second');
-  state = await management.testConnection(second.id, state.revision, 'admin-test', new AbortController().signal);
-  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: second.id }, 'admin-test');
-  await withAiRuntime(snapshot, async () => { assert.equal(aiConfig().model, 'gemini-first'); assert.equal(aiApiKey(), 'first-secret-key-12345'); });
+  state = await management.testConnection(
+    second.id,
+    state.revision,
+    'admin-test',
+    new AbortController().signal
+  );
+  state = await management.saveAiSettings(
+    {
+      ...state.settings,
+      revision: state.revision,
+      activeConnectionId: second.id,
+    },
+    'admin-test'
+  );
+  await withAiRuntime(snapshot, async () => {
+    assert.equal(aiConfig().model, 'gemini-first');
+    assert.equal(aiApiKey(), 'first-secret-key-12345');
+  });
   assert.equal((await resolveAiRuntime()).config.model, 'gemini-second');
-  const concurrent = await Promise.allSettled([40, 41].map((dailyCalls) => management.saveAiSettings({ ...state.settings, revision: state.revision, dailyCalls }, 'admin-test')));
-  assert.equal(concurrent.filter((item) => item.status === 'fulfilled').length, 1);
-  assert.equal(concurrent.find((item) => item.status === 'rejected').reason.statusCode, 409);
+  const concurrent = await Promise.allSettled(
+    [40, 41].map((dailyCalls) =>
+      management.saveAiSettings(
+        { ...state.settings, revision: state.revision, dailyCalls },
+        'admin-test'
+      )
+    )
+  );
+  assert.equal(
+    concurrent.filter((item) => item.status === 'fulfilled').length,
+    1
+  );
+  assert.equal(
+    concurrent.find((item) => item.status === 'rejected').reason.statusCode,
+    409
+  );
   state = await management.readAiSettings();
-  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, enabled: false, activeConnectionId: null }, 'admin-test');
-  state = await management.saveConnection({ revision: state.revision, name: 'Second edited', provider: 'gemini', model: 'gemini-edited', apiKey: 'replacement-secret-key-0000' }, 'admin-test', second.id);
-  assert.equal(state.connections.find((item) => item.id === second.id).checkedOk, false);
-  t.mock.method(aiProvider, 'interpretQuery', async () => { throw Object.assign(new Error('provider-secret-response'), { status: 429 }); });
-  state = await management.testConnection(second.id, state.revision, 'admin-test', new AbortController().signal);
-  assert.equal(state.connections.find((item) => item.id === second.id).checkCode, 'AI_RATE_LIMITED');
+  state = await management.saveAiSettings(
+    {
+      ...state.settings,
+      revision: state.revision,
+      enabled: false,
+      activeConnectionId: null,
+    },
+    'admin-test'
+  );
+  state = await management.saveConnection(
+    {
+      revision: state.revision,
+      name: 'Second edited',
+      provider: 'gemini',
+      model: 'gemini-edited',
+      apiKey: 'replacement-secret-key-0000',
+    },
+    'admin-test',
+    second.id
+  );
+  assert.equal(
+    state.connections.find((item) => item.id === second.id).checkedOk,
+    false
+  );
+  t.mock.method(aiProvider, 'interpretQuery', async () => {
+    throw Object.assign(new Error('provider-secret-response'), { status: 429 });
+  });
+  state = await management.testConnection(
+    second.id,
+    state.revision,
+    'admin-test',
+    new AbortController().signal
+  );
+  assert.equal(
+    state.connections.find((item) => item.id === second.id).checkCode,
+    'AI_RATE_LIMITED'
+  );
   assert.ok(!JSON.stringify(state).includes('provider-secret-response'));
-  state = await management.deleteConnection(second.id, state.revision, 'admin-test');
+  state = await management.deleteConnection(
+    second.id,
+    state.revision,
+    'admin-test'
+  );
   assert.ok(!state.connections.some((item) => item.id === second.id));
   assert.ok(state.audit.some((entry) => entry.action === 'connection.deleted'));
   process.env.GEMINI_API_KEY = 'environment-secret-must-not-fall-back';
@@ -1244,105 +1848,263 @@ test('dynamic Gemini configuration encrypts credentials, checks activation, fenc
 test('versioned embeddings fence index lag, isolate dimensions/keys, switch atomically, roll back and cancel safely', async (t) => {
   const previous = process.env.AI_CONFIG_ENCRYPTION_KEY;
   process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
-  const geminiId = randomUUID(), openaiId = randomUUID();
+  const geminiId = randomUUID(),
+    openaiId = randomUUID();
   await AiEmbeddingChunk.init();
-  await AiSettings.create({ _id: 'global', enabled: true, indexingEnabled: true, semanticEnabled: false, dailyCalls: 100, activeConnectionId: openaiId, connections: [
-    { id: geminiId, name: 'Embedding Gemini', provider: 'gemini', model: 'gemini-3.1-flash-lite', encryptedKey: encryptCredential('gemini-embedding-secret', geminiId), keyHint: 'cret', checkedOk: true },
-    { id: openaiId, name: 'OpenAI chat and embeddings', provider: 'openai', model: 'gpt-4.1-mini', encryptedKey: encryptCredential('openai-embedding-secret', openaiId), keyHint: 'cret', checkedOk: true },
-  ] });
+  await AiSettings.create({
+    _id: 'global',
+    enabled: true,
+    indexingEnabled: true,
+    semanticEnabled: false,
+    dailyCalls: 100,
+    activeConnectionId: openaiId,
+    connections: [
+      {
+        id: geminiId,
+        name: 'Embedding Gemini',
+        provider: 'gemini',
+        model: 'gemini-3.1-flash-lite',
+        encryptedKey: encryptCredential('gemini-embedding-secret', geminiId),
+        keyHint: 'cret',
+        checkedOk: true,
+      },
+      {
+        id: openaiId,
+        name: 'OpenAI chat and embeddings',
+        provider: 'openai',
+        model: 'gpt-4.1-mini',
+        encryptedKey: encryptCredential('openai-embedding-secret', openaiId),
+        keyHint: 'cret',
+        checkedOk: true,
+      },
+    ],
+  });
   t.after(async () => {
     clearAiCache();
-    await AiEmbeddingChunk.deleteMany({}); await AiEmbeddingGeneration.deleteMany({}); await AiSettings.deleteOne({ _id: 'global' });
-    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
+    await AiEmbeddingChunk.deleteMany({});
+    await AiEmbeddingGeneration.deleteMany({});
+    await AiSettings.deleteOne({ _id: 'global' });
+    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY;
+    else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
   });
-  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () { yield { key: 'document:warranty', text: 'Published policy '.repeat(90), title: 'Warranty', href: '/chinh-sach-bao-hanh' }; });
+  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () {
+    yield {
+      key: 'document:warranty',
+      text: 'Published policy '.repeat(90),
+      title: 'Warranty',
+      href: '/chinh-sach-bao-hanh',
+    };
+  });
   const embeddings = t.mock.method(aiProvider, 'embed', async () => {
-    assert.equal(aiEmbeddingKey(), aiConfig().embeddingProvider === 'gemini' ? 'gemini-embedding-secret' : 'openai-embedding-secret');
+    assert.equal(
+      aiEmbeddingKey(),
+      aiConfig().embeddingProvider === 'gemini'
+        ? 'gemini-embedding-secret'
+        : 'openai-embedding-secret'
+    );
     return [1, ...Array(aiConfig().embeddingDimensions - 1).fill(0)];
   });
-  let indexReady = false, visible = false, replaced = false;
-  t.mock.method(vectorInfrastructure, 'ensure', async (version) => { if (!indexReady) throw new VectorIndexPending(); return (replaced ? 'replaced-' : 'physical-') + version._id; });
+  let indexReady = false,
+    visible = false,
+    replaced = false;
+  t.mock.method(vectorInfrastructure, 'ensure', async (version) => {
+    if (!indexReady) throw new VectorIndexPending();
+    return (replaced ? 'replaced-' : 'physical-') + version._id;
+  });
   t.mock.method(vectorInfrastructure, 'visible', async () => visible);
   let state = await readEmbeddingVersions();
-  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 768 }, 'test-admin');
+  state = await createEmbeddingVersion(
+    {
+      revision: state.revision,
+      connectionId: geminiId,
+      model: 'gemini-embedding-001',
+      dimensions: 768,
+    },
+    'test-admin'
+  );
   const first = state.versions[0]._id;
   const legacyCount = await AiChunk.countDocuments();
   await withAiConfig(() => runEmbeddingBuild());
   assert.equal((await AiEmbeddingGeneration.findById(first)).state, 'queued');
   assert.equal(embeddings.mock.callCount(), 0); // No provider spend before infrastructure readiness.
   indexReady = true;
-  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  await AiEmbeddingGeneration.updateOne(
+    { _id: first },
+    { $set: { nextRunAt: new Date(0) } }
+  );
   await withAiConfig(() => runEmbeddingBuild());
   let built = await AiEmbeddingGeneration.findById(first).lean();
-  assert.equal(built.state, 'verifying'); assert.ok(built.chunks > 0);
+  assert.equal(built.state, 'verifying');
+  assert.ok(built.chunks > 0);
   const generated = embeddings.mock.callCount();
-  await assert.rejects(activateEmbeddingVersion(first, state.revision, 'test-admin'), (e) => e.statusCode === 409);
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, null);
-  await assert.rejects(management.deleteConnection(geminiId, state.revision, 'test-admin'), (e) => e.statusCode === 409);
+  await assert.rejects(
+    activateEmbeddingVersion(first, state.revision, 'test-admin'),
+    (e) => e.statusCode === 409
+  );
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    null
+  );
+  await assert.rejects(
+    management.deleteConnection(geminiId, state.revision, 'test-admin'),
+    (e) => e.statusCode === 409
+  );
   visible = true;
-  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  await AiEmbeddingGeneration.updateOne(
+    { _id: first },
+    { $set: { nextRunAt: new Date(0) } }
+  );
   await withAiConfig(() => runEmbeddingBuild());
   built = await AiEmbeddingGeneration.findById(first).lean();
-  assert.equal(built.state, 'ready'); assert.equal(built.verified, built.chunks);
+  assert.equal(built.state, 'ready');
+  assert.equal(built.verified, built.chunks);
   assert.equal(embeddings.mock.callCount(), generated); // Verifying again never re-embeds data.
   state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
   const firstSnapshot = await resolveAiRuntime();
-  assert.equal(firstSnapshot.config.provider, 'openai'); assert.equal(firstSnapshot.apiKey, 'openai-embedding-secret');
-  assert.equal(firstSnapshot.config.embeddingProvider, 'gemini'); assert.equal(firstSnapshot.embeddingApiKey, 'gemini-embedding-secret');
+  assert.equal(firstSnapshot.config.provider, 'openai');
+  assert.equal(firstSnapshot.apiKey, 'openai-embedding-secret');
+  assert.equal(firstSnapshot.config.embeddingProvider, 'gemini');
+  assert.equal(firstSnapshot.embeddingApiKey, 'gemini-embedding-secret');
   assert.equal(firstSnapshot.config.embeddingDimensions, 768);
-  state = await createEmbeddingVersion({ revision: state.revision, connectionId: openaiId, model: 'text-embedding-3-small', dimensions: 1536 }, 'test-admin');
+  state = await createEmbeddingVersion(
+    {
+      revision: state.revision,
+      connectionId: openaiId,
+      model: 'text-embedding-3-small',
+      dimensions: 1536,
+    },
+    'test-admin'
+  );
   const second = state.versions.find((v) => v._id !== first)._id;
   await withAiConfig(() => runEmbeddingBuild());
   assert.equal((await AiEmbeddingGeneration.findById(second)).state, 'ready');
   state = await activateEmbeddingVersion(second, state.revision, 'test-admin');
   const secondSnapshot = await resolveAiRuntime();
-  assert.equal(secondSnapshot.config.embeddingProvider, 'openai'); assert.equal(secondSnapshot.config.embeddingDimensions, 1536);
+  assert.equal(secondSnapshot.config.embeddingProvider, 'openai');
+  assert.equal(secondSnapshot.config.embeddingDimensions, 1536);
   clearAiCache();
   const searches = [];
-  t.mock.method(AiEmbeddingChunk, 'aggregate', (pipeline) => ({ option: async () => { searches.push(pipeline[0].$vectorSearch); return []; } }));
+  t.mock.method(AiEmbeddingChunk, 'aggregate', (pipeline) => ({
+    option: async () => {
+      searches.push(pipeline[0].$vectorSearch);
+      return [];
+    },
+  }));
   await withAiRuntime(firstSnapshot, () => vectorMatches('same question'));
   await withAiRuntime(secondSnapshot, () => vectorMatches('same question'));
-  assert.deepEqual(searches.map((query) => query.filter.generation), [first, second]);
-  assert.deepEqual(searches.map((query) => query.queryVector.length), [768, 1536]);
+  assert.deepEqual(
+    searches.map((query) => query.filter.generation),
+    [first, second]
+  );
+  assert.deepEqual(
+    searches.map((query) => query.queryVector.length),
+    [768, 1536]
+  );
   replaced = true;
-  await assert.rejects(activateEmbeddingVersion(first, state.revision, 'test-admin'), (e) => e.statusCode === 409);
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, second);
+  await assert.rejects(
+    activateEmbeddingVersion(first, state.revision, 'test-admin'),
+    (e) => e.statusCode === 409
+  );
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    second
+  );
   replaced = false;
   state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
-  await withAiRuntime(secondSnapshot, async () => { assert.equal(aiConfig().embeddingGeneration, second); assert.equal(aiEmbeddingKey(), 'openai-embedding-secret'); });
-  await assert.rejects(changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete'), (e) => e.statusCode === 409);
-  await AiEmbeddingGeneration.updateOne({ _id: second }, { $set: { lastDeactivatedAt: new Date(Date.now() - 6 * 60000) } });
-  state = await changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete');
-  assert.equal(await AiEmbeddingChunk.countDocuments({ generation: second }), 0);
-  assert.ok(await AiEmbeddingChunk.countDocuments({ generation: first }) > 0);
+  await withAiRuntime(secondSnapshot, async () => {
+    assert.equal(aiConfig().embeddingGeneration, second);
+    assert.equal(aiEmbeddingKey(), 'openai-embedding-secret');
+  });
+  await assert.rejects(
+    changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete'),
+    (e) => e.statusCode === 409
+  );
+  await AiEmbeddingGeneration.updateOne(
+    { _id: second },
+    { $set: { lastDeactivatedAt: new Date(Date.now() - 6 * 60000) } }
+  );
+  state = await changeEmbeddingVersion(
+    second,
+    state.revision,
+    'test-admin',
+    'delete'
+  );
+  assert.equal(
+    await AiEmbeddingChunk.countDocuments({ generation: second }),
+    0
+  );
+  assert.ok((await AiEmbeddingChunk.countDocuments({ generation: first })) > 0);
   const beforeReuse = embeddings.mock.callCount();
-  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 768 }, 'test-admin');
+  state = await createEmbeddingVersion(
+    {
+      revision: state.revision,
+      connectionId: geminiId,
+      model: 'gemini-embedding-001',
+      dimensions: 768,
+    },
+    'test-admin'
+  );
   const reused = state.versions.find((v) => v._id !== first)._id;
   await withAiConfig(() => runEmbeddingBuild());
   assert.equal((await AiEmbeddingGeneration.findById(reused)).state, 'ready');
   assert.equal(embeddings.mock.callCount(), beforeReuse); // Identical space/text reuses vectors, not provider quota.
-  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 1536 }, 'test-admin');
-  const third = state.versions.find((v) => v._id !== first && v.dimensions === 1536)._id;
+  state = await createEmbeddingVersion(
+    {
+      revision: state.revision,
+      connectionId: geminiId,
+      model: 'gemini-embedding-001',
+      dimensions: 1536,
+    },
+    'test-admin'
+  );
+  const third = state.versions.find(
+    (v) => v._id !== first && v.dimensions === 1536
+  )._id;
   t.mock.method(aiProvider, 'embed', async () => {
     const latest = await readEmbeddingVersions();
-    await changeEmbeddingVersion(third, latest.revision, 'test-admin', 'cancel');
+    await changeEmbeddingVersion(
+      third,
+      latest.revision,
+      'test-admin',
+      'cancel'
+    );
     return [1, ...Array(1535).fill(0)];
   });
   await withAiConfig(() => runEmbeddingBuild());
-  assert.equal((await AiEmbeddingGeneration.findById(third)).state, 'cancelled');
+  assert.equal(
+    (await AiEmbeddingGeneration.findById(third)).state,
+    'cancelled'
+  );
   assert.equal(await AiEmbeddingChunk.countDocuments({ generation: third }), 0);
   state = await readEmbeddingVersions();
-  state = await changeEmbeddingVersion(third, state.revision, 'test-admin', 'retry');
-  t.mock.method(aiProvider, 'embed', async () => { throw Object.assign(new Error('limit'), { aiCode: 'AI_USAGE_LIMIT' }); });
+  state = await changeEmbeddingVersion(
+    third,
+    state.revision,
+    'test-admin',
+    'retry'
+  );
+  t.mock.method(aiProvider, 'embed', async () => {
+    throw Object.assign(new Error('limit'), { aiCode: 'AI_USAGE_LIMIT' });
+  });
   await withAiConfig(() => runEmbeddingBuild());
   const paused = await AiEmbeddingGeneration.findById(third);
   assert.equal(paused.state, 'building');
   assert.equal(paused.failureCode, 'AI_USAGE_LIMIT');
   assert.ok(paused.nextRunAt > new Date());
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    first
+  );
   assert.equal(await AiChunk.countDocuments(), legacyCount);
   // An operator switching away during an automatic refresh must win.
-  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () { yield { key: 'document:warranty', text: 'Refreshed policy '.repeat(90), title: 'Warranty', href: '/chinh-sach-bao-hanh' }; });
+  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () {
+    yield {
+      key: 'document:warranty',
+      text: 'Refreshed policy '.repeat(90),
+      title: 'Warranty',
+      href: '/chinh-sach-bao-hanh',
+    };
+  });
   await queueActiveEmbeddingRefresh(true);
   let switched = false;
   t.mock.method(aiProvider, 'embed', async () => {
@@ -1353,52 +2115,117 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
       current = await readEmbeddingVersions();
       await activateEmbeddingVersion(first, current.revision, 'operator');
       const flags = await management.readAiSettings();
-      await management.saveAiSettings({ ...flags.settings, revision: flags.revision, indexingEnabled: true }, 'operator');
+      await management.saveAiSettings(
+        { ...flags.settings, revision: flags.revision, indexingEnabled: true },
+        'operator'
+      );
     }
     return [1, ...Array(aiConfig().embeddingDimensions - 1).fill(0)];
   });
   await withAiConfig(() => runEmbeddingBuild());
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    first
+  );
 });
 
 test('ordinary MongoDB builds, verifies, searches and automatically refreshes isolated semantic snapshots', async (t) => {
   const previous = process.env.AI_CONFIG_ENCRYPTION_KEY;
   process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
-  t.mock.method(vectorInfrastructure, 'ensure', originalVectorInfrastructure.ensure);
-  t.mock.method(vectorInfrastructure, 'visible', originalVectorInfrastructure.visible);
+  t.mock.method(
+    vectorInfrastructure,
+    'ensure',
+    originalVectorInfrastructure.ensure
+  );
+  t.mock.method(
+    vectorInfrastructure,
+    'visible',
+    originalVectorInfrastructure.visible
+  );
   const connectionId = randomUUID();
-  await AiSettings.create({ _id: 'global', enabled: true, indexingEnabled: false, semanticEnabled: false, dailyCalls: 100, activeConnectionId: connectionId, connections: [
-    { id: connectionId, name: 'Semantic fixture', provider: 'gemini', model: 'gemini-3.1-flash-lite', encryptedKey: encryptCredential('mock-embedding-key', connectionId), keyHint: '-key', checkedOk: true },
-  ] });
+  await AiSettings.create({
+    _id: 'global',
+    enabled: true,
+    indexingEnabled: false,
+    semanticEnabled: false,
+    dailyCalls: 100,
+    activeConnectionId: connectionId,
+    connections: [
+      {
+        id: connectionId,
+        name: 'Semantic fixture',
+        provider: 'gemini',
+        model: 'gemini-3.1-flash-lite',
+        encryptedKey: encryptCredential('mock-embedding-key', connectionId),
+        keyHint: '-key',
+        checkedOk: true,
+      },
+    ],
+  });
   t.after(async () => {
     clearAiCache();
-    await AiEmbeddingChunk.deleteMany({}); await AiEmbeddingGeneration.deleteMany({}); await AiSettings.deleteOne({ _id: 'global' });
-    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
+    await AiEmbeddingChunk.deleteMany({});
+    await AiEmbeddingGeneration.deleteMany({});
+    await AiSettings.deleteOne({ _id: 'global' });
+    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY;
+    else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
   });
   let changed = false;
   t.mock.method(knowledgeSourceProvider, 'iterate', async function* () {
-    yield { key: 'document:warranty', text: changed ? 'Updated warranty' : 'Warranty coverage', title: 'Warranty', href: '/warranty' };
-    if (!changed) yield { key: 'document:shipping', text: 'Shipping delivery', title: 'Shipping', href: '/shipping' };
+    yield {
+      key: 'document:warranty',
+      text: changed ? 'Updated warranty' : 'Warranty coverage',
+      title: 'Warranty',
+      href: '/warranty',
+    };
+    if (!changed)
+      yield {
+        key: 'document:shipping',
+        text: 'Shipping delivery',
+        title: 'Shipping',
+        href: '/shipping',
+      };
   });
   let quotaOnce = true;
   const embed = t.mock.method(aiProvider, 'embed', async (text) => {
     if (text.includes('Shipping') && quotaOnce) {
       quotaOnce = false;
-      throw Object.assign(new Error('mock daily limit'), { aiCode: 'AI_USAGE_LIMIT' });
+      throw Object.assign(new Error('mock daily limit'), {
+        aiCode: 'AI_USAGE_LIMIT',
+      });
     }
-    return [...(text.includes('Shipping') ? [0, 1] : [1, 0]), ...Array(766).fill(0)];
+    return [
+      ...(text.includes('Shipping') ? [0, 1] : [1, 0]),
+      ...Array(766).fill(0),
+    ];
   });
-  let state = await createEmbeddingVersion({ revision: 0, connectionId, model: 'gemini-embedding-001', dimensions: 768, engine: 'exact', startSync: true }, 'test-admin');
+  let state = await createEmbeddingVersion(
+    {
+      revision: 0,
+      connectionId,
+      model: 'gemini-embedding-001',
+      dimensions: 768,
+      engine: 'exact',
+      startSync: true,
+    },
+    'test-admin'
+  );
   const first = state.versions[0]._id;
   assert.equal((await AiSettings.findById('global')).indexingEnabled, true);
   await withAiConfig(() => runEmbeddingBuild());
   const paused = await AiEmbeddingGeneration.findById(first);
-  assert.equal(paused.state, 'building'); assert.equal(paused.chunks, 1);
-  assert.equal(paused.failureCode, 'AI_USAGE_LIMIT'); assert.ok(paused.nextRunAt > new Date());
-  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  assert.equal(paused.state, 'building');
+  assert.equal(paused.chunks, 1);
+  assert.equal(paused.failureCode, 'AI_USAGE_LIMIT');
+  assert.ok(paused.nextRunAt > new Date());
+  await AiEmbeddingGeneration.updateOne(
+    { _id: first },
+    { $set: { nextRunAt: new Date(0) } }
+  );
   await withAiConfig(() => runEmbeddingBuild());
   const built = await AiEmbeddingGeneration.findById(first);
-  assert.equal(built.state, 'ready'); assert.equal(built.verified, 2);
+  assert.equal(built.state, 'ready');
+  assert.equal(built.verified, 2);
   state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
   clearAiCache();
   const matches = await withAiConfig(() => vectorMatches('guarantee repair'));
@@ -1409,36 +2236,80 @@ test('ordinary MongoDB builds, verifies, searches and automatically refreshes is
   await queueActiveEmbeddingRefresh(true);
   const successor = await AiEmbeddingGeneration.findOne({ parentId: first });
   assert.ok(successor.indexName.startsWith('ai_exact_'));
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    first
+  );
   await withAiConfig(() => runEmbeddingBuild());
-  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, successor._id);
+  assert.equal(
+    (await AiSettings.findById('global')).activeEmbeddingGenerationId,
+    successor._id
+  );
   const current = await withAiConfig(() => vectorMatches('guarantee repair'));
-  assert.equal(current.length, 1); assert.equal(current[0].text, 'Updated warranty');
+  assert.equal(current.length, 1);
+  assert.equal(current[0].text, 'Updated warranty');
   assert.equal(await AiEmbeddingChunk.countDocuments({ generation: first }), 2);
   assert.equal(embed.mock.callCount(), 5); // 2 sources, 1 failed call, 1 query, 1 changed source.
-  const aborted = new AbortController(); aborted.abort();
-  await assert.rejects(withAiConfig(() => vectorMatches('cancelled', aborted.signal)), { name: 'AbortError' });
+  const aborted = new AbortController();
+  aborted.abort();
+  await assert.rejects(
+    withAiConfig(() => vectorMatches('cancelled', aborted.signal)),
+    { name: 'AbortError' }
+  );
   const expiredIds = Array.from({ length: 18 }, () => randomUUID());
-  await AiEmbeddingGeneration.insertMany(expiredIds.map((id) => ({
-    _id: id, connectionId, provider: 'gemini', model: 'gemini-embedding-001', dimensions: 768,
-    indexName: 'ai_exact_' + id.replaceAll('-', ''), state: 'ready', autoActivate: true,
-    createdBy: 'worker', lastDeactivatedAt: new Date(Date.now() - 6 * 60000),
-  })));
+  await AiEmbeddingGeneration.insertMany(
+    expiredIds.map((id) => ({
+      _id: id,
+      connectionId,
+      provider: 'gemini',
+      model: 'gemini-embedding-001',
+      dimensions: 768,
+      indexName: 'ai_exact_' + id.replaceAll('-', ''),
+      state: 'ready',
+      autoActivate: true,
+      createdBy: 'worker',
+      lastDeactivatedAt: new Date(Date.now() - 6 * 60000),
+    }))
+  );
   assert.equal(await AiEmbeddingGeneration.countDocuments(), 20);
   await queueActiveEmbeddingRefresh(true);
   assert.equal(await AiEmbeddingGeneration.countDocuments(), 20);
-  assert.equal(await AiEmbeddingGeneration.countDocuments({ _id: { $in: expiredIds } }), 17);
+  assert.equal(
+    await AiEmbeddingGeneration.countDocuments({ _id: { $in: expiredIds } }),
+    17
+  );
   assert.ok(await AiEmbeddingGeneration.exists({ _id: first })); // Manual rollback preserved.
-  assert.ok(await AiEmbeddingGeneration.exists({ parentId: successor._id, state: 'queued' }));
-  const shutdown = new AbortController(); shutdown.abort();
+  assert.ok(
+    await AiEmbeddingGeneration.exists({
+      parentId: successor._id,
+      state: 'queued',
+    })
+  );
+  const shutdown = new AbortController();
+  shutdown.abort();
   await withAiConfig(() => runEmbeddingBuild(shutdown.signal));
-  const interrupted = await AiEmbeddingGeneration.findOne({ parentId: successor._id });
+  const interrupted = await AiEmbeddingGeneration.findOne({
+    parentId: successor._id,
+  });
   assert.ok(['queued', 'building', 'verifying'].includes(interrupted.state));
   assert.equal(interrupted.failureCode, 'AI_INDEX_INTERRUPTED');
   assert.equal(interrupted.leaseId, null);
-  await AiEmbeddingGeneration.updateOne({ _id: interrupted._id }, { $set: { nextRunAt: new Date(0) } });
+  await AiEmbeddingGeneration.updateOne(
+    { _id: interrupted._id },
+    { $set: { nextRunAt: new Date(0) } }
+  );
   // Worker must load fresh database settings, even when started in a disabled request snapshot.
-  const stopWorker = withAiRuntime({ config: { ...environmentAiConfig(), enabled: false, indexingEnabled: false }, apiKey: '' }, () => startAiIndexWorker());
+  const stopWorker = withAiRuntime(
+    {
+      config: {
+        ...environmentAiConfig(),
+        enabled: false,
+        indexingEnabled: false,
+      },
+      apiKey: '',
+    },
+    () => startAiIndexWorker()
+  );
   try {
     const deadline = Date.now() + 4000;
     let resumed;
@@ -1448,47 +2319,162 @@ test('ordinary MongoDB builds, verifies, searches and automatically refreshes is
       await new Promise((resolve) => setTimeout(resolve, 20));
     } while (Date.now() < deadline);
     assert.equal(resumed.state, 'ready');
-  } finally { await stopWorker(); }
+  } finally {
+    await stopWorker();
+  }
 });
 
 test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow through mocked vendor transports', async (t) => {
-  t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
+  t.mock.method(
+    aiProvider,
+    'interpretQuery',
+    originalAIProvider.interpretQuery
+  );
   t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
-  clearAiCache(); t.after(clearAiCache);
-  const brand = await BrandModel.create({ name: 'Providerfixture Brand', slug: 'providerfixture-brand' });
-  const category = await Categories.create({ name: 'Providerfixture Category', slug: 'providerfixture-category' });
-  const product = await Product.create({ product_name: 'Providerfixture Headphones', slug: 'providerfixture-headphones', category: category._id, brand: brand._id, price: 1000, stock: 3, is_active: true });
+  clearAiCache();
+  t.after(clearAiCache);
+  const brand = await BrandModel.create({
+    name: 'Providerfixture Brand',
+    slug: 'providerfixture-brand',
+  });
+  const category = await Categories.create({
+    name: 'Providerfixture Category',
+    slug: 'providerfixture-category',
+  });
+  const product = await Product.create({
+    product_name: 'Providerfixture Headphones',
+    slug: 'providerfixture-headphones',
+    category: category._id,
+    brand: brand._id,
+    price: 1000,
+    stock: 3,
+    is_active: true,
+  });
   const network = t.mock.method(globalThis, 'fetch', async (url, options) => {
     const request = JSON.parse(options.body);
-    assert.ok(['api.openai.com', 'api.x.ai', 'generativelanguage.googleapis.com'].includes(new URL(String(url)).hostname));
-    if (!request.stream) return Response.json({ choices: [{ index: 0, finish_reason: 'stop', message: { content: JSON.stringify({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, productNames: ['Providerfixture Headphones'], referencePositions: [], task: 'search', sort: 'relevance', inherit: false }) } }] });
+    assert.ok(
+      [
+        'api.openai.com',
+        'api.x.ai',
+        'generativelanguage.googleapis.com',
+      ].includes(new URL(String(url)).hostname)
+    );
+    if (!request.stream)
+      return Response.json({
+        choices: [
+          {
+            index: 0,
+            finish_reason: 'stop',
+            message: {
+              content: JSON.stringify({
+                search: '',
+                brand: null,
+                category: null,
+                minPrice: null,
+                maxPrice: null,
+                productNames: ['Providerfixture Headphones'],
+                referencePositions: [],
+                task: 'search',
+                sort: 'relevance',
+                inherit: false,
+              }),
+            },
+          },
+        ],
+      });
     const question = JSON.parse(request.messages.at(-1).content);
-    assert.equal(question.verifiedStoreData.products[0].id, String(product._id));
+    assert.equal(
+      question.verifiedStoreData.products[0].id,
+      String(product._id)
+    );
     assert.equal(question.verifiedStoreData.products[0].price, 1000);
-    const chunks = [{ choices: [{ index: 0, delta: { content: 'Providerfixture Headphones có giá 1000 đồng.' }, finish_reason: null }] }, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }];
-    return new Response(chunks.map((item) => 'data: ' + JSON.stringify(item) + '\n\n').join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+    const chunks = [
+      {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'Providerfixture Headphones có giá 1000 đồng.' },
+            finish_reason: null,
+          },
+        ],
+      },
+      { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+    ];
+    return new Response(
+      chunks.map((item) => 'data: ' + JSON.stringify(item) + '\n\n').join('') +
+        'data: [DONE]\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } }
+    );
   });
-  for (const [provider, model] of [['gemini', 'gemini-3.1-flash-lite'], ['openai', 'gpt-4.1-mini'], ['xai', 'grok-4.7']]) {
+  for (const [provider, model] of [
+    ['gemini', 'gemini-3.1-flash-lite'],
+    ['openai', 'gpt-4.1-mini'],
+    ['xai', 'grok-4.7'],
+  ]) {
     const owner = { kind: 'guest', id: randomUUID() };
     const conversation = await chat.createConversation(owner);
-    const input = { conversationId: String(conversation._id), requestId: randomUUID(), content: `Tìm Providerfixture Headphones (${provider})` };
+    const input = {
+      conversationId: String(conversation._id),
+      requestId: randomUUID(),
+      content: `Tìm Providerfixture Headphones (${provider})`,
+    };
     const events = [];
-    await withAiRuntime({ config: { ...environmentAiConfig(), provider, model, enabled: true, semanticEnabled: false, vectorIndex: '', dailyCalls: 100000 }, apiKey: 'mock-vendor-credential' }, () => runChat(owner, input, new AbortController().signal, (event) => events.push(event)));
+    await withAiRuntime(
+      {
+        config: {
+          ...environmentAiConfig(),
+          provider,
+          model,
+          enabled: true,
+          semanticEnabled: false,
+          vectorIndex: '',
+          dailyCalls: 100000,
+        },
+        apiKey: 'mock-vendor-credential',
+      },
+      () =>
+        runChat(owner, input, new AbortController().signal, (event) =>
+          events.push(event)
+        )
+    );
     assert.equal(events.at(-1).type, 'chat:completed');
     assert.equal(events.at(-1).data.products[0].id, String(product._id));
-    assert.equal((await AiTurn.findOne({ requestId: input.requestId })).status, 'completed');
+    assert.equal(
+      (await AiTurn.findOne({ requestId: input.requestId })).status,
+      'completed'
+    );
   }
   assert.equal(network.mock.callCount(), 6);
 });
 
 test('AI management endpoints require administrative permission and never serialize server credentials', async () => {
   const headers = { Origin: 'http://localhost:5173' };
-  assert.equal((await fetch(base + '/admin/settings', { headers })).status, 401);
+  assert.equal(
+    (await fetch(base + '/admin/settings', { headers })).status,
+    401
+  );
   for (const role of ['staff', 'admin']) {
-    const user = await User.create({ firstName: 'AI', lastName: 'Manager', email: `ai-${role}@example.test`, password: 'test-hash-only', role, active: true });
-    const token = generateAccessToken({ id: String(user._id), accountType: 'user', tokenVersion: 0 });
-    const response = await fetch(base + '/admin/settings', { headers: { ...headers, Authorization: `Bearer ${token}` } });
+    const user = await User.create({
+      firstName: 'AI',
+      lastName: 'Manager',
+      email: `ai-${role}@example.test`,
+      password: 'test-hash-only',
+      role,
+      active: true,
+    });
+    const token = generateAccessToken({
+      id: String(user._id),
+      accountType: 'user',
+      tokenVersion: 0,
+    });
+    const response = await fetch(base + '/admin/settings', {
+      headers: { ...headers, Authorization: `Bearer ${token}` },
+    });
     assert.equal(response.status, role === 'staff' ? 403 : 200);
-    if (response.ok) { const body = await response.text(); assert.ok(!body.includes('encryptedKey')); assert.ok(!body.includes('GEMINI_API_KEY')); }
+    if (response.ok) {
+      const body = await response.text();
+      assert.ok(!body.includes('encryptedKey'));
+      assert.ok(!body.includes('GEMINI_API_KEY'));
+    }
   }
 });

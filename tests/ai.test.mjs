@@ -16,7 +16,11 @@ import { validateAiEnvironment } from '../dist/services/ai/environment.js';
 import { Permission } from '../dist/types/shared/permissions.type.js';
 import { hasPermission } from '../dist/config/rolePermissions.js';
 import { EventEmitter } from 'node:events';
-import { initializeAiSession, aiIdentity, aiOrigin } from '../dist/services/ai/identity.service.js';
+import {
+  initializeAiSession,
+  aiIdentity,
+  aiOrigin,
+} from '../dist/services/ai/identity.service.js';
 import express from 'express';
 import { once } from 'node:events';
 import {
@@ -25,14 +29,22 @@ import {
 } from '../dist/services/ai/request-lifecycle.js';
 
 test('production guest sessions support cross-site cookies and preserve signed identity with origin checks', async () => {
-  const previous = { NODE_ENV: process.env.NODE_ENV, JWT_SECRET: process.env.JWT_SECRET, FRONTEND_ORIGINS: process.env.FRONTEND_ORIGINS };
+  const previous = {
+    NODE_ENV: process.env.NODE_ENV,
+    JWT_SECRET: process.env.JWT_SECRET,
+    FRONTEND_ORIGINS: process.env.FRONTEND_ORIGINS,
+  };
   process.env.NODE_ENV = 'production';
   process.env.JWT_SECRET = 'test-ai-cookie-secret';
   process.env.FRONTEND_ORIGINS = 'https://shop.example';
   const app = express();
   app.use(aiOrigin);
-  app.post('/session', initializeAiSession, (_req, res) => res.json(res.locals.aiOwner));
-  app.post('/identity', aiIdentity, (_req, res) => res.json(res.locals.aiOwner));
+  app.post('/session', initializeAiSession, (_req, res) =>
+    res.json(res.locals.aiOwner)
+  );
+  app.post('/identity', aiIdentity, (_req, res) =>
+    res.json(res.locals.aiOwner)
+  );
   app.use((error, _req, res, _next) => res.status(error.status || 500).end());
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -45,9 +57,15 @@ test('production guest sessions support cross-site cookies and preserve signed i
     assert.match(cookie, /; Secure/i);
     assert.match(cookie, /; HttpOnly/i);
     const owner = await session.json();
-    const identity = await fetch(url + '/identity', { method: 'POST', headers: { ...headers, Cookie: cookie.split(';')[0] } });
+    const identity = await fetch(url + '/identity', {
+      method: 'POST',
+      headers: { ...headers, Cookie: cookie.split(';')[0] },
+    });
     assert.deepEqual(await identity.json(), owner);
-    const rejected = await fetch(url + '/session', { method: 'POST', headers: { Origin: 'https://untrusted.example' } });
+    const rejected = await fetch(url + '/session', {
+      method: 'POST',
+      headers: { Origin: 'https://untrusted.example' },
+    });
     assert.equal(rejected.status, 403);
     assert.equal(rejected.headers.get('set-cookie'), null);
     process.env.NODE_ENV = 'development';
@@ -56,7 +74,7 @@ test('production guest sessions support cross-site cookies and preserve signed i
     assert.doesNotMatch(local.headers.get('set-cookie'), /; Secure/i);
   } finally {
     server.closeAllConnections();
-    await new Promise(resolve => server.close(resolve));
+    await new Promise((resolve) => server.close(resolve));
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

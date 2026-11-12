@@ -10,7 +10,12 @@ const schema = new Schema(
       lowercase: true,
       maxlength: 255,
     },
-    description: { type: String, trim: true, maxlength: DESCRIPTION_MAX_LENGTH, default: '' },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: DESCRIPTION_MAX_LENGTH,
+      default: '',
+    },
     isActive: { type: Boolean, default: true },
   },
   {

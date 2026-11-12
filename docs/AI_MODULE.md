@@ -69,19 +69,19 @@ Routes under `/ai/admin/embeddings` expose actual state, chunk count, verified c
 
 See `.env.example`. AI is disabled by default. Do not put keys in frontend variables or commit real `.env` files.
 
-| Variable | Purpose |
-| --- | --- |
-| AI_ENABLED | Enables Gemini requests; requires GEMINI_API_KEY and an explicit daily call limit |
-| GEMINI_API_KEY | Backend-only Google AI Studio credential; OpenAI credentials are not used |
-| AI_CHAT_MODEL | Default gemini-3.1-flash-lite, with a Free Tier listed by Google |
-| AI_CHAT_MAX_OUTPUT_TOKENS | Answer budget, default 2048; validated integer 256–16384 |
-| AI_INTENT_MAX_OUTPUT_TOKENS | Structured intent budget, default 1536; validated integer 256–16384 |
-| AI_REASONING_EFFORT | low (default), medium or high mapped to Gemini thinking; reasoning uses the output budget |
-| AI_EMBEDDING_MODEL | Default gemini-embedding-001; requests and validates 1536 dimensions and normalizes the vector |
-| AI_DAILY_CALL_LIMIT | Shared database counter limiting all provider attempts per UTC day, including indexing, intent extraction, embeddings and responses |
-| AI_VECTOR_INDEX | Existing MongoDB vector-search index name |
-| AI_INDEX_ENABLED | Explicitly enables periodic knowledge indexing and its provider spend |
-| AI_RISK_ENABLED | Enables observational login/checkout risk signals; no automatic blocking of orders/accounts |
+| Variable                    | Purpose                                                                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| AI_ENABLED                  | Enables Gemini requests; requires GEMINI_API_KEY and an explicit daily call limit                                                   |
+| GEMINI_API_KEY              | Backend-only Google AI Studio credential; OpenAI credentials are not used                                                           |
+| AI_CHAT_MODEL               | Default gemini-3.1-flash-lite, with a Free Tier listed by Google                                                                    |
+| AI_CHAT_MAX_OUTPUT_TOKENS   | Answer budget, default 2048; validated integer 256–16384                                                                            |
+| AI_INTENT_MAX_OUTPUT_TOKENS | Structured intent budget, default 1536; validated integer 256–16384                                                                 |
+| AI_REASONING_EFFORT         | low (default), medium or high mapped to Gemini thinking; reasoning uses the output budget                                           |
+| AI_EMBEDDING_MODEL          | Default gemini-embedding-001; requests and validates 1536 dimensions and normalizes the vector                                      |
+| AI_DAILY_CALL_LIMIT         | Shared database counter limiting all provider attempts per UTC day, including indexing, intent extraction, embeddings and responses |
+| AI_VECTOR_INDEX             | Existing MongoDB vector-search index name                                                                                           |
+| AI_INDEX_ENABLED            | Explicitly enables periodic knowledge indexing and its provider spend                                                               |
+| AI_RISK_ENABLED             | Enables observational login/checkout risk signals; no automatic blocking of orders/accounts                                         |
 
 The daily call cap is not a monetary budget: input/output length is bounded, but total currency cost depends on configured provider prices. Failed provider attempts still count. Indexing is additionally capped at floor(25% of the total daily cap), leaving at least 75% for interactive traffic. No automatic fallback to another paid model. An API credential and approved deployment configuration are required for live acceptance.
 
@@ -108,7 +108,12 @@ MongoDB must support `$vectorSearch`; ordinary MongoDB transaction support alone
 ```json
 {
   "fields": [
-    { "type": "vector", "path": "embedding", "numDimensions": 1536, "similarity": "cosine" },
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 1536,
+      "similarity": "cosine"
+    },
     { "type": "filter", "path": "embeddingModel" }
   ]
 }
@@ -134,18 +139,18 @@ Concurrent identical intent/embedding requests share one in-flight computation. 
 
 All paths start with `/api/v1/ai`. Mutating browser requests require an allowed Origin. Reuse existing Customer Authorization headers; anonymous requests use the guest cookie.
 
-| Method/path | Purpose |
-| --- | --- |
-| POST /session | Initialize/renew chat browser identity; body {}; serialized before private requests |
-| GET /conversations?page=1 | Owner-scoped list, ten per page |
-| POST /conversations | Create; body {} |
-| GET /conversations/:id/messages?page=1 | Most recent twenty turns on page 1, displayed chronologically |
-| POST /conversations/:id/end | Idempotent completion; body {} |
-| POST /conversations/:id/cancel | Owner-scoped durable cancellation; body { requestId, content }; returns the matching terminal status, answer and sources |
-| POST /socket-ticket | Single-use, 30-second socket ticket; body {} |
-| GET /search?q=... | Hybrid search; page/limit/category/brand/minPrice/maxPrice |
-| GET /admin/status | ai:manage permission, no secrets or transcript contents |
-| POST /admin/reindex | ai:manage permission, queues index sweep |
+| Method/path                            | Purpose                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| POST /session                          | Initialize/renew chat browser identity; body {}; serialized before private requests                                      |
+| GET /conversations?page=1              | Owner-scoped list, ten per page                                                                                          |
+| POST /conversations                    | Create; body {}                                                                                                          |
+| GET /conversations/:id/messages?page=1 | Most recent twenty turns on page 1, displayed chronologically                                                            |
+| POST /conversations/:id/end            | Idempotent completion; body {}                                                                                           |
+| POST /conversations/:id/cancel         | Owner-scoped durable cancellation; body { requestId, content }; returns the matching terminal status, answer and sources |
+| POST /socket-ticket                    | Single-use, 30-second socket ticket; body {}                                                                             |
+| GET /search?q=...                      | Hybrid search; page/limit/category/brand/minPrice/maxPrice                                                               |
+| GET /admin/status                      | ai:manage permission, no secrets or transcript contents                                                                  |
+| POST /admin/reindex                    | ai:manage permission, queues index sweep                                                                                 |
 
 Use `socket.io-client` with the API origin, `path: '/api/v1/ai/socket'`, `transports: ['websocket']` and `auth: { ticket, accessToken }`. The random ticket is consumed once in Socket.IO middleware and expires after 30 seconds. Ticket and access token are sent in the auth handshake, never query strings or browser storage. Customer identity is validated during handshake and again on every send/cancel. Wait for `chat:ready` before sending. Guest connects without an accessToken. Direct native WebSocket clients no longer speak the application protocol.
 

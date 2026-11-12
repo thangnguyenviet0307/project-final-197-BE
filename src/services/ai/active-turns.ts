@@ -1,6 +1,13 @@
 // In-process cancellation supplements durable database state; no credentials are retained.
-const active = new Map<string, { requestId: string; controller: AbortController }>();
-export function registerTurn(id: string, requestId: string, controller: AbortController) {
+const active = new Map<
+  string,
+  { requestId: string; controller: AbortController }
+>();
+export function registerTurn(
+  id: string,
+  requestId: string,
+  controller: AbortController
+) {
   const entry = { requestId, controller };
   active.set(id, entry);
   return () => {

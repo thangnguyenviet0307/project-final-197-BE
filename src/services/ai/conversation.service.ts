@@ -258,17 +258,28 @@ export async function cancelTurn(
       { session, returnDocument: 'after' }
     );
     if (!conversation) throw createError(404, 'Conversation not found');
-    let turn = await AiTurn.findOne({ conversationId: id, requestId }).session(session);
+    let turn = await AiTurn.findOne({ conversationId: id, requestId }).session(
+      session
+    );
     if (turn && turn.content !== content)
       throw createError(409, 'Request ID belongs to different content');
     if (!turn) {
-      if (conversation.status !== 'active') throw createError(409, 'Conversation ended');
+      if (conversation.status !== 'active')
+        throw createError(409, 'Conversation ended');
       // Durable cancellation receipt: a delayed send replays cancelled and
       // never starts a paid generation, even on another API instance.
-      const created = await AiTurn.create([{
-        conversationId: id, requestId, content,
-        status: 'cancelled', expiresAt: conversation.expiresAt,
-      }], { session });
+      const created = await AiTurn.create(
+        [
+          {
+            conversationId: id,
+            requestId,
+            content,
+            status: 'cancelled',
+            expiresAt: conversation.expiresAt,
+          },
+        ],
+        { session }
+      );
       turn = created[0] ?? null;
     } else if (turn.status === 'processing') {
       turn = await AiTurn.findOneAndUpdate(
@@ -286,8 +297,10 @@ export async function cancelTurn(
       );
     }
     return {
-      requestId: turn.requestId, status: turn.status,
-      answer: turn.answer, sources: turn.sources,
+      requestId: turn.requestId,
+      status: turn.status,
+      answer: turn.answer,
+      sources: turn.sources,
     };
   });
   if (result.status === 'cancelled') cancelRegisteredTurn(id, requestId);

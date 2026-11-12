@@ -124,9 +124,21 @@ const productSchema = new Schema(
       ),
       default: null,
     },
-    warrantyInformation: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
-    shippingInformation: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
-    returnPolicy: { type: String, maxlength: DESCRIPTION_MAX_LENGTH, default: null },
+    warrantyInformation: {
+      type: String,
+      maxlength: DESCRIPTION_MAX_LENGTH,
+      default: null,
+    },
+    shippingInformation: {
+      type: String,
+      maxlength: DESCRIPTION_MAX_LENGTH,
+      default: null,
+    },
+    returnPolicy: {
+      type: String,
+      maxlength: DESCRIPTION_MAX_LENGTH,
+      default: null,
+    },
     minimumOrderQuantity: {
       type: Number,
       min: 1,
@@ -166,7 +178,10 @@ const productSchema = new Schema(
       min: [0, 'Giảm giá không được nhỏ hơn 0'],
       max: [70, 'Giảm giá không được vượt quá 70%'],
     },
-    categories: { type: [{ type: Schema.Types.ObjectId, ref: 'Categories' }], default: undefined },
+    categories: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Categories' }],
+      default: undefined,
+    },
     category: {
       type: Schema.Types.ObjectId,
       ref: 'Categories',

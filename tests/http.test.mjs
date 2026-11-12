@@ -348,19 +348,28 @@ test('access and refresh tokens retain separate signing keys and expiration poli
   assert.equal(refreshClaims.exp - refreshClaims.iat, 30 * 24 * 60 * 60);
 });
 
-test('admin refresh lasts 30 days and renews on rotation while customer refresh remains seven days', t => {
+test('admin refresh lasts 30 days and renews on rotation while customer refresh remains seven days', (t) => {
   const start = Date.now();
   t.mock.timers.enable({ apis: ['Date'], now: start });
   const user = { id: '507f1f77bcf86cd799439011', tokenVersion: 2 };
   const admin = generateRefreshToken(user);
   const customer = generateRefreshToken({ ...user, accountType: 'customer' });
-  assert.equal(jwt.decode(customer).exp - jwt.decode(customer).iat, 7 * 24 * 60 * 60);
+  assert.equal(
+    jwt.decode(customer).exp - jwt.decode(customer).iat,
+    7 * 24 * 60 * 60
+  );
   t.mock.timers.setTime(start + 10 * 24 * 60 * 60 * 1000);
   assert.equal(verifyRefreshToken(admin).version, 2);
-  assert.throws(() => verifyRefreshToken(customer), { status: 401, authCode: 'AUTH_TOKEN_EXPIRED' });
+  assert.throws(() => verifyRefreshToken(customer), {
+    status: 401,
+    authCode: 'AUTH_TOKEN_EXPIRED',
+  });
   const renewed = generateRefreshToken(user);
   t.mock.timers.setTime(start + 31 * 24 * 60 * 60 * 1000);
-  assert.throws(() => verifyRefreshToken(admin), { status: 401, authCode: 'AUTH_TOKEN_EXPIRED' });
+  assert.throws(() => verifyRefreshToken(admin), {
+    status: 401,
+    authCode: 'AUTH_TOKEN_EXPIRED',
+  });
   assert.equal(verifyRefreshToken(renewed).version, 2);
 });
 

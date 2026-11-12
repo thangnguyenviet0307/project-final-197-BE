@@ -25,16 +25,20 @@ function batchProjection(
   );
   if (options.content && options.content !== 'full') {
     for (const field of [
-      'description', 'warrantyInformation', 'shippingInformation', 'returnPolicy',
+      'description',
+      'warrantyInformation',
+      'shippingInformation',
+      'returnPolicy',
     ]) {
       if (options.content === 'none') delete fields[field];
-      else fields[field] = {
-        $substrCP: [
-          { $ifNull: ['$' + field, ''] },
-          0,
-          field === 'description' ? 12000 : 1800,
-        ],
-      };
+      else
+        fields[field] = {
+          $substrCP: [
+            { $ifNull: ['$' + field, ''] },
+            0,
+            field === 'description' ? 12000 : 1800,
+          ],
+        };
     }
   }
   return fields;

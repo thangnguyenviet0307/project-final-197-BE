@@ -63,9 +63,24 @@ export const productDetailsShape = {
     })
     .nullable()
     .optional(), // centimetres
-  warrantyInformation: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
-  shippingInformation: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
-  returnPolicy: z.string().trim().max(DESCRIPTION_MAX_LENGTH).nullable().optional(),
+  warrantyInformation: z
+    .string()
+    .trim()
+    .max(DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
+  shippingInformation: z
+    .string()
+    .trim()
+    .max(DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
+  returnPolicy: z
+    .string()
+    .trim()
+    .max(DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
   minimumOrderQuantity: z
     .int()
     .positive()
@@ -135,7 +150,12 @@ export const createProductSchema = z.object({
     )
     .optional(),
   brand: objectId,
-  description: z.string().trim().max(PRODUCT_DESCRIPTION_MAX_LENGTH).nullable().optional(),
+  description: z
+    .string()
+    .trim()
+    .max(PRODUCT_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
   model_year: z
     .int()
     .min(1900)

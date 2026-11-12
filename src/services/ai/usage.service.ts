@@ -89,7 +89,7 @@ export async function reserveUsage(
       duration,
       now
     );
-    throw createError(429, 'Đã đạt giới hạn sử dụng. Vui lòng thử lại sau.');
+    throw createError(429, 'Đã đạt giới hạn sử dụng. Vui lòng thử lại sau.', { aiCode: 'AI_USAGE_LIMIT' });
   }
 }
 export async function reserveProviderCall(

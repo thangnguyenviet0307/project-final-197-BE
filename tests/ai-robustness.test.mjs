@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import mongoose from 'mongoose';
-import { Responses } from 'openai/resources/responses/responses';
+import { Completions } from 'openai/resources/chat/completions';
 import { cachedAiValue, clearAiCache } from '../dist/services/ai/cache.js';
-import { aiProvider } from '../dist/services/ai/providers/openai.provider.js';
+import { aiProvider } from '../dist/services/ai/providers/gemini.provider.js';
 import {
   httpAiTask,
   AI_HTTP_TIMEOUT_MS,
@@ -118,25 +118,29 @@ test('HTTP deadline rejects promptly even when database work ignores cancellatio
 test('provider requires a completed terminal event and propagates upstream failures', async (t) => {
   const previous = {
     enabled: process.env.AI_ENABLED,
-    key: process.env.OPENAI_API_KEY,
+    key: process.env.GEMINI_API_KEY,
   };
   process.env.AI_ENABLED = 'true';
-  process.env.OPENAI_API_KEY = 'mock-only';
+  process.env.GEMINI_API_KEY = 'mock-only';
   t.after(() => {
     if (previous.enabled === undefined) delete process.env.AI_ENABLED;
     else process.env.AI_ENABLED = previous.enabled;
-    if (previous.key === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = previous.key;
+    if (previous.key === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previous.key;
   });
   t.mock.method(mongoose.Query.prototype, 'exec', async () => ({
     modifiedCount: 1,
   }));
   let events = [];
-  t.mock.method(Responses.prototype, 'create', async () => ({
-    async *[Symbol.asyncIterator]() {
-      yield* events;
-    },
-  }));
+  const requests = [];
+  t.mock.method(Completions.prototype, 'create', async (request) => {
+    requests.push(request);
+    return {
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+    };
+  });
   const read = async () => {
     let text = '';
     for await (const delta of aiProvider.answerStream(
@@ -148,13 +152,32 @@ test('provider requires a completed terminal event and propagates upstream failu
       text += delta;
     return text;
   };
-  const delta = { type: 'response.output_text.delta', delta: 'partial' };
+  const delta = {
+    choices: [{ index: 0, delta: { content: 'partial' }, finish_reason: null }],
+  };
   events = [delta];
-  await assert.rejects(read(), /before completion/);
-  for (const type of ['response.failed', 'response.incomplete', 'error']) {
-    events = [delta, { type }];
-    await assert.rejects(read(), /incomplete/);
+  await assert.rejects(read(), (e) => e.aiCode === 'AI_INVALID_RESPONSE');
+  for (const reason of ['length', 'content_filter', 'tool_calls']) {
+    events = [
+      delta,
+      { choices: [{ index: 0, delta: {}, finish_reason: reason }] },
+    ];
+    await assert.rejects(
+      read(),
+      (e) =>
+        e.aiCode ===
+        (reason === 'length' ? 'AI_OUTPUT_LIMIT' : 'AI_INVALID_RESPONSE')
+    );
   }
-  events = [delta, { type: 'response.completed' }];
+  events = [
+    delta,
+    { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+  ];
   assert.equal(await read(), 'partial');
+  const request = requests.at(-1);
+  assert.ok(request.max_tokens >= 2048);
+  assert.match(request.messages[0].content, /verifiedStoreData/);
+  assert.match(request.messages[0].content, /catalogScope/);
+  assert.equal(request.reasoning_effort, 'low');
+  assert.equal('store' in request, false);
 });

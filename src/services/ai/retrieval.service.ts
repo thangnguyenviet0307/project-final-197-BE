@@ -19,14 +19,26 @@ import { readDocument } from '../support/managed-document.service.js';
 import { documentKeys } from '../../validations/support/managed-document.validation.js';
 import { aiSearchSchema } from '../../validations/ai/ai.validation.js';
 import type { AiProduct, AiSource } from '../../types/ai/ai.types.js';
-import { aiProvider } from './providers/openai.provider.js';
+import { aiProvider } from './providers/gemini.provider.js';
 import { aiConfig } from './config.js';
+import { aiError, reportAiFailure } from './failures.js';
+import {
+  catalogSort,
+  quickClarification,
+  relevantPassages,
+  normalizeQuestion,
+} from './dialogue.js';
 import { buildProductQuery } from '../../utils/products/product-query.js';
 import { escapeRegex } from '../../utils/shared/search.js';
 import { cachedAiValue } from './cache.js';
 import { plainText } from '../../utils/shared/plain-text.js';
 export { plainText } from '../../utils/shared/plain-text.js';
 export type AiSearch = z.infer<typeof aiSearchSchema>;
+export interface RetrievalContext {
+  previousSearch?: AiSearch;
+  previousProducts?: AiProduct[];
+  previousProductIds?: string[];
+}
 function mapCards(
   products: Awaited<ReturnType<typeof getStorefrontProducts>>
 ): AiProduct[] {
@@ -102,8 +114,9 @@ export async function vectorMatches(text: string, signal?: AbortSignal) {
       },
       { $project: { embedding: 0 } },
     ]).option({ maxTimeMS: 5000, ...(signal ? { signal } : {}) });
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
+    reportAiFailure(error, 'embedding');
     return [];
   } // Keyword/catalog fallback stays available.
 }
@@ -111,18 +124,103 @@ export async function searchProducts(
   input: AiSearch,
   semanticMatches?: ReturnType<typeof vectorMatches>,
   interpret = true,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  context?: RetrievalContext
 ) {
   signal?.throwIfAborted();
+  let sort = catalogSort(input.q);
+  let clarification: string | undefined;
+  let selected: AiProduct[] | undefined;
   let search = input.q;
+  const intentContext = context
+    ? {
+        previousSearch: context.previousSearch,
+        previousProducts: context.previousProductIds?.map((id, index) => ({
+          position: index + 1,
+          id,
+          name:
+            context.previousProducts?.find((product) => product.id === id)
+              ?.name ?? null,
+        })),
+        previousProductIds: context.previousProductIds,
+      }
+    : undefined;
   const explicit = input;
-  if (interpret && aiConfig().enabled && process.env['OPENAI_API_KEY']) {
+  if (interpret && aiConfig().enabled && process.env['GEMINI_API_KEY']) {
     try {
       const intent = await cachedAiValue(
-        `intent:${aiConfig().model}:${input.q}`,
-        (sharedSignal) => aiProvider.interpretQuery(input.q, sharedSignal),
+        `intent:${aiConfig().model}:${input.q}:${JSON.stringify(intentContext ?? {})}`,
+        (sharedSignal) =>
+          aiProvider.interpretQuery(input.q, sharedSignal, intentContext),
         signal
       );
+      sort = sort ?? (intent.sort === 'relevance' ? undefined : intent.sort);
+      const positions = intent.referencePositions ?? [];
+      if (positions.length) {
+        selected = positions.flatMap((position) => {
+          const id = context?.previousProductIds?.[position - 1];
+          const product = context?.previousProducts?.find((p) => p.id === id);
+          return product ? [product] : [];
+        });
+        if (selected.length !== positions.length)
+          clarification =
+            'Sản phẩm được nhắc đến không còn khả dụng. Bạn hãy gửi lại tên hoặc mã sản phẩm cần tư vấn.';
+      }
+      if (intent.productNames?.length) {
+        const matches = await Promise.all(
+          intent.productNames.map(async (name) => {
+            const exact = {
+              $regex: '^' + escapeRegex(name.trim()) + '$',
+              $options: 'i',
+            };
+            return Product.find({
+              is_active: true,
+              $and: [await visibleCatalogFilter(signal)],
+              $or: [
+                { product_name: exact },
+                { sku: exact },
+                { 'variants.sku': exact },
+              ],
+            })
+              .setOptions({ maxTimeMS: 5000, ...(signal ? { signal } : {}) })
+              .select('slug')
+              .limit(2)
+              .lean();
+          })
+        );
+        if (matches.some((rows) => rows.length !== 1))
+          clarification =
+            'Chưa xác định chính xác các sản phẩm. Bạn hãy gửi tên đầy đủ hoặc mã của từng sản phẩm cần so sánh.';
+        const named = await productCards(
+          matches.flatMap((rows) => (rows.length === 1 ? [rows[0]!.slug] : [])),
+          signal
+        );
+        if (
+          named.length !==
+          new Set(
+            matches.flatMap((rows) =>
+              rows.length === 1 ? [rows[0]!.slug] : []
+            )
+          ).size
+        )
+          clarification =
+            'Một sản phẩm vừa ngừng hiển thị. Bạn hãy chọn lại sản phẩm cần tư vấn.';
+        selected = [
+          ...new Map(
+            [...(selected ?? []), ...named].map((product) => [
+              product.id,
+              product,
+            ])
+          ).values(),
+        ];
+      }
+      if (
+        intent.task === 'compare' &&
+        (!selected || new Set(selected.map((p) => p.id)).size < 2)
+      )
+        clarification =
+          clarification ??
+          'Bạn muốn so sánh những sản phẩm nào? Hãy gửi tên hoặc mã của ít nhất hai sản phẩm.';
       const normalize = (s: string) =>
         s
           .normalize('NFD')
@@ -141,11 +239,16 @@ export async function searchProducts(
           .lean(),
       ]);
       const brand = brands.find(
-        (b) => intent.brand && normalize(b.name) === normalize(intent.brand)
+        (b) =>
+          intent.brand &&
+          (normalize(b.name) === normalize(intent.brand) ||
+            String(b._id) === intent.brand)
       );
       const category = categories.find(
         (c) =>
-          intent.category && normalize(c.name) === normalize(intent.category)
+          intent.category &&
+          (normalize(c.name) === normalize(intent.category) ||
+            String(c._id) === intent.category)
       );
       if (
         (!input.brand && intent.brand && !brand) ||
@@ -175,16 +278,65 @@ export async function searchProducts(
         input.minPrice = explicit.minPrice;
         input.maxPrice = explicit.maxPrice;
       }
-      search = intent.search;
-    } catch {
+      if (intent.inherit && context?.previousSearch) {
+        const previous = context.previousSearch;
+        input.brand ??= previous.brand;
+        input.category ??= previous.category;
+        input.minPrice ??= previous.minPrice;
+        input.maxPrice ??= previous.maxPrice;
+      }
+      search =
+        intent.search ||
+        (intent.inherit ? (context?.previousSearch?.q ?? '') : '');
+    } catch (error) {
       signal?.throwIfAborted();
-      /* Deterministic catalog search remains available. */
+      const failure = reportAiFailure(error, 'intent');
+      if (context) throw aiError(failure.code, 502, 'intent');
     }
   }
+  const searchContext: AiSearch = { ...input, q: search };
+  if (selected || clarification)
+    return {
+      rows: clarification ? [] : (selected ?? []),
+      total: selected?.length ?? 0,
+      page: input.page,
+      limit: input.limit,
+      scope: 'selected-products',
+      semantic: false,
+      clarification,
+      searchContext,
+    };
   const categoryFilter = await expandPublicCategoryFilter(
     input.category,
     signal
   );
+  if (sort) {
+    const sorted = await listStoreProducts(
+      {
+        search: search || undefined,
+        category: categoryFilter,
+        brand: input.brand,
+        minPrice: input.minPrice,
+        maxPrice: input.maxPrice,
+        page: input.page,
+        limit: input.limit,
+        sortBy: sort === 'newest' ? 'createdAt' : 'price',
+        sortOrder: sort === 'price_asc' ? 'asc' : 'desc',
+      },
+      signal
+    );
+    const slugs = sorted.data.map((p) => p.slug);
+    const cards = await productCards(slugs, signal);
+    return {
+      rows: slugs.flatMap((slug) => cards.filter((p) => p.slug === slug)),
+      total: sorted.pagination.total,
+      page: input.page,
+      limit: input.limit,
+      scope: 'catalog',
+      semantic: false,
+      searchContext,
+    };
+  }
   const [keyword, semantic] = await Promise.all([
     listStoreProducts(
       {
@@ -265,9 +417,13 @@ export async function searchProducts(
   signal?.throwIfAborted();
   const ordered = [...scores].sort((a, b) => b[1] - a[1]).map(([slug]) => slug);
   // Recheck live visibility/prices with no editorial content before pagination.
-  const candidatesWithoutContent = await getStorefrontProducts(ordered, signal, {
-    content: 'none',
-  });
+  const candidatesWithoutContent = await getStorefrontProducts(
+    ordered,
+    signal,
+    {
+      content: 'none',
+    }
+  );
   const bySlug = new Map(candidatesWithoutContent.map((p) => [p.slug, p]));
   const candidates = ordered.map((slug) => bySlug.get(slug));
   const rows = candidates.filter(
@@ -290,22 +446,45 @@ export async function searchProducts(
     page: input.page,
     limit: input.limit,
     scope: 'ranked-candidates',
+    searchContext,
     semantic: semantic.length > 0,
   };
 }
 export async function retrieveKnowledge(
   question: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  context?: RetrievalContext
 ) {
   signal?.throwIfAborted();
+  const clarification = quickClarification(question);
+  if (clarification)
+    return {
+      products: [],
+      sources: [] as AiSource[],
+      clarification,
+      catalogScope: 'clarification',
+      searchContext: undefined,
+    };
+  const policy =
+    /chinh sach|bao hanh|doi tra|giao hang|bao mat|dieu khoan/.test(
+      normalizeQuestion(question)
+    );
   const matchesPromise = vectorMatches(question, signal);
   const [products, documents, matches] = await Promise.all([
-    searchProducts(
-      aiSearchSchema.parse({ q: question.slice(0, 300), limit: 6 }),
-      matchesPromise,
-      true,
-      signal
-    ),
+    policy
+      ? Promise.resolve({
+          rows: [] as AiProduct[],
+          scope: 'policy',
+          searchContext: undefined,
+          clarification: undefined,
+        })
+      : searchProducts(
+          { q: question, limit: 6, page: 1 },
+          matchesPromise,
+          true,
+          signal,
+          context
+        ),
     Promise.all(
       documentKeys.map(async (key) => ({ key, doc: await readDocument(key) }))
     ),
@@ -332,14 +511,24 @@ export async function retrieveKnowledge(
       key,
       title: key,
       href,
-      text: (relevant.join('\n') || live).slice(0, 1800),
+      text: relevantPassages(live, question, relevant),
     });
   }
-  return { products: products.rows, sources };
+  return {
+    products: products.rows,
+    sources,
+    catalogScope: products.scope,
+    searchContext:
+      'searchContext' in products ? products.searchContext : undefined,
+    clarification:
+      'clarification' in products ? products.clarification : undefined,
+  };
 }
 export async function recommendProducts(slug: string, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  const product = (await getStorefrontProducts([slug], signal, { content: 'none' }))[0];
+  const product = (
+    await getStorefrontProducts([slug], signal, { content: 'none' })
+  )[0];
   if (!product) return [];
   const result = await searchProducts(
     aiSearchSchema.parse({

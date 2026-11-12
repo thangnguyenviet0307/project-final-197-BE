@@ -11,7 +11,7 @@ import {
   chatEventSchema,
   aiSearchSchema,
 } from '../dist/validations/ai/ai.validation.js';
-import { aiProvider } from '../dist/services/ai/providers/openai.provider.js';
+import { aiProvider } from '../dist/services/ai/providers/gemini.provider.js';
 import { validateAiEnvironment } from '../dist/services/ai/environment.js';
 import { Permission } from '../dist/types/shared/permissions.type.js';
 import { hasPermission } from '../dist/config/rolePermissions.js';

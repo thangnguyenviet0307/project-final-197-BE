@@ -9,7 +9,7 @@ import {
 import { readDocument } from '../support/managed-document.service.js';
 import { documentKeys } from '../../validations/support/managed-document.validation.js';
 import { plainText } from '../../utils/shared/plain-text.js';
-import { aiProvider } from './providers/openai.provider.js';
+import { aiProvider } from './providers/gemini.provider.js';
 import { aiConfig } from './config.js';
 import mongoose, { type ClientSession } from 'mongoose';
 export interface IndexContext {

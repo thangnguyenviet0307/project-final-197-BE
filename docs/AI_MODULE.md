@@ -4,6 +4,8 @@ The AI module lives in the existing Express API and React storefront. It does no
 
 ## Conversation lifecycle and retention
 
+AI HTTP tasks distinguish server-observed client disconnects from upstream cancellation and deadlines. Disconnects abort pending work with an internal marker and do not log an unhandled 500 or attempt a response on a closed connection. The 70-second HTTP deadline aborts upstream work with the same HTTP 504 reason returned to the error middleware. Unexpected AbortErrors remain observable; sent headers delegate live errors to Express, and closed/finished responses are never written again. Request, response and signal listeners plus deadline timers are removed when the task settles; late work rejections remain observed.
+
 - Closing/minimizing the widget does not end the conversation. **Kết thúc** explicitly ends it. A new chat creates a different conversation.
 - An active conversation automatically ends after **one hour without a submitted message**. Reading history, socket pings, minimizing and reconnecting do not extend activity. The server enforces the deadline, including when its worker was offline.
 - Guest conversation and message expiry is **effective completion time +24 hours**. Automatic completion time is last activity +one hour, not the later time a cleanup worker happens to run. All guest turns share the conversation's expiry.
@@ -19,10 +21,13 @@ See `.env.example`. AI is disabled by default. Do not put keys in frontend varia
 
 | Variable | Purpose |
 | --- | --- |
-| AI_ENABLED | Enables paid AI requests; requires API key and an explicit daily call limit |
-| OPENAI_API_KEY | Backend-only provider credential |
-| AI_CHAT_MODEL | Default gpt-5.4-mini, configurable provider model |
-| AI_EMBEDDING_MODEL | Default text-embedding-3-small; embedding requests use 1536 dimensions |
+| AI_ENABLED | Enables Gemini requests; requires GEMINI_API_KEY and an explicit daily call limit |
+| GEMINI_API_KEY | Backend-only Google AI Studio credential; OpenAI credentials are not used |
+| AI_CHAT_MODEL | Default gemini-3.1-flash-lite, with a Free Tier listed by Google |
+| AI_CHAT_MAX_OUTPUT_TOKENS | Answer budget, default 2048; validated integer 256–16384 |
+| AI_INTENT_MAX_OUTPUT_TOKENS | Structured intent budget, default 1536; validated integer 256–16384 |
+| AI_REASONING_EFFORT | low (default), medium or high mapped to Gemini thinking; reasoning uses the output budget |
+| AI_EMBEDDING_MODEL | Default gemini-embedding-001; requests and validates 1536 dimensions and normalizes the vector |
 | AI_DAILY_CALL_LIMIT | Shared database counter limiting all provider attempts per UTC day, including indexing, intent extraction, embeddings and responses |
 | AI_VECTOR_INDEX | Existing MongoDB vector-search index name |
 | AI_INDEX_ENABLED | Explicitly enables periodic knowledge indexing and its provider spend |
@@ -30,7 +35,23 @@ See `.env.example`. AI is disabled by default. Do not put keys in frontend varia
 
 The daily call cap is not a monetary budget: input/output length is bounded, but total currency cost depends on configured provider prices. Failed provider attempts still count. Indexing is additionally capped at floor(25% of the total daily cap), leaving at least 75% for interactive traffic. No automatic fallback to another paid model. An API credential and approved deployment configuration are required for live acceptance.
 
+### Gemini Free Tier setup and migration
+
+1. Create a server-side key at [Google AI Studio](https://aistudio.google.com/apikey), using a project on the Free Tier. Set `GEMINI_API_KEY` in local `.env` or the deployment's backend environment; never share the key in chat or frontend variables.
+2. Set `AI_CHAT_MODEL=gemini-3.1-flash-lite`, `AI_EMBEDDING_MODEL=gemini-embedding-001`, `AI_DAILY_CALL_LIMIT=100` and `AI_ENABLED=true`, then restart the backend. Keep vector/index settings as previously configured. Chat works with keyword/catalog retrieval without a vector index.
+3. If an existing vector index contains OpenAI embeddings, run the existing knowledge sync after configuring Gemini. Model filters exclude old embeddings while reindexing; keyword/catalog retrieval stays available. The 1536-dimension index definition remains valid. Do not mix embedding spaces even when dimensions match.
+
+The provider sends requests only to `generativelanguage.googleapis.com`. Chat/intent use Google's documented OpenAI-compatible endpoint through the existing SDK; embeddings use native `embedContent` with an explicit output dimensionality. No ChatGPT/OpenAI API key or endpoint is used. Streaming, cancellation, quota accounting, persistence/replay, owner checks, retrieval and risk rules retain the existing application contracts. Free-tier exhaustion returns safe inline feedback; it never triggers an automatic retry or another provider/model.
+
+There is no API request flag that forces a billing-enabled project onto the Free Tier. Keep the Google project on the Free Tier to avoid paid usage; the application does not enable billing. Availability and quota depend on Google/account/model. Google's free-tier data handling differs from paid service, so review [pricing and data usage](https://ai.google.dev/gemini-api/docs/pricing) and [API terms](https://ai.google.dev/gemini-api/terms) before sending production data.
+
 ## Search infrastructure and indexing
+
+Cheapest, most expensive and newest intents use database sorting across the complete eligible catalog, with the shared discounted variant-price calculation and public visibility rules. Their `scope` is `catalog`; ordinary semantic/keyword suggestions remain `ranked-candidates`. Chat preserves the full question up to 2000 characters, previous structured filters and stable product IDs; named comparisons read each exact name/SKU separately and missing ordinal references trigger clarification. Generic quick prompts ask for the missing requirements without a provider call.
+
+Published policy retrieval scans overlapping passages across the entire live document and supplies a bounded relevant excerpt, including relevant content near the end. Stored vector text must still exist in the live published body. System instructions ground answers in current verified data and distinguish global sorting from candidate suggestions.
+
+Provider failures use safe codes for unavailable service, credit exhaustion, rate limits, authorization, timeout, malformed responses and output limits. Failed turns retain sanitized error metadata for history/replay. Incomplete output never becomes completed. Logs contain only safe codes, stage and request ID; admin status exposes the latest 20 failure summaries without chat content. When saving a failure cannot be confirmed, the socket omits terminal status and asks the client to reload history.
 
 MongoDB must support `$vectorSearch`; ordinary MongoDB transaction support alone is insufficient. Create a vector-search index on **ai_knowledge_chunks** through the deployment's supported administration tools, for example:
 

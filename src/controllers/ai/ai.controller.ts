@@ -14,6 +14,7 @@ import {
 } from '../../validations/ai/ai.validation.js';
 import {
   AiChunk,
+  AiTurn,
   AiConversation,
   AiCounter,
   AiIndexJob,
@@ -24,9 +25,14 @@ import { httpAiTask } from '../../services/ai/request-lifecycle.js';
 const owner = (locals: Record<string, unknown>) => locals['aiOwner'] as AiOwner;
 export const cancel: RequestHandler = asyncHandler(async (req, res) => {
   const input = cancelTurnSchema.parse(req.body);
-  sendResponse(res, 200, { data: await conversations.cancelTurn(
-    String(req.params['id']), owner(res.locals), input.requestId, input.content
-  ) });
+  sendResponse(res, 200, {
+    data: await conversations.cancelTurn(
+      String(req.params['id']),
+      owner(res.locals),
+      input.requestId,
+      input.content
+    ),
+  });
 });
 export const create: RequestHandler = asyncHandler(async (_req, res) => {
   const doc = await conversations.createConversation(owner(res.locals));
@@ -79,21 +85,42 @@ export const recommendations: RequestHandler = asyncHandler(
   }
 );
 export const status: RequestHandler = asyncHandler(async (_req, res) => {
-  const [conversations, chunks, usage, risks, index] = await Promise.all([
-    AiConversation.countDocuments({ expiresAt: { $gt: new Date() } }),
-    AiChunk.countDocuments(),
-    AiCounter.find({ _id: /^provider-global:/, expiresAt: { $gt: new Date() } })
-      .select('count expiresAt')
-      .lean(),
-    AiRiskEvent.find({ expiresAt: { $gt: new Date() } })
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .select('-actorHash')
-      .lean(),
-    AiIndexJob.findById('sync').lean(),
-  ]);
+  const [conversations, chunks, usage, risks, index, failures] =
+    await Promise.all([
+      AiConversation.countDocuments({ expiresAt: { $gt: new Date() } }),
+      AiChunk.countDocuments(),
+      AiCounter.find({
+        _id: /^provider-global:/,
+        expiresAt: { $gt: new Date() },
+      })
+        .select('count expiresAt')
+        .lean(),
+      AiRiskEvent.find({ expiresAt: { $gt: new Date() } })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select('-actorHash')
+        .lean(),
+      AiIndexJob.findById('sync').lean(),
+      AiTurn.find({
+        status: 'failed',
+        error: { $exists: true },
+        expiresAt: { $gt: new Date() },
+      })
+        .sort({ updatedAt: -1 })
+        .limit(20)
+        .select('requestId error updatedAt -_id')
+        .lean(),
+    ]);
   sendResponse(res, 200, {
-    data: { config: aiConfig(), conversations, chunks, usage, risks, index },
+    data: {
+      config: aiConfig(),
+      conversations,
+      chunks,
+      usage,
+      risks,
+      index,
+      failures,
+    },
   });
 });
 export const reindex: RequestHandler = asyncHandler(async (_req, res) => {

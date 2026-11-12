@@ -1,3 +1,4 @@
+import { aiError, reportAiFailure } from '../../services/ai/failures.js';
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { AiSocketTicket } from '../../models/ai/ai.model.js';
@@ -55,7 +56,14 @@ export function attachAiGateway(server: HttpServer) {
   });
   io.on('connection', (socket) => {
     const owner = socket.data['owner'] as AiOwner;
-    let running: { requestId: string; conversationId: string; content: string; controller: AbortController } | undefined;
+    let running:
+      | {
+          requestId: string;
+          conversationId: string;
+          content: string;
+          controller: AbortController;
+        }
+      | undefined;
     let messages = 0;
     let windowStart = Date.now();
     let pendingBytes = 0;
@@ -101,15 +109,32 @@ export function attachAiGateway(server: HttpServer) {
       const input = chatEventSchema.parse({ ...payload, type: name });
       if (input.type === 'chat:cancel') {
         if (running?.requestId === input.requestId) {
-          const result = await cancelTurn(running.conversationId, owner, input.requestId, running.content);
-          emit({ type: 'chat:cancel-result', requestId: input.requestId, data: result });
+          const result = await cancelTurn(
+            running.conversationId,
+            owner,
+            input.requestId,
+            running.content
+          );
+          emit({
+            type: 'chat:cancel-result',
+            requestId: input.requestId,
+            data: result,
+          });
         }
         return;
       }
       if (running) throw new Error('Already processing');
       const controller = new AbortController();
-      running = { requestId: input.requestId, conversationId: input.conversationId, content: input.content, controller };
-      const timeout = setTimeout(() => controller.abort(), 75000);
+      running = {
+        requestId: input.requestId,
+        conversationId: input.conversationId,
+        content: input.content,
+        controller,
+      };
+      const timeout = setTimeout(
+        () => controller.abort(aiError('AI_TIMEOUT')),
+        75000
+      );
       timeout.unref();
       try {
         await runChat(owner, input, controller.signal, emit);
@@ -120,15 +145,23 @@ export function attachAiGateway(server: HttpServer) {
     };
     for (const name of ['chat:send', 'chat:cancel'] as const)
       socket.on(name, (payload: unknown) => {
-        void handle(name, payload).catch(() =>
+        void handle(name, payload).catch((error: unknown) => {
+          const failure =
+            error && typeof error === 'object' && 'aiCode' in error
+              ? reportAiFailure(error, 'persistence')
+              : undefined;
           emit({
             type: 'chat:error',
             data: {
+              ...(failure
+                ? { code: failure.code, retryable: failure.retryable }
+                : {}),
               message:
+                failure?.message ??
                 'Yêu cầu không hợp lệ, phiên hết hạn hoặc hội thoại đang bận.',
             },
-          })
-        );
+          });
+        });
       });
     emit({ type: 'chat:ready' });
   });

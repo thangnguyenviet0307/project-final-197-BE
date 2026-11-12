@@ -1,4 +1,5 @@
 import { sendResponse } from '../../helpers/response.helper.js';
+import { ClientDisconnectedError } from '../../utils/shared/request-cancellation.js';
 import type { Request, Response, NextFunction } from 'express';
 
 import mongoose from 'mongoose';
@@ -45,6 +46,17 @@ export function errorMiddleware(
   res: Response,
   _next: NextFunction
 ): void {
+  if (err instanceof ClientDisconnectedError) return;
+  // The response cannot be written after disconnect/completion. Keep genuine
+  // failures observable, including AbortErrors with no client-cancel marker.
+  if (_req.aborted || res.destroyed || res.writableEnded) {
+    if (err instanceof Error && (!hasStatusCode(err) || err.statusCode >= 500))
+      console.error('API error after response closed', {
+        name: err.name,
+        ...(hasStatusCode(err) ? { statusCode: err.statusCode } : {}),
+      });
+    return;
+  }
   if (res.headersSent) {
     _next(err);
     return;

@@ -33,6 +33,28 @@ const turnSchema = new Schema(
     sources: { type: [sourceSchema], default: [] },
     productSlugs: { type: [String], default: [] },
     productIds: { type: [Schema.Types.ObjectId], default: [] },
+    error: {
+      type: new Schema(
+        { code: String, message: String, stage: String, retryable: Boolean },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+    searchContext: {
+      type: new Schema(
+        {
+          q: String,
+          page: Number,
+          limit: Number,
+          brand: String,
+          category: String,
+          minPrice: Number,
+          maxPrice: Number,
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     expiresAt: { type: Date, required: true },
   },
   { collection: 'ai_messages', timestamps: true }

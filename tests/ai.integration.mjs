@@ -12,13 +12,14 @@ import {
 import * as chat from '../dist/services/ai/conversation.service.js';
 import { DAY, HOUR } from '../dist/services/ai/config.js';
 import { attachAiGateway } from '../dist/gateways/ai/chat.gateway.js';
-import { aiProvider } from '../dist/services/ai/providers/openai.provider.js';
+import { aiProvider } from '../dist/services/ai/providers/gemini.provider.js';
 import { Customer } from '../dist/models/customers/customers.model.js';
 import Product from '../dist/models/products/products.model.js';
 import { BrandModel } from '../dist/models/brands/brands.model.js';
 import { Categories } from '../dist/models/categories/categories.model.js';
 import { AiChunk } from '../dist/models/ai/ai.model.js';
 import { searchProducts } from '../dist/services/ai/retrieval.service.js';
+import { retrieveKnowledge } from '../dist/services/ai/retrieval.service.js';
 import {
   indexSource,
   pruneHiddenProductChunks,
@@ -49,6 +50,77 @@ if (!uri || !uri.startsWith('mongodb://127.0.0.1:'))
   throw new Error('Requires isolated loopback test deployment');
 let server, stop, base;
 const guest = { kind: 'guest', id: randomUUID() };
+
+test('catalog extrema sort all eligible products by live discounted variant price, not the newest 100', async (t) => {
+  clearAiCache();
+  process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
+  const brand = await BrandModel.create({ name: 'Extrema Brand', slug: 'extrema-brand' });
+  const category = await Categories.create({ name: 'Extrema Category', slug: 'extrema-category' });
+  const baseProduct = { category: category._id, brand: brand._id, stock: 5, is_active: true };
+  const cheapest = await Product.create({ ...baseProduct, product_name: 'Extrema oldest', slug: 'extrema-oldest', price: 999999, discount: 50, variants: [{ sku: 'EXT-OLD', price: 1000, stock: 5 }] });
+  await Product.insertMany(Array.from({ length: 105 }, (_, i) => ({ ...baseProduct, product_name: `Extrema ${i}`, slug: `extrema-${i}`, price: 10000 + i })));
+  await Product.create({ ...baseProduct, product_name: 'Extrema hidden', slug: 'extrema-hidden', price: 1, on_sale: false });
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, sort: 'price_asc' }));
+  const result = await searchProducts({ q: 'Giá thấp nhất trong cửa hàng', brand: String(brand._id), page: 1, limit: 6 });
+  assert.equal(result.scope, 'catalog');
+  assert.equal(result.total, 106);
+  assert.equal(result.rows[0].id, String(cheapest._id));
+  assert.equal(result.rows[0].price, 500);
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, sort: 'price_desc' }));
+  const high = await searchProducts({ q: 'Giá cao nhất trong cửa hàng', brand: String(brand._id), page: 1, limit: 1 });
+  assert.equal(high.rows[0].price, 10104);
+});
+
+test('follow-up keeps structured filters, reads the full question and never substitutes hidden ordinal products', async (t) => {
+  clearAiCache(); process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
+  const brand = await BrandModel.create({ name: 'Followup Brand', slug: 'followup-brand' });
+  const category = await Categories.create({ name: 'Followup Category', slug: 'followup-category' });
+  const fixtures = await Product.insertMany([10000, 10001, 20000].map((price, i) => ({ product_name: `Followup ${i}`, slug: `followup-${i}`, brand: brand._id, category: category._id, stock: 1, price, is_active: true })));
+  const previousSearch = { q: '', brand: String(brand._id), minPrice: 10000, page: 1, limit: 6 };
+  const question = 'Tôi muốn tìm thêm sản phẩm. '.repeat(35) + 'Ngân sách tối đa 10001 đồng.';
+  let seen;
+  t.mock.method(aiProvider, 'interpretQuery', async (q, _signal, context) => { seen = { q, context }; return { search: '', brand: null, category: null, minPrice: null, maxPrice: 10001, inherit: true }; });
+  const result = await retrieveKnowledge(question, undefined, { previousSearch });
+  assert.equal(seen.q, question);
+  assert.equal(seen.context.previousSearch.brand, previousSearch.brand);
+  assert.equal(result.searchContext.maxPrice, 10001);
+  assert.ok(result.products.length > 0);
+  assert.ok(result.products.every((p) => p.price >= 10000 && p.price <= 10001));
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, referencePositions: [2] }));
+  const missing = await retrieveKnowledge('Cái thứ hai thì sao?', undefined, { previousProductIds: ['a', 'b'], previousProducts: [] });
+  assert.equal(missing.products.length, 0);
+  assert.match(missing.clarification, /không còn khả dụng/);
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, task: 'compare', productNames: ['Followup 0', 'Followup 2'] }));
+  const comparison = await retrieveKnowledge('So sánh Followup 0 và Followup 2', undefined, {});
+  assert.deepEqual(new Set(comparison.products.map((p) => p.id)), new Set([String(fixtures[0]._id), String(fixtures[2]._id)]));
+  assert.equal(comparison.clarification, undefined);
+});
+
+test('quick prompts clarify without paid generation and quota failures persist safe feedback for replay', async (t) => {
+  clearAiCache(); process.env.AI_ENABLED = 'true'; process.env.GEMINI_API_KEY = 'mock-only';
+  t.after(() => { process.env.AI_ENABLED = 'false'; delete process.env.GEMINI_API_KEY; clearAiCache(); });
+  const answer = t.mock.method(aiProvider, 'answerStream', async function* () { throw new Error('Unexpected paid generation'); });
+  t.mock.method(aiProvider, 'interpretQuery', async () => { throw Object.assign(new Error('secret-provider-payload'), { status: 429, code: 'insufficient_quota' }); });
+  const owner = { kind: 'guest', id: randomUUID() };
+  const c = await chat.createConversation(owner);
+  const events = [];
+  await runChat(owner, { conversationId: String(c._id), requestId: randomUUID(), content: 'So sánh sản phẩm' }, new AbortController().signal, (e) => events.push(e));
+  assert.equal(events.at(-1).type, 'chat:completed');
+  assert.match(events.at(-1).data.answer, /ít nhất hai/);
+  assert.equal(answer.mock.callCount(), 0);
+  const input = { conversationId: String(c._id), requestId: randomUUID(), content: 'Tìm tai nghe dưới 800 nghìn' };
+  await runChat(owner, input, new AbortController().signal, (e) => events.push(e));
+  assert.equal(events.at(-1).data.code, 'AI_CREDIT_EXHAUSTED');
+  const saved = await AiTurn.findOne({ requestId: input.requestId }).lean();
+  assert.equal(saved.status, 'failed');
+  assert.equal(saved.error.code, 'AI_CREDIT_EXHAUSTED');
+  assert.ok(!JSON.stringify(saved).includes('secret-provider-payload'));
+  await runChat(owner, input, new AbortController().signal, (e) => events.push(e));
+  assert.equal(events.at(-1).data.message, saved.error.message);
+  assert.equal(answer.mock.callCount(), 0);
+});
 before(async () => {
   await mongoose.connect(uri, {
     dbName: 'ai_test_' + randomBytes(10).toString('hex'),
@@ -68,6 +140,25 @@ after(async () => {
   await mongoose.connection.dropDatabase();
   await mongoose.disconnect();
 });
+test('disabled AI explains availability safely instead of reporting an ambiguous incomplete answer', async (t) => {
+  const previous = process.env.AI_ENABLED;
+  process.env.AI_ENABLED = 'false';
+  t.after(() => {
+    if (previous === undefined) delete process.env.AI_ENABLED;
+    else process.env.AI_ENABLED = previous;
+  });
+  const network = t.mock.method(globalThis, 'fetch', () => { throw new Error('Unexpected paid network request'); });
+  const owner = { kind: 'guest', id: randomUUID() };
+  const c = await chat.createConversation(owner);
+  const events = [];
+  await runChat(owner, { conversationId: String(c._id), requestId: randomUUID(), content: 'Tìm tai nghe dưới 500 nghìn' },
+    new AbortController().signal, event => events.push(event));
+  assert.equal(events.at(-1).type, 'chat:error');
+  assert.equal(events.at(-1).data.status, 'failed');
+  assert.equal(events.at(-1).data.message, 'Trợ lý AI hiện chưa sẵn sàng. Bạn có thể tìm sản phẩm trong cửa hàng và quay lại sau.');
+  assert.equal(network.mock.callCount(), 0);
+});
+
 test('durable cancellation survives delayed sends, rejects other owners and keeps terminal results immutable', async () => {
   const owner = { kind: 'guest', id: randomUUID() };
   const c = await chat.createConversation(owner);
@@ -490,11 +581,11 @@ test('AI search verifies live variant discounts and hides stopped products despi
   );
   process.env.AI_ENABLED = 'true';
   process.env.AI_VECTOR_INDEX = 'test';
-  process.env.OPENAI_API_KEY = 'mock-only';
+  process.env.GEMINI_API_KEY = 'mock-only';
   t.after(() => {
     process.env.AI_ENABLED = 'false';
     delete process.env.AI_VECTOR_INDEX;
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
   });
   t.mock.method(aiProvider, 'embed', async () => [0, 1]);
   t.mock.method(aiProvider, 'interpretQuery', async () => ({
@@ -711,11 +802,11 @@ test('search batches 100 candidates without per-product metrics and handles long
 test('unknown requested brand stays empty and pagination reuses successful intent/embedding results', async (t) => {
   clearAiCache();
   process.env.AI_ENABLED = 'true';
-  process.env.OPENAI_API_KEY = 'mock-only';
+  process.env.GEMINI_API_KEY = 'mock-only';
   process.env.AI_VECTOR_INDEX = 'mock-index';
   t.after(() => {
     process.env.AI_ENABLED = 'false';
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     delete process.env.AI_VECTOR_INDEX;
     clearAiCache();
   });
@@ -752,11 +843,11 @@ test('unknown requested brand stays empty and pagination reuses successful inten
 test('cancelling retrieval aborts embedding and intent requests before starting answer generation', async (t) => {
   clearAiCache();
   process.env.AI_ENABLED = 'true';
-  process.env.OPENAI_API_KEY = 'mock-only';
+  process.env.GEMINI_API_KEY = 'mock-only';
   process.env.AI_VECTOR_INDEX = 'mock-index';
   t.after(() => {
     process.env.AI_ENABLED = 'false';
-    delete process.env.OPENAI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
     delete process.env.AI_VECTOR_INDEX;
     clearAiCache();
   });

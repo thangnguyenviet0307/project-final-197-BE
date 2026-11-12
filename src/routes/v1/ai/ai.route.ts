@@ -27,13 +27,13 @@ import {
 const router: ExpressRouter = Router();
 router.use(aiOrigin);
 const admin = Router();
-admin.use(
-  authenticate,
-  requirePermission(Permission.AiManage),
-  createAuthRateLimit(30, 60000)
-);
-admin.get('/settings', settings.read);
-admin.get('/embeddings', embeddings.read);
+admin.use(authenticate, requirePermission(Permission.AiView));
+const adminRateLimit = createAuthRateLimit(30, 60000);
+admin.get('/settings', adminRateLimit, settings.read);
+admin.get('/embeddings', adminRateLimit, embeddings.read);
+admin.get('/status', adminRateLimit, controller.status);
+// Every operation below can change configuration, data, state or provider usage.
+admin.use(requirePermission(Permission.AiManage), adminRateLimit);
 admin.post('/embeddings', embeddings.create);
 admin.post('/embeddings/activate', embeddings.activate);
 admin.post('/embeddings/:id/retry', embeddings.change('retry'));
@@ -49,7 +49,6 @@ admin.post(
   createAuthRateLimit(4, 60000),
   settings.test
 );
-admin.get('/status', controller.status);
 admin.post('/reindex', controller.reindex);
 router.use('/admin', admin);
 router.use(createAuthRateLimit(60, 60000));

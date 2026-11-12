@@ -165,7 +165,10 @@ test('AI activation requires explicit credentials/budget; staff cannot administe
     () => validateAiEnvironment({ AI_INDEX_ENABLED: 'true' }),
     /VECTOR_INDEX/
   );
-  assert.equal(hasPermission('admin', Permission.AiManage), true);
+  assert.equal(hasPermission('super_admin', Permission.AiManage), true);
+  assert.equal(hasPermission('admin', Permission.AiManage), false);
+  assert.equal(hasPermission('admin', Permission.AiView), true);
+  assert.equal(hasPermission('staff', Permission.AiView), true);
   assert.equal(hasPermission('staff', Permission.AiManage), false);
 });
 test('HTTP disconnection aborts AI work and removes lifecycle listeners', async () => {

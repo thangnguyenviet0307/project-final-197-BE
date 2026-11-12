@@ -1,4 +1,5 @@
 export enum Permission {
+  AiView = 'ai:view',
   AiManage = 'ai:manage',
   OwnershipTransfer = 'system:transfer-ownership',
   UserManageAdmins = 'users:manage-admins',

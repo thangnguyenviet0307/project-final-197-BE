@@ -2453,7 +2453,7 @@ test('AI management endpoints require administrative permission and never serial
     (await fetch(base + '/admin/settings', { headers })).status,
     401
   );
-  for (const role of ['staff', 'admin']) {
+  for (const role of ['staff', 'admin', 'super_admin']) {
     const user = await User.create({
       firstName: 'AI',
       lastName: 'Manager',
@@ -2470,11 +2470,62 @@ test('AI management endpoints require administrative permission and never serial
     const response = await fetch(base + '/admin/settings', {
       headers: { ...headers, Authorization: `Bearer ${token}` },
     });
-    assert.equal(response.status, role === 'staff' ? 403 : 200);
+    assert.equal(response.status, 200);
     if (response.ok) {
       const body = await response.text();
       assert.ok(!body.includes('encryptedKey'));
       assert.ok(!body.includes('GEMINI_API_KEY'));
+    }
+    const authorized = {
+      ...headers,
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    for (const path of ['/status', '/embeddings'])
+      assert.equal(
+        (await fetch(base + '/admin' + path, { headers: authorized })).status,
+        200
+      );
+    const writes = [
+      ['POST', '/settings/initialize'],
+      ['PUT', '/settings'],
+      ['POST', '/connections'],
+      ['PUT', '/connections/' + randomUUID()],
+      ['DELETE', '/connections/' + randomUUID()],
+      ['POST', '/connections/' + randomUUID() + '/test'],
+      ['POST', '/embeddings'],
+      ['POST', '/embeddings/activate'],
+      ['POST', '/embeddings/' + randomUUID() + '/retry'],
+      ['POST', '/embeddings/' + randomUUID() + '/cancel'],
+      ['DELETE', '/embeddings/' + randomUUID()],
+      ['POST', '/reindex'],
+    ];
+    if (role !== 'super_admin') {
+      for (const [method, path] of writes)
+        assert.equal(
+          (
+            await fetch(base + '/admin' + path, {
+              method,
+              headers: authorized,
+              body: '{}',
+            })
+          ).status,
+          403,
+          `${role} ${method} ${path}`
+        );
+    } else {
+      // Invalid payload reaches validation only for the owner; never call providers.
+      for (const path of ['/connections', '/embeddings'])
+        assert.equal(
+          (
+            await fetch(base + '/admin' + path, {
+              method: 'POST',
+              headers: authorized,
+              body: '{}',
+            })
+          ).status,
+          400
+        );
     }
   }
 });

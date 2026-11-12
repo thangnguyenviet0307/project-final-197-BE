@@ -7,9 +7,11 @@ const rolePermissions: Record<Role, Permission[]> = {
   admin: Object.values(Permission).filter(
     (permission) =>
       permission !== Permission.OwnershipTransfer &&
+      permission !== Permission.AiManage &&
       permission !== Permission.UserManageAdmins
   ),
   staff: [
+    Permission.AiView,
     // Staff read all history and operate orders assigned to themselves.
     Permission.OrderView,
     Permission.OrderViewAll,

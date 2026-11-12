@@ -1,3 +1,9 @@
+import {
+  AiEmbeddingChunk,
+  AiEmbeddingGeneration,
+} from '../../models/ai/ai-embedding.model.js';
+import { queueActiveEmbeddingRefresh } from '../../services/ai/embedding-worker.js';
+import createError from 'http-errors';
 import type { RequestHandler } from 'express';
 import { asyncHandler } from '../../utils/shared/async-handler.util.js';
 import { sendResponse } from '../../helpers/response.helper.js';
@@ -5,7 +11,6 @@ import type { AiOwner } from '../../types/ai/ai.types.js';
 import * as conversations from '../../services/ai/conversation.service.js';
 import {
   searchProducts,
-  recommendProducts,
 } from '../../services/ai/retrieval.service.js';
 import {
   aiSearchSchema,
@@ -20,7 +25,7 @@ import {
   AiIndexJob,
   AiRiskEvent,
 } from '../../models/ai/ai.model.js';
-import { aiConfig } from '../../services/ai/config.js';
+import { aiConfig, withAiConfig } from '../../services/ai/config.js';
 import { httpAiTask } from '../../services/ai/request-lifecycle.js';
 const owner = (locals: Record<string, unknown>) => locals['aiOwner'] as AiOwner;
 export const cancel: RequestHandler = asyncHandler(async (req, res) => {
@@ -75,20 +80,16 @@ export const search: RequestHandler = asyncHandler(async (req, res) => {
     ),
   });
 });
-export const recommendations: RequestHandler = asyncHandler(
-  async (req, res) => {
-    sendResponse(res, 200, {
-      data: await httpAiTask(req, res, (signal) =>
-        recommendProducts(String(req.params['slug']), signal)
-      ),
-    });
-  }
-);
 export const status: RequestHandler = asyncHandler(async (_req, res) => {
+  const config = await withAiConfig(() => aiConfig());
   const [conversations, chunks, usage, risks, index, failures] =
     await Promise.all([
       AiConversation.countDocuments({ expiresAt: { $gt: new Date() } }),
-      AiChunk.countDocuments(),
+      config.embeddingGeneration
+        ? AiEmbeddingChunk.countDocuments({
+            generation: config.embeddingGeneration,
+          })
+        : AiChunk.countDocuments(),
       AiCounter.find({
         _id: /^provider-global:/,
         expiresAt: { $gt: new Date() },
@@ -100,7 +101,20 @@ export const status: RequestHandler = asyncHandler(async (_req, res) => {
         .limit(50)
         .select('-actorHash')
         .lean(),
-      AiIndexJob.findById('sync').lean(),
+      config.embeddingGeneration
+        ? AiEmbeddingGeneration.findById(config.embeddingGeneration)
+            .lean()
+            .then((version) =>
+              version
+                ? {
+                    state: 'completed',
+                    attempts: 0,
+                    lastSuccessAt: version.finishedAt,
+                    nextRunAt: version.nextRunAt,
+                  }
+                : null
+            )
+        : AiIndexJob.findById('sync').lean(),
       AiTurn.find({
         status: 'failed',
         error: { $exists: true },
@@ -113,7 +127,7 @@ export const status: RequestHandler = asyncHandler(async (_req, res) => {
     ]);
   sendResponse(res, 200, {
     data: {
-      config: aiConfig(),
+      config,
       conversations,
       chunks,
       usage,
@@ -124,13 +138,21 @@ export const status: RequestHandler = asyncHandler(async (_req, res) => {
   });
 });
 export const reindex: RequestHandler = asyncHandler(async (_req, res) => {
-  await AiIndexJob.updateOne(
-    { _id: 'sync' },
-    {
-      $set: { nextRunAt: new Date(), requestedAt: new Date() },
-      $setOnInsert: { state: 'queued' },
-    },
-    { upsert: true }
-  );
+  await withAiConfig(async () => {
+    if (!aiConfig().enabled || !aiConfig().indexingEnabled)
+      throw createError(
+        409,
+        'Enable AI and knowledge indexing before synchronizing'
+      );
+    if (await queueActiveEmbeddingRefresh(true)) return;
+    await AiIndexJob.updateOne(
+      { _id: 'sync' },
+      {
+        $set: { nextRunAt: new Date(), requestedAt: new Date() },
+        $setOnInsert: { state: 'queued' },
+      },
+      { upsert: true }
+    );
+  });
   sendResponse(res, 202, { message: 'Đã xếp lịch đồng bộ kiến thức.' });
 });

@@ -1,12 +1,13 @@
+import { withAiConfig } from './config.js';
 import { AiConversation, AiTurn } from '../../models/ai/ai.model.js';
 import type { AiOwner, AiEvent } from '../../types/ai/ai.types.js';
 import { beginTurn } from './conversation.service.js';
 import { retrieveKnowledge, productCardsByIds } from './retrieval.service.js';
-import { aiProvider } from './providers/gemini.provider.js';
+import { aiProvider } from './providers/provider.js';
 import { reserveUsage } from './usage.service.js';
 import { registerTurn } from './active-turns.js';
 import { aiError, reportAiFailure, type AiStage } from './failures.js';
-export async function runChat(
+async function runChatWithConfig(
   owner: AiOwner,
   input: { conversationId: string; requestId: string; content: string },
   signal: AbortSignal,
@@ -220,4 +221,8 @@ export async function runChat(
       reportAiFailure(error, 'persistence', input.requestId);
     }
   }
+}
+
+export function runChat(...args: Parameters<typeof runChatWithConfig>) {
+  return withAiConfig(() => runChatWithConfig(...args));
 }

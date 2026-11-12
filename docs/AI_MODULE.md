@@ -1,5 +1,19 @@
 # AI module
 
+## Set up automatic synchronization and semantic search
+
+1. In AI administration, import the environment connection if necessary, then explicitly test a Gemini/OpenAI connection. Keep the assistant enabled. A tested chat connection does not guarantee embedding quota; actual build failures are shown separately.
+2. Create an embedding version. Choose ordinary MongoDB cosine for a small store (maximum 5,000 chunks), or Atlas Vector Search if supported with search-index permissions. Ordinary MongoDB still needs the replica-set/transaction support used throughout this project.
+3. Leave "Bật đồng bộ tự động sau khi tạo" selected to persist indexing enabled together with the new version. No `AI_VECTOR_INDEX` environment value is needed for ordinary MongoDB. The worker picks up work within a minute.
+4. Wait for ready status, then explicitly activate the version. Activation enables semantic retrieval. Published knowledge and eligible products feed the existing chat/search flows; keyword/catalog fallback remains available.
+5. The worker refreshes every 15 minutes using successor snapshots, reuses unchanged vectors, and switches only after verification. Changes during a build are reconciled on a later scan. Disabling indexing prevents new tasks; running tasks keep their captured configuration.
+
+Indexing uses at most one quarter of the configured daily call limit (minimum total limit: four). Application quota pauses resume after midnight UTC; provider rate limits/timeouts retry after five minutes. Persisted chunks survive restarts. Authentication, billing and incompatible infrastructure failures require operator attention. The admin shows real progress and retry time.
+
+At 20 saved versions, automatic ordinary-MongoDB refresh can retire the oldest inactive automatically generated ready snapshot after the five-minute deactivation guard. Manual versions remain. If all versions are protected, remove an unused version manually. Atlas search indexes are never dropped automatically; their lifecycle and service quotas still require infrastructure management.
+
+Exact cosine search streams the complete active generation in bounded batches and retains only the top 40 matches. Capacity overflow fails explicitly; move to Atlas for a larger catalog. Existing versions retain their original backend and provider/model/dimension isolation. No live provider calls or production configuration mutations are performed by tests.
+
 The AI module lives in the existing Express API and React storefront. It does not create another website. No production database or provider calls were used to implement it.
 
 ## Conversation lifecycle and retention
@@ -13,9 +27,45 @@ AI HTTP tasks distinguish server-observed client disconnects from upstream cance
 - Database transactions serialize sending, completion, leases and guest expiry updates. Identical requestId/content is replayed; changing content conflicts. Only one turn per conversation can generate at once. A lease abandoned by a crashed worker becomes failed rather than generating a second paid response automatically.
 - All history reads exclude expired records immediately. MongoDB TTL and a minute-based worker remove records physically in the background; deletion is eventual, not guaranteed at the exact millisecond. Retention does not cover independently managed infrastructure backups.
 - Guest identity is a signed HttpOnly cookie, with only a digest stored as owner ID. Customer access uses the existing active/account-enabled/tokenVersion checks. Guest chats are never silently merged into a Customer account.
-- Clients explicitly initialize private chat access with POST /session. The frontend serializes initialization (Web Locks across tabs where supported; shared promise within a tab), before creating/listing chats or requesting tickets. Only /session can issue/renew the cookie; renewal preserves its value. Private requests without a valid guest cookie return 428, with no Set-Cookie. Public search/recommendation requests do not identify guests or change cookies. This prevents background request responses from overwriting the chat owner. Browser-cookie expiry is renewed separately from chat retention.
+- Clients explicitly initialize private chat access with POST /session. The frontend serializes initialization (Web Locks across tabs where supported; shared promise within a tab), before creating/listing chats or requesting tickets. Only /session can issue/renew the cookie; renewal preserves its value. Private requests without a valid guest cookie return 428, with no Set-Cookie. Public AI search requests do not identify guests or change cookies. This prevents background request responses from overwriting the chat owner. Browser-cookie expiry is renewed separately from chat retention.
 
 ## Configuration
+
+### Dynamic administration (2026-11-12)
+
+`/auth/ai` now supports persisted Gemini connection CRUD, model selection, write-only credential replacement, explicit JSON/stream connection tests, activation, feature toggles and an audit history. Admins with `AiManage` can import the existing environment connection without sending its key to the browser. The dashboard reads actual backend counters and refreshes every 15 seconds while visible. Connection tests consume up to two provider attempts and require a separate confirmation; no paid calls run automatically on save or activation.
+
+Configuration is stored atomically in the explicitly named `ai_settings` collection. Credentials use AES-256-GCM with randomized nonces and connection-ID authenticated data. API DTOs whitelist metadata and the final four key characters; encrypted values are excluded from ordinary model queries. Frontend credential writes bypass mutation caches. Never log request bodies or provider payloads.
+
+Set `AI_CONFIG_ENCRYPTION_KEY` to a persistent 32-byte hexadecimal key (64 characters) in backend deployment secrets before enabling web writes. A local development key was provisioned in the ignored `.env`; restarting the backend loads it. Preserve the same key across instances, deployments and backups. Losing/changing it prevents decrypting stored credentials. Do not commit or expose it. `AI_FORCE_DISABLED=true` is an environment-only emergency stop overriding database enablement. These secrets and vector infrastructure remain server configuration; the web does not modify `.env` files.
+
+Before the first managed configuration exists, existing environment settings remain the bootstrap fallback. After initialization, database settings take precedence even when all connections are deactivated/deleted; the server never silently resumes an environment API key. Enabling a new/re-enabled connection requires a successful test. Editing/deleting a selected connection requires first selecting another connection or saving disabled AI with no selected connection. Changing a model/key invalidates its test result. Writes carry a revision and conflict with HTTP 409 when stale; an audit records only actor ID, action, connection ID and time (last 100 entries).
+
+Every chat, HTTP AI task and index run resolves a fresh database configuration into AsyncLocalStorage. In-flight operations retain their model, credential and limits; new operations on every instance read the newly committed configuration. No process-global credential cache or Redis is needed. Database failure does not silently replace an established database configuration with environment credentials. Risk observation also resolves dynamic flags. Indexing and semantic retrieval have separate switches; enabling either requires a server-provisioned vector index. The worker reads settings each tick, and manual synchronization enforces enablement on the backend.
+
+Phase 2 adds Google Gemini, OpenAI GPT and xAI Grok as working provider choices. Phase 3 adds versioned embeddings and index cutover. Changing chat models does not change the embedding space. The original Gemini-only bootstrap remains compatible with existing deployments.
+
+### Multi-provider chat — phase 2
+
+The provider registry dispatches to separate Gemini/OpenAI/xAI adapters over a shared JSON/stream protocol implementation. Hosts are fixed to Google, `api.openai.com` and `api.x.ai`; arbitrary API URLs are not accepted. Provider/model prefixes and non-chat modalities are validated. Each saved connection must successfully exercise structured extraction and streamed output before activation. A model's appearance in suggestions is not a guarantee of account access, quota or pricing; custom compatible model IDs still require the same test. No provider/model fallback or SDK retry is enabled.
+
+OpenAI requests use `max_completion_tokens` and `store:false`, with reasoning effort only for the supported reasoning-model family. Gemini uses its compatibility parameters; xAI omits incompatible reasoning options. All adapters validate refusal, truncation and terminal status before marking a turn completed. Replacing a provider requires entering a new credential, and the browser clears its credential draft when the provider changes. Credentials cannot be edited/deleted while referenced by a saved embedding version. Renaming an inactive connection remains possible.
+
+### Versioned embeddings — phase 3
+
+Admin creates a candidate using a tested Gemini/OpenAI connection, a supported embedding model and 768/1536/3072 dimensions (OpenAI small is capped at 1536). xAI chat can use an independent Gemini/OpenAI embedding connection. Existing Gemini embedding credentials are pinned separately from the selected chat connection, including when upgrading older database configurations.
+
+Each candidate has an immutable model/provider/dimension tuple and a generated search-index name in `ai_embedding_generations`. Chunks live in the separate `ai_embedding_chunks` collection, uniquely keyed by generation/source/part. Legacy `ai_knowledge_chunks` and its index are not migrated, overwritten or deleted. Vector queries filter the generation; embedding caches bind provider/model/dimensions, preventing mixed spaces even when vector lengths match.
+
+The index worker handles queued candidates when AI and periodic indexing are enabled. It creates an additive Vector Search index on `ai_embedding_chunks`, checks its exact dimensions/cosine definition and generation/_id/hash filter fields, and waits for it to become queryable before spending embedding quota. This requires a MongoDB deployment supporting Vector Search/search-index management and a database account allowed to create/list those indexes. Ordinary standalone MongoDB transaction support is not enough. Unsupported infrastructure produces a visible safe index error; it never silently marks a version ready.
+
+Builds reuse the shared current-public-catalog and published-document source iterator. Chunk hashes bind provider/model/dimensions/text; retry reuses completed vectors, and a successor can copy unchanged vectors from ready versions in the same space without another provider call. A fenced database lease and heartbeat protect every chunk/progress write. Cancel/replacement/crash recovery cannot let a stale worker publish data. Stale candidate source chunks are removed only inside that candidate, never from the active/legacy dataset. Index verification queries every chunk by generation, object ID and current content hash; persisted-but-not-indexed data remains in `verifying`, and verification retries do not generate embeddings again. Physical index identity is retained and checked before cutover.
+
+Only a `ready` version can be activated. The pointer, audit and configuration revision change in a transaction; previous data remains available for rollback. In-flight chats retain the prior provider/key/dimensions/index snapshot. A returned older version is selected using the same ready/index validation. Index revalidation of an inactive ready version does not rebuild its data; syncing new content creates a new generation instead. An environment-only return deactivates the version and disables semantic/indexing flags, allowing keyword search without silently switching embedding keys.
+
+Periodic refresh creates a successor approximately every 15 minutes and promotes it only after verification, provided the operator has not changed the embedding-selection epoch (including switching away and back). Manual sync queues/resumes a successor. At most 20 versions are retained; admin can cancel, retry or delete inactive versions. Recently deactivated versions are protected for five minutes, beyond bounded in-flight HTTP/socket turns. Deleting a version removes its metadata/chunks but deliberately retains its search index; infrastructure owners can remove unused generated indexes separately after checking use. Account-specific MongoDB index quotas can therefore require index cleanup. Failed/quota-limited candidates never replace the active pointer.
+
+Routes under `/ai/admin/embeddings` expose actual state, chunk count, verified count, index definition, safe failure code and audit history. Create/test/sync operations may consume provider quota and infrastructure resources; UI confirmations and descriptions identify these operations. No live provider or Atlas requests were made during implementation tests: provider transports and index readiness/visibility were mocked, while MongoDB persistence, fencing, rollback and cancellation used the isolated integration replica set.
 
 See `.env.example`. AI is disabled by default. Do not put keys in frontend variables or commit real `.env` files.
 
@@ -74,7 +124,7 @@ Search combines keyword and semantic candidates using reciprocal ranks. Price/br
 
 Chatbot sources are data, not instructions. Model output cannot run arbitrary queries or mutate business data. HTML is converted to text before indexing; frontend renders answers as text and only server-supplied local source/product links are clickable. This limits impact of prompt injection but is not a claim that LLM answers are infallible.
 
-Public product DTO mapping is shared with the existing storefront. AI cards load in batches without review/order aggregations. Successful intent and query-embedding intermediates have a bounded, process-local five-minute cache, allowing pagination to reuse provider work; prices, stock and visibility are never cached there. An explicitly requested unknown brand/category returns no matches rather than broadening to unrelated products. Recommendation text is bounded before applying the public query schema.
+Public product DTO mapping is shared with the existing storefront. AI cards load in batches without review/order aggregations. Successful intent and query-embedding intermediates have a bounded, process-local five-minute cache, allowing pagination to reuse provider work; prices, stock and visibility are never cached there. An explicitly requested unknown brand/category returns no matches rather than broadening to unrelated products. The product-detail AI recommendation section and its dedicated endpoint were removed on 2026-11-12; AI chat and smart search still provide product cards.
 
 Cancellation flows through retrieval, intent extraction, embeddings and answer generation. Public HTTP tasks reject at the 70-second deadline even if underlying work ignores cancellation; MongoDB retrieval operations also receive cancellation and execution limits. Frontend timeout is 75 seconds. Chat completion refreshes only owner-scoped conversation queries. History stores immutable product IDs and loads current public cards in a batch, preserving identity across slug changes/reuse. Hidden/deleted products are omitted. Legacy slug-only turns retain their transcript without inferred product cards.
 
@@ -94,7 +144,6 @@ All paths start with `/api/v1/ai`. Mutating browser requests require an allowed 
 | POST /conversations/:id/cancel | Owner-scoped durable cancellation; body { requestId, content }; returns the matching terminal status, answer and sources |
 | POST /socket-ticket | Single-use, 30-second socket ticket; body {} |
 | GET /search?q=... | Hybrid search; page/limit/category/brand/minPrice/maxPrice |
-| GET /recommendations/:slug | Public similar/alternative products |
 | GET /admin/status | ai:manage permission, no secrets or transcript contents |
 | POST /admin/reindex | ai:manage permission, queues index sweep |
 

@@ -1,3 +1,13 @@
+import { AiEmbeddingChunk } from '../../models/ai/ai-embedding.model.js';
+import {
+  aiProductNameQuery,
+  categoryMeaning,
+  questionPriceRange,
+} from './product-search.js';
+import {
+  exactVectorMatches,
+  isExactVectorIndex,
+} from './vector-infrastructure.js';
 import {
   categoryMembership,
   expandPublicCategoryFilter,
@@ -19,8 +29,8 @@ import { readDocument } from '../support/managed-document.service.js';
 import { documentKeys } from '../../validations/support/managed-document.validation.js';
 import { aiSearchSchema } from '../../validations/ai/ai.validation.js';
 import type { AiProduct, AiSource } from '../../types/ai/ai.types.js';
-import { aiProvider } from './providers/gemini.provider.js';
-import { aiConfig } from './config.js';
+import { aiProvider } from './providers/provider.js';
+import { aiConfig, aiApiKey, aiRuntimeIdentity } from './config.js';
 import { aiError, reportAiFailure } from './failures.js';
 import {
   catalogSort,
@@ -85,35 +95,56 @@ export async function productCard(slug: string) {
   return (await productCards([slug]))[0] ?? null;
 }
 export async function vectorMatches(text: string, signal?: AbortSignal) {
-  if (!aiConfig().enabled || !aiConfig().vectorIndex) return [];
+  if (
+    !aiConfig().enabled ||
+    !aiConfig().semanticEnabled ||
+    !aiConfig().vectorIndex
+  )
+    return [];
   try {
     signal?.throwIfAborted();
     const vector = await cachedAiValue(
-      `embedding:${aiConfig().embeddingModel}:${text}`,
+      `embedding:${aiConfig().embeddingProvider}:${aiConfig().embeddingModel}:${aiConfig().embeddingDimensions}:${text}`,
       (sharedSignal) => aiProvider.embed(text, sharedSignal),
       signal
     );
     signal?.throwIfAborted();
-    return await AiChunk.aggregate<{
-      key: string;
-      part: number;
-      hash: string;
-      text: string;
-      title: string;
-      href: string;
-    }>([
-      {
-        $vectorSearch: {
-          index: aiConfig().vectorIndex,
-          path: 'embedding',
-          queryVector: vector,
-          numCandidates: 200,
-          limit: 40,
-          filter: { embeddingModel: aiConfig().embeddingModel },
+    if (
+      aiConfig().embeddingGeneration &&
+      isExactVectorIndex(aiConfig().vectorIndex)
+    )
+      return await exactVectorMatches(
+        aiConfig().embeddingGeneration!,
+        vector,
+        signal
+      );
+    const collection = aiConfig().embeddingGeneration
+      ? AiEmbeddingChunk
+      : AiChunk;
+    return await collection
+      .aggregate<{
+        key: string;
+        part: number;
+        hash: string;
+        text: string;
+        title: string;
+        href: string;
+      }>([
+        {
+          $vectorSearch: {
+            index: aiConfig().vectorIndex,
+            path: 'embedding',
+            queryVector: vector,
+            numCandidates: 200,
+            limit: 40,
+            filter: aiConfig().embeddingGeneration
+              ? { generation: aiConfig().embeddingGeneration }
+              : { embeddingModel: aiConfig().embeddingModel },
+          },
         },
-      },
-      { $project: { embedding: 0 } },
-    ]).option({ maxTimeMS: 5000, ...(signal ? { signal } : {}) });
+        { $project: { embedding: 0 } },
+      ])
+      .option({ maxTimeMS: 5000, ...(signal ? { signal } : {}) });
   } catch (error) {
     signal?.throwIfAborted();
     reportAiFailure(error, 'embedding');
@@ -146,10 +177,17 @@ export async function searchProducts(
       }
     : undefined;
   const explicit = input;
-  if (interpret && aiConfig().enabled && process.env['GEMINI_API_KEY']) {
+  const priceRange = questionPriceRange(input.q);
+  if (priceRange)
+    input = {
+      ...input,
+      minPrice: input.minPrice ?? priceRange.minPrice,
+      maxPrice: input.maxPrice ?? priceRange.maxPrice,
+    };
+  if (interpret && aiConfig().enabled && aiApiKey()) {
     try {
       const intent = await cachedAiValue(
-        `intent:${aiConfig().model}:${input.q}:${JSON.stringify(intentContext ?? {})}`,
+        `intent:${aiRuntimeIdentity()}:${input.q}:${JSON.stringify(intentContext ?? {})}`,
         (sharedSignal) =>
           aiProvider.interpretQuery(input.q, sharedSignal, intentContext),
         signal
@@ -244,16 +282,21 @@ export async function searchProducts(
           (normalize(b.name) === normalize(intent.brand) ||
             String(b._id) === intent.brand)
       );
-      const category = categories.find(
-        (c) =>
-          intent.category &&
-          (normalize(c.name) === normalize(intent.category) ||
-            String(c._id) === intent.category)
-      );
-      if (
-        (!input.brand && intent.brand && !brand) ||
-        (!input.category && intent.category && !category)
-      )
+      const category =
+        categories.find(
+          (c) =>
+            intent.category &&
+            (normalize(c.name) === normalize(intent.category) ||
+              String(c._id) === intent.category)
+        ) ??
+        categories.find(
+          (c) =>
+            intent.category &&
+            categoryMeaning(c.name) === categoryMeaning(intent.category)
+        );
+      const compatibilityBrand =
+        intent.brand && /^(iphone|ipad|macbook)$/i.test(intent.brand.trim());
+      if (!input.brand && intent.brand && !brand && !compatibilityBrand)
         return {
           rows: [],
           total: 0,
@@ -264,7 +307,9 @@ export async function searchProducts(
         };
       input = {
         ...input,
-        brand: input.brand ?? (brand ? String(brand._id) : undefined),
+        brand:
+          input.brand ??
+          (brand && !compatibilityBrand ? String(brand._id) : undefined),
         category:
           input.category ?? (category ? String(category._id) : undefined),
         minPrice: input.minPrice ?? intent.minPrice ?? undefined,
@@ -288,6 +333,15 @@ export async function searchProducts(
       search =
         intent.search ||
         (intent.inherit ? (context?.previousSearch?.q ?? '') : '');
+      // Unknown inferred categories must remain searchable keywords rather than
+      // vetoing the live catalog. Explicit category IDs remain strict filters.
+      if (!category && intent.category && !search.trim())
+        search = intent.category;
+      if (
+        compatibilityBrand &&
+        !normalizeQuestion(search).includes(normalizeQuestion(intent.brand!))
+      )
+        search = `${search} ${intent.brand}`.trim();
     } catch (error) {
       signal?.throwIfAborted();
       const failure = reportAiFailure(error, 'intent');
@@ -323,7 +377,8 @@ export async function searchProducts(
         sortBy: sort === 'newest' ? 'createdAt' : 'price',
         sortOrder: sort === 'price_asc' ? 'asc' : 'desc',
       },
-      signal
+      signal,
+      { searchQuery: aiProductNameQuery(search) }
     );
     const slugs = sorted.data.map((p) => p.slug);
     const cards = await productCards(slugs, signal);
@@ -348,7 +403,8 @@ export async function searchProducts(
         page: 1,
         limit: 100,
       },
-      signal
+      signal,
+      { searchQuery: aiProductNameQuery(search) }
     ),
     semanticMatches ?? vectorMatches(input.q, signal),
   ]);
@@ -523,44 +579,4 @@ export async function retrieveKnowledge(
     clarification:
       'clarification' in products ? products.clarification : undefined,
   };
-}
-export async function recommendProducts(slug: string, signal?: AbortSignal) {
-  signal?.throwIfAborted();
-  const product = (
-    await getStorefrontProducts([slug], signal, { content: 'none' })
-  )[0];
-  if (!product) return [];
-  const result = await searchProducts(
-    aiSearchSchema.parse({
-      q: `${product.name} ${product.category.name}`.slice(0, 300),
-      category: product.category.id,
-      limit: 10,
-    }),
-    undefined,
-    false,
-    signal
-  );
-  let rows = result.rows.filter((p) => p.slug !== slug);
-  if (rows.length < 4) {
-    const fallback = await listStoreProducts(
-      {
-        category: product.category.id,
-        limit: 8,
-      },
-      signal
-    );
-    const cards = await productCards(
-      fallback.data.filter((p) => p.slug !== slug).map((p) => p.slug),
-      signal
-    );
-    rows = [
-      ...new Map(
-        [...rows, ...cards.filter((p): p is AiProduct => !!p)].map((p) => [
-          p.id,
-          p,
-        ])
-      ).values(),
-    ];
-  }
-  return rows.slice(0, 6);
 }

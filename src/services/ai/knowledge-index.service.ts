@@ -1,16 +1,26 @@
+import {
+  runEmbeddingBuild,
+  queueActiveEmbeddingRefresh,
+} from './embedding-worker.js';
+import { knowledgeSources } from './knowledge-sources.js';
 import { createHash } from 'node:crypto';
 import Product from '../../models/products/products.model.js';
 import { AiChunk, AiIndexJob } from '../../models/ai/ai.model.js';
 import { randomUUID } from 'node:crypto';
-import {
-  listStoreProducts,
-  visibleCatalogFilter,
-} from '../products/store-products.service.js';
-import { readDocument } from '../support/managed-document.service.js';
-import { documentKeys } from '../../validations/support/managed-document.validation.js';
+import { visibleCatalogFilter } from '../products/store-products.service.js';
 import { plainText } from '../../utils/shared/plain-text.js';
-import { aiProvider } from './providers/gemini.provider.js';
-import { aiConfig } from './config.js';
+import { aiProvider } from './providers/provider.js';
+import {
+  aiConfig,
+  aiEmbeddingKey,
+  resolveAiRuntime,
+  withAiRuntime,
+} from './config.js';
+import {
+  registerIndexWorker,
+  markIndexWorkerTick,
+  markIndexWorkerError,
+} from './index-worker-control.js';
 import mongoose, { type ClientSession } from 'mongoose';
 export interface IndexContext {
   signal?: AbortSignal;
@@ -103,56 +113,18 @@ export async function indexSource(
   );
 }
 export async function synchronizeKnowledge(context: IndexContext = {}) {
-  // Remove hidden/deleted sources before generating any paid embeddings, even if quota is exhausted.
   await pruneHiddenProductChunks(context);
-  for (const key of documentKeys) {
-    await checkLease(context);
-    const doc = await readDocument(key);
+  for await (const source of knowledgeSources({
+    ...context,
+    check: () => checkLease(context),
+  }))
     await indexSource(
-      'document:' + key,
-      doc && 'content' in doc && typeof doc.content === 'string'
-        ? doc.content
-        : '',
-      key,
-      '/' + key,
+      source.key,
+      source.text,
+      source.title,
+      source.href,
       context
     );
-  }
-  let page = 1;
-  while (true) {
-    await checkLease(context);
-    const result = await listStoreProducts(
-      { page, limit: 50 },
-      context.signal,
-      { includeContent: true }
-    );
-    for (const p of result.data)
-      await indexSource(
-        'product:' + p._id,
-        [
-          p.product_name,
-          p.sku,
-          p.description,
-          JSON.stringify(p.tags),
-          JSON.stringify(p.brand),
-          JSON.stringify(p.category),
-          JSON.stringify(p.categories),
-          JSON.stringify(
-            p.variants.map((v) => ({
-              name: v.variant_name,
-              color: v.color,
-              size: v.size,
-              attributes: v.attributes,
-            }))
-          ),
-        ].join(' '),
-        p.product_name,
-        '/shop/' + p.slug,
-        context
-      );
-    if (result.data.length < 50) break;
-    page++;
-  }
   await pruneHiddenProductChunks(context);
 }
 export async function pruneHiddenProductChunks(context: IndexContext = {}) {
@@ -187,102 +159,121 @@ export async function pruneHiddenProductChunks(context: IndexContext = {}) {
 }
 export function startAiIndexWorker() {
   let pending: Promise<void> | undefined;
+  let stopped = false;
+  let wakeRequested = false;
   let controller: AbortController | undefined;
   const tick = () => {
-    if (
-      pending ||
-      process.env['AI_INDEX_ENABLED'] !== 'true' ||
-      !aiConfig().enabled
-    )
-      return;
-    pending = (async () => {
-      try {
-        await AiIndexJob.updateOne(
-          { _id: 'sync' },
-          { $setOnInsert: { nextRunAt: new Date(), state: 'queued' } },
-          { upsert: true }
-        );
-      } catch {
-        /* another process initialized it */
-      }
-      const lease = randomUUID();
-      const startedAt = new Date();
-      const job = await AiIndexJob.findOneAndUpdate(
-        {
-          _id: 'sync',
-          nextRunAt: { $lte: new Date() },
-          $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }],
-        },
-        {
-          $set: { state: lease, leaseUntil: new Date(Date.now() + 120000) },
-          $inc: { attempts: 1 },
-        }
-      );
-      if (!job) return;
-      const abort = new AbortController();
-      controller = abort;
-      const heartbeat = setInterval(() => {
-        void AiIndexJob.updateOne(
-          { _id: 'sync', state: lease },
-          { $set: { leaseUntil: new Date(Date.now() + 120000) } }
-        )
-          .then((result) => {
-            if (!result.matchedCount) abort.abort();
-          })
-          .catch(() => abort.abort());
-      }, 30000);
-      heartbeat.unref();
-      try {
-        await synchronizeKnowledge({ signal: abort.signal, lease });
-        await mongoose.connection.transaction(async (session) => {
-          const current = await AiIndexJob.findOne({
-            _id: 'sync',
-            state: lease,
-            leaseUntil: { $gt: new Date() },
-          }).session(session);
-          if (!current) return;
-          await AiIndexJob.updateOne(
-            { _id: 'sync', state: lease },
-            {
-              $set: {
-                state: 'completed',
-                leaseUntil: null,
-                lastSuccessAt: new Date(),
-                nextRunAt:
-                  current.requestedAt && current.requestedAt > startedAt
-                    ? new Date()
-                    : new Date(Date.now() + 15 * 60000),
-              },
-            },
-            { session }
-          );
-        });
-      } catch {
-        await AiIndexJob.updateOne(
-          { _id: 'sync', state: lease },
-          {
-            $set: {
-              state: 'failed',
-              leaseUntil: null,
-              nextRunAt: new Date(Date.now() + 5 * 60000),
-            },
+    if (pending || stopped) return;
+    markIndexWorkerTick();
+    pending = resolveAiRuntime()
+      .then((snapshot) =>
+        withAiRuntime(snapshot, async () => {
+          if (stopped) return;
+          if (!aiConfig().enabled || !aiConfig().indexingEnabled) return;
+          const versionController = new AbortController();
+          controller = versionController;
+          if (await runEmbeddingBuild(versionController.signal)) return;
+          if (await queueActiveEmbeddingRefresh()) return;
+          if (!aiConfig().vectorIndex || !aiEmbeddingKey()) return;
+          try {
+            await AiIndexJob.updateOne(
+              { _id: 'sync' },
+              { $setOnInsert: { nextRunAt: new Date(), state: 'queued' } },
+              { upsert: true }
+            );
+          } catch {
+            /* another process initialized it */
           }
-        );
-      } finally {
-        clearInterval(heartbeat);
-      }
-    })()
+          const lease = randomUUID();
+          const startedAt = new Date();
+          const job = await AiIndexJob.findOneAndUpdate(
+            {
+              _id: 'sync',
+              nextRunAt: { $lte: new Date() },
+              $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }],
+            },
+            {
+              $set: { state: lease, leaseUntil: new Date(Date.now() + 120000) },
+              $inc: { attempts: 1 },
+            }
+          );
+          if (!job) return;
+          const abort = new AbortController();
+          controller = abort;
+          const heartbeat = setInterval(() => {
+            void AiIndexJob.updateOne(
+              { _id: 'sync', state: lease },
+              { $set: { leaseUntil: new Date(Date.now() + 120000) } }
+            )
+              .then((result) => {
+                if (!result.matchedCount) abort.abort();
+              })
+              .catch(() => abort.abort());
+          }, 30000);
+          heartbeat.unref();
+          try {
+            await synchronizeKnowledge({ signal: abort.signal, lease });
+            await mongoose.connection.transaction(async (session) => {
+              const current = await AiIndexJob.findOne({
+                _id: 'sync',
+                state: lease,
+                leaseUntil: { $gt: new Date() },
+              }).session(session);
+              if (!current) return;
+              await AiIndexJob.updateOne(
+                { _id: 'sync', state: lease },
+                {
+                  $set: {
+                    state: 'completed',
+                    leaseUntil: null,
+                    lastSuccessAt: new Date(),
+                    nextRunAt:
+                      current.requestedAt && current.requestedAt > startedAt
+                        ? new Date()
+                        : new Date(Date.now() + 15 * 60000),
+                  },
+                },
+                { session }
+              );
+            });
+          } catch {
+            await AiIndexJob.updateOne(
+              { _id: 'sync', state: lease },
+              {
+                $set: {
+                  state: 'failed',
+                  leaseUntil: null,
+                  nextRunAt: new Date(Date.now() + 5 * 60000),
+                },
+              }
+            );
+          } finally {
+            clearInterval(heartbeat);
+          }
+        })
+      )
       .catch(() => {
+        markIndexWorkerError();
         console.error('AI indexing failed');
       })
       .finally(() => {
         pending = undefined;
+        if (wakeRequested) {
+          wakeRequested = false;
+          tick();
+        }
       });
   };
   const timer = setInterval(tick, 60000);
+  const unregister = registerIndexWorker(() => {
+    if (pending) wakeRequested = true;
+    else tick();
+  });
   timer.unref();
   tick();
   return async () => {
+    stopped = true;
+    unregister();
     clearInterval(timer);
     controller?.abort();
     await pending;

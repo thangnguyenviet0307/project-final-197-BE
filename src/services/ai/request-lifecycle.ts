@@ -1,3 +1,4 @@
+import { withAiConfig } from './config.js';
 import type { Request, Response } from 'express';
 import createError from 'http-errors';
 import { ClientDisconnectedError } from '../../utils/shared/request-cancellation.js';
@@ -31,7 +32,10 @@ export function httpAiTask<T>(
   const work = Promise.resolve()
     .then(() => {
       controller.signal.throwIfAborted();
-      return task(controller.signal);
+      return withAiConfig(() => {
+        controller.signal.throwIfAborted();
+        return task(controller.signal);
+      });
     })
     .then((value) => {
       controller.signal.throwIfAborted();

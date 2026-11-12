@@ -1,6 +1,8 @@
 import { Router, type Router as ExpressRouter } from 'express';
 import { z } from 'zod';
 import * as controller from '../../../controllers/ai/ai.controller.js';
+import * as embeddings from '../../../controllers/ai/ai-embedding.controller.js';
+import * as settings from '../../../controllers/ai/ai-settings.controller.js';
 import {
   aiIdentity,
   aiOrigin,
@@ -24,18 +26,32 @@ import {
 } from '../../../validations/ai/ai.validation.js';
 const router: ExpressRouter = Router();
 router.use(aiOrigin);
-router.get(
-  '/admin/status',
+const admin = Router();
+admin.use(
   authenticate,
   requirePermission(Permission.AiManage),
-  controller.status
+  createAuthRateLimit(30, 60000)
 );
-router.post(
-  '/admin/reindex',
-  authenticate,
-  requirePermission(Permission.AiManage),
-  controller.reindex
+admin.get('/settings', settings.read);
+admin.get('/embeddings', embeddings.read);
+admin.post('/embeddings', embeddings.create);
+admin.post('/embeddings/activate', embeddings.activate);
+admin.post('/embeddings/:id/retry', embeddings.change('retry'));
+admin.post('/embeddings/:id/cancel', embeddings.change('cancel'));
+admin.delete('/embeddings/:id', embeddings.change('delete'));
+admin.post('/settings/initialize', settings.initialize);
+admin.put('/settings', settings.save);
+admin.post('/connections', settings.create);
+admin.put('/connections/:id', settings.update);
+admin.delete('/connections/:id', settings.remove);
+admin.post(
+  '/connections/:id/test',
+  createAuthRateLimit(4, 60000),
+  settings.test
 );
+admin.get('/status', controller.status);
+admin.post('/reindex', controller.reindex);
+router.use('/admin', admin);
 router.use(createAuthRateLimit(60, 60000));
 router.use(
   asyncHandler(async (req, _res, next) => {
@@ -44,11 +60,6 @@ router.use(
   })
 );
 router.get('/search', validate({ query: aiSearchSchema }), controller.search);
-router.get(
-  '/recommendations/:slug',
-  validate({ params: z.object({ slug: z.string().min(1).max(255) }).strict() }),
-  controller.recommendations
-);
 router.get(
   '/conversations',
   aiIdentity,

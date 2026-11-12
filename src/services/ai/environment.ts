@@ -1,4 +1,11 @@
 export function validateAiEnvironment(environment: NodeJS.ProcessEnv): void {
+  if (
+    environment['AI_CONFIG_ENCRYPTION_KEY'] &&
+    !/^[a-f0-9]{64}$/i.test(environment['AI_CONFIG_ENCRYPTION_KEY'])
+  )
+    throw new Error(
+      'AI_CONFIG_ENCRYPTION_KEY must contain 64 hexadecimal characters'
+    );
   for (const name of [
     'AI_INTENT_MAX_OUTPUT_TOKENS',
     'AI_CHAT_MAX_OUTPUT_TOKENS',
@@ -15,7 +22,12 @@ export function validateAiEnvironment(environment: NodeJS.ProcessEnv): void {
     !['low', 'medium', 'high'].includes(environment['AI_REASONING_EFFORT'])
   )
     throw new Error('Invalid AI_REASONING_EFFORT');
-  for (const name of ['AI_ENABLED', 'AI_INDEX_ENABLED', 'AI_RISK_ENABLED']) {
+  for (const name of [
+    'AI_ENABLED',
+    'AI_INDEX_ENABLED',
+    'AI_RISK_ENABLED',
+    'AI_FORCE_DISABLED',
+  ]) {
     if (
       environment[name] !== undefined &&
       !['true', 'false'].includes(environment[name]!)

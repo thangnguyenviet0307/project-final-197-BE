@@ -19,6 +19,9 @@ for (const file of await readdir(new URL('../src/models/', import.meta.url), {
 test('all runtime models explicitly bind to the intended snake_case collections', () => {
   const expected = {
     AiConversation: 'ai_conversations',
+    AiSettings: 'ai_settings',
+    AiEmbeddingGeneration: 'ai_embedding_generations',
+    AiEmbeddingChunk: 'ai_embedding_chunks',
     AiTurn: 'ai_messages',
     AiSocketTicket: 'ai_socket_tickets',
     AiChunk: 'ai_knowledge_chunks',

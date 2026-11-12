@@ -9,6 +9,7 @@ Không thao tác đơn hàng, không yêu cầu mật khẩu/OTP/thẻ ngân hà
 
 export const intentInstructions = `Trích xuất nhu cầu tìm sản phẩm thành JSON đúng schema.
 Đọc toàn bộ question, kể cả điều kiện ở cuối. search là từ khóa sản phẩm ngắn, bỏ lời chào, điều kiện giá và từ yêu cầu sắp xếp. Giá là VND: triệu=1000000, nghìn/k=1000.
+Ví dụ "ốp lưng iphone tầm 100-200k": search="ốp lưng iphone", minPrice=100000, maxPrice=200000, brand=null. iPhone là thiết bị tương thích, không phải thương hiệu nhà sản xuất ốp. "Ốp lưng" và "ốp điện thoại" là cách gọi tương đương. Giữ thiết bị tương thích trong search. productNames chỉ chứa tên đầy đủ hoặc SKU của sản phẩm cụ thể, không chứa loại sản phẩm chung như "ốp lưng iPhone".
 sort: price_asc khi rẻ nhất/giá thấp nhất, price_desc khi đắt nhất/giá cao nhất, newest khi mới nhất, relevance khi còn lại.
 task: compare khi so sánh, policy khi hỏi chính sách, search khi tìm/gợi ý sản phẩm.
 productNames: tên hoặc SKU các sản phẩm được khách nêu để đọc đúng từng sản phẩm; không gộp hai tên thành một search phrase. referencePositions: các vị trí 1-based của previousProducts được nhắc (ví dụ cái thứ hai = [2]).

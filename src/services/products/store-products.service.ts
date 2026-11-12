@@ -5,6 +5,7 @@ import {
 import Product from '../../models/products/products.model.js';
 import {
   buildProductSearchQuery,
+  buildProductQuery,
   discountedPricePageIds,
   buildProductSort,
 } from '../../utils/products/product-query.js';
@@ -30,8 +31,14 @@ const references = [
 // documents into memory; detail reads and internal indexing retain full content.
 export const publicProductListFields = publicProductFields
   .split(' ')
-  .filter((field) =>
-    !['description', 'warrantyInformation', 'shippingInformation', 'returnPolicy'].includes(field)
+  .filter(
+    (field) =>
+      ![
+        'description',
+        'warrantyInformation',
+        'shippingInformation',
+        'returnPolicy',
+      ].includes(field)
   )
   .join(' ');
 
@@ -57,7 +64,10 @@ export async function visibleCatalogFilter(
 export async function listStoreProducts(
   filters: Partial<GetProductsQuery>,
   signal?: AbortSignal,
-  options: { includeContent?: boolean } = {}
+  options: {
+    includeContent?: boolean;
+    searchQuery?: Record<string, unknown> | undefined;
+  } = {}
 ) {
   signal?.throwIfAborted();
   if (filters.category) {
@@ -68,9 +78,22 @@ export async function listStoreProducts(
   }
   const page = filters.page ?? 1;
   const limit = filters.limit ?? 12;
+  const originalSearch = await buildProductSearchQuery(filters, true, signal);
   const query: Record<string, unknown> = {
     $and: [
-      await buildProductSearchQuery(filters, true, signal),
+      options.searchQuery
+        ? {
+            $or: [
+              originalSearch,
+              {
+                $and: [
+                  buildProductQuery({ ...filters, search: undefined }),
+                  options.searchQuery,
+                ],
+              },
+            ],
+          }
+        : originalSearch,
       await visibleCatalogFilter(signal),
     ],
     is_active: true,

@@ -23,6 +23,7 @@ import { retrieveKnowledge } from '../dist/services/ai/retrieval.service.js';
 import {
   indexSource,
   pruneHiddenProductChunks,
+  startAiIndexWorker,
 } from '../dist/services/ai/knowledge-index.service.js';
 import { runChat } from '../dist/services/ai/chat.service.js';
 import { clearAiCache } from '../dist/services/ai/cache.js';
@@ -35,11 +36,24 @@ import {
   reserveUsage,
   reserveProviderCall,
 } from '../dist/services/ai/usage.service.js';
-import { recommendProducts } from '../dist/services/ai/retrieval.service.js';
 import { observeRisk } from '../dist/services/ai/risk.service.js';
 import { digest } from '../dist/services/ai/identity.service.js';
 import { EventEmitter } from 'node:events';
 import { generateAccessToken } from '../dist/utils/auth/token.js';
+import { AiSettings } from '../dist/models/ai/ai-settings.model.js';
+import * as management from '../dist/services/ai/settings.service.js';
+import { resolveAiRuntime, withAiRuntime, aiConfig, aiApiKey, environmentAiConfig } from '../dist/services/ai/config.js';
+import { User } from '../dist/models/users/users.model.js';
+import { AiEmbeddingChunk, AiEmbeddingGeneration } from '../dist/models/ai/ai-embedding.model.js';
+import { createEmbeddingVersion, activateEmbeddingVersion, changeEmbeddingVersion, readEmbeddingVersions } from '../dist/services/ai/embedding-versions.service.js';
+import { runEmbeddingBuild, queueActiveEmbeddingRefresh } from '../dist/services/ai/embedding-worker.js';
+import { vectorInfrastructure, VectorIndexPending } from '../dist/services/ai/vector-infrastructure.js';
+import { knowledgeSourceProvider } from '../dist/services/ai/knowledge-sources.js';
+import { withAiConfig, aiEmbeddingKey } from '../dist/services/ai/config.js';
+import { encryptCredential } from '../dist/services/ai/credentials.js';
+import { vectorMatches } from '../dist/services/ai/retrieval.service.js';
+const originalAIProvider = { ...aiProvider };
+const originalVectorInfrastructure = { ...vectorInfrastructure };
 process.env.JWT_SECRET = randomBytes(32).toString('hex');
 process.env.JWT_REFRESH_SECRET = randomBytes(32).toString('hex');
 process.env.FRONTEND_ORIGINS = 'http://localhost:5173';
@@ -50,6 +64,29 @@ if (!uri || !uri.startsWith('mongodb://127.0.0.1:'))
   throw new Error('Requires isolated loopback test deployment');
 let server, stop, base;
 const guest = { kind: 'guest', id: randomUUID() };
+
+test('iPhone cases in a shared-unit budget match live catalog aliases without semantic search', async (t) => {
+  clearAiCache();
+  const brand = await BrandModel.create({ name: 'Case fixture Apple', slug: 'case-fixture-apple' });
+  const category = await Categories.create({ name: 'Ốp điện thoại', slug: 'case-fixture-category' });
+  const base = { category: category._id, brand: brand._id, stock: 5, is_active: true };
+  const fixtures = await Product.insertMany([
+    { ...base, product_name: 'Ốp lưng iPhone 15 Pro/Pro max dodocase', slug: 'case-fixture-15', price: 166000 },
+    { ...base, product_name: 'Ốp lưng iPhone 17/18 kuroma', slug: 'case-fixture-17', price: 157000 },
+    { ...base, product_name: 'Ốp lưng Samsung S25', slug: 'case-fixture-samsung', price: 150000 },
+    { ...base, product_name: 'Ốp lưng iPhone đắt', slug: 'case-fixture-high', price: 250000 },
+    { ...base, product_name: 'Ốp lưng iPhone ẩn', slug: 'case-fixture-hidden', price: 150000, on_sale: false },
+  ]);
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: 'iphone op lung', brand: 'iPhone', category: 'ốp lưng', minPrice: 100, maxPrice: 200 }));
+  const runtime = { config: { ...environmentAiConfig(), enabled: true, semanticEnabled: false }, apiKey: 'mock-only' };
+  const result = await withAiRuntime(runtime, () => searchProducts({ q: 'tôi muốn tìm ốp lưng iphone với giá tầm 100-200k', page: 1, limit: 10 }));
+  assert.deepEqual(new Set(result.rows.map((p) => p.id)), new Set(fixtures.slice(0, 2).map((p) => String(p._id))));
+  assert.equal(result.searchContext.minPrice, 100000);
+  assert.equal(result.searchContext.maxPrice, 200000);
+  const sorted = await withAiRuntime(runtime, () => searchProducts({ q: 'op lung iphone 100-200k gia tang dan', page: 1, limit: 10 }));
+  assert.deepEqual(sorted.rows.map((p) => p.price), [157000, 166000]);
+  clearAiCache();
+});
 
 test('catalog extrema sort all eligible products by live discounted variant price, not the newest 100', async (t) => {
   clearAiCache();
@@ -793,11 +830,12 @@ test('search batches 100 candidates without per-product metrics and handles long
     product_name: 'x'.repeat(255),
     slug: 'long-valid-product',
     price: 100,
+    warrantyInformation: 'w'.repeat(100_000),
     category: category._id,
     brand: brand._id,
   });
-  const rows = await recommendProducts(long.slug);
-  assert.ok(Array.isArray(rows));
+  const longResult = await searchProducts({ q: long.product_name, page: 1, limit: 10 }, undefined, false);
+  assert.ok(longResult.rows.some((row) => row.id === String(long._id)));
 });
 test('unknown requested brand stays empty and pagination reuses successful intent/embedding results', async (t) => {
   clearAiCache();
@@ -1146,4 +1184,311 @@ test('AI keyword and semantic candidates share storefront descendant and additio
   const controller = new AbortController();
   controller.abort(new Error('cancelled merge search'));
   await assert.rejects(searchProducts({ q: 'Mergefixture', category: String(parent._id), page: 1, limit: 20 }, matches, false, controller.signal), /cancelled merge search/);
+});
+
+test('dynamic Gemini configuration encrypts credentials, checks activation, fences updates and preserves running snapshots', async (t) => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  const previousEncryption = process.env.AI_CONFIG_ENCRYPTION_KEY;
+  delete process.env.GEMINI_API_KEY;
+  process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+  t.after(async () => {
+    await AiSettings.deleteOne({ _id: 'global' });
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previousKey;
+    if (previousEncryption === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previousEncryption;
+  });
+  let state = await management.saveConnection({ revision: 0, name: 'First', provider: 'gemini', model: 'gemini-first', apiKey: 'first-secret-key-12345' }, 'admin-test');
+  const first = state.connections[0];
+  assert.equal(state.revision, 1);
+  assert.ok(!JSON.stringify(state).includes('first-secret-key'));
+  const raw = await AiSettings.collection.findOne({ _id: 'global' });
+  assert.ok(raw.connections[0].encryptedKey.startsWith('v1.'));
+  assert.ok(!JSON.stringify(raw).includes('first-secret-key'));
+  assert.equal((await AiSettings.findById('global').lean()).connections[0].encryptedKey, undefined);
+  await assert.rejects(management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: first.id, enabled: true }, 'admin-test'), (e) => e.statusCode === 400);
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null }));
+  t.mock.method(aiProvider, 'answerStream', async function* () { assert.ok(aiApiKey().includes('secret-key')); yield 'Ready'; });
+  state = await management.testConnection(first.id, state.revision, 'admin-test', new AbortController().signal);
+  assert.equal(state.connections[0].checkedOk, true);
+  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: first.id, enabled: true, dailyCalls: 37, riskEnabled: true }, 'admin-test');
+  const snapshot = await resolveAiRuntime();
+  assert.equal(snapshot.config.enabled, true); assert.equal(snapshot.config.dailyCalls, 37);
+  assert.equal(snapshot.apiKey, 'first-secret-key-12345');
+  await assert.rejects(management.deleteConnection(first.id, state.revision, 'admin-test'), (e) => e.statusCode === 409);
+  await assert.rejects(management.saveConnection({ revision: state.revision, name: 'Edit active', provider: 'gemini', model: 'gemini-new' }, 'admin-test', first.id), (e) => e.statusCode === 409);
+  state = await management.saveConnection({ revision: state.revision, name: 'Second', provider: 'gemini', model: 'gemini-second', apiKey: 'second-secret-key-67890' }, 'admin-test');
+  const second = state.connections.find((item) => item.name === 'Second');
+  state = await management.testConnection(second.id, state.revision, 'admin-test', new AbortController().signal);
+  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, activeConnectionId: second.id }, 'admin-test');
+  await withAiRuntime(snapshot, async () => { assert.equal(aiConfig().model, 'gemini-first'); assert.equal(aiApiKey(), 'first-secret-key-12345'); });
+  assert.equal((await resolveAiRuntime()).config.model, 'gemini-second');
+  const concurrent = await Promise.allSettled([40, 41].map((dailyCalls) => management.saveAiSettings({ ...state.settings, revision: state.revision, dailyCalls }, 'admin-test')));
+  assert.equal(concurrent.filter((item) => item.status === 'fulfilled').length, 1);
+  assert.equal(concurrent.find((item) => item.status === 'rejected').reason.statusCode, 409);
+  state = await management.readAiSettings();
+  state = await management.saveAiSettings({ ...state.settings, revision: state.revision, enabled: false, activeConnectionId: null }, 'admin-test');
+  state = await management.saveConnection({ revision: state.revision, name: 'Second edited', provider: 'gemini', model: 'gemini-edited', apiKey: 'replacement-secret-key-0000' }, 'admin-test', second.id);
+  assert.equal(state.connections.find((item) => item.id === second.id).checkedOk, false);
+  t.mock.method(aiProvider, 'interpretQuery', async () => { throw Object.assign(new Error('provider-secret-response'), { status: 429 }); });
+  state = await management.testConnection(second.id, state.revision, 'admin-test', new AbortController().signal);
+  assert.equal(state.connections.find((item) => item.id === second.id).checkCode, 'AI_RATE_LIMITED');
+  assert.ok(!JSON.stringify(state).includes('provider-secret-response'));
+  state = await management.deleteConnection(second.id, state.revision, 'admin-test');
+  assert.ok(!state.connections.some((item) => item.id === second.id));
+  assert.ok(state.audit.some((entry) => entry.action === 'connection.deleted'));
+  process.env.GEMINI_API_KEY = 'environment-secret-must-not-fall-back';
+  const stopped = await resolveAiRuntime();
+  assert.equal(stopped.config.enabled, false);
+  assert.equal(stopped.apiKey, '');
+});
+
+test('versioned embeddings fence index lag, isolate dimensions/keys, switch atomically, roll back and cancel safely', async (t) => {
+  const previous = process.env.AI_CONFIG_ENCRYPTION_KEY;
+  process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+  const geminiId = randomUUID(), openaiId = randomUUID();
+  await AiEmbeddingChunk.init();
+  await AiSettings.create({ _id: 'global', enabled: true, indexingEnabled: true, semanticEnabled: false, dailyCalls: 100, activeConnectionId: openaiId, connections: [
+    { id: geminiId, name: 'Embedding Gemini', provider: 'gemini', model: 'gemini-3.1-flash-lite', encryptedKey: encryptCredential('gemini-embedding-secret', geminiId), keyHint: 'cret', checkedOk: true },
+    { id: openaiId, name: 'OpenAI chat and embeddings', provider: 'openai', model: 'gpt-4.1-mini', encryptedKey: encryptCredential('openai-embedding-secret', openaiId), keyHint: 'cret', checkedOk: true },
+  ] });
+  t.after(async () => {
+    clearAiCache();
+    await AiEmbeddingChunk.deleteMany({}); await AiEmbeddingGeneration.deleteMany({}); await AiSettings.deleteOne({ _id: 'global' });
+    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
+  });
+  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () { yield { key: 'document:warranty', text: 'Published policy '.repeat(90), title: 'Warranty', href: '/chinh-sach-bao-hanh' }; });
+  const embeddings = t.mock.method(aiProvider, 'embed', async () => {
+    assert.equal(aiEmbeddingKey(), aiConfig().embeddingProvider === 'gemini' ? 'gemini-embedding-secret' : 'openai-embedding-secret');
+    return [1, ...Array(aiConfig().embeddingDimensions - 1).fill(0)];
+  });
+  let indexReady = false, visible = false, replaced = false;
+  t.mock.method(vectorInfrastructure, 'ensure', async (version) => { if (!indexReady) throw new VectorIndexPending(); return (replaced ? 'replaced-' : 'physical-') + version._id; });
+  t.mock.method(vectorInfrastructure, 'visible', async () => visible);
+  let state = await readEmbeddingVersions();
+  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 768 }, 'test-admin');
+  const first = state.versions[0]._id;
+  const legacyCount = await AiChunk.countDocuments();
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiEmbeddingGeneration.findById(first)).state, 'queued');
+  assert.equal(embeddings.mock.callCount(), 0); // No provider spend before infrastructure readiness.
+  indexReady = true;
+  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  await withAiConfig(() => runEmbeddingBuild());
+  let built = await AiEmbeddingGeneration.findById(first).lean();
+  assert.equal(built.state, 'verifying'); assert.ok(built.chunks > 0);
+  const generated = embeddings.mock.callCount();
+  await assert.rejects(activateEmbeddingVersion(first, state.revision, 'test-admin'), (e) => e.statusCode === 409);
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, null);
+  await assert.rejects(management.deleteConnection(geminiId, state.revision, 'test-admin'), (e) => e.statusCode === 409);
+  visible = true;
+  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  await withAiConfig(() => runEmbeddingBuild());
+  built = await AiEmbeddingGeneration.findById(first).lean();
+  assert.equal(built.state, 'ready'); assert.equal(built.verified, built.chunks);
+  assert.equal(embeddings.mock.callCount(), generated); // Verifying again never re-embeds data.
+  state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
+  const firstSnapshot = await resolveAiRuntime();
+  assert.equal(firstSnapshot.config.provider, 'openai'); assert.equal(firstSnapshot.apiKey, 'openai-embedding-secret');
+  assert.equal(firstSnapshot.config.embeddingProvider, 'gemini'); assert.equal(firstSnapshot.embeddingApiKey, 'gemini-embedding-secret');
+  assert.equal(firstSnapshot.config.embeddingDimensions, 768);
+  state = await createEmbeddingVersion({ revision: state.revision, connectionId: openaiId, model: 'text-embedding-3-small', dimensions: 1536 }, 'test-admin');
+  const second = state.versions.find((v) => v._id !== first)._id;
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiEmbeddingGeneration.findById(second)).state, 'ready');
+  state = await activateEmbeddingVersion(second, state.revision, 'test-admin');
+  const secondSnapshot = await resolveAiRuntime();
+  assert.equal(secondSnapshot.config.embeddingProvider, 'openai'); assert.equal(secondSnapshot.config.embeddingDimensions, 1536);
+  clearAiCache();
+  const searches = [];
+  t.mock.method(AiEmbeddingChunk, 'aggregate', (pipeline) => ({ option: async () => { searches.push(pipeline[0].$vectorSearch); return []; } }));
+  await withAiRuntime(firstSnapshot, () => vectorMatches('same question'));
+  await withAiRuntime(secondSnapshot, () => vectorMatches('same question'));
+  assert.deepEqual(searches.map((query) => query.filter.generation), [first, second]);
+  assert.deepEqual(searches.map((query) => query.queryVector.length), [768, 1536]);
+  replaced = true;
+  await assert.rejects(activateEmbeddingVersion(first, state.revision, 'test-admin'), (e) => e.statusCode === 409);
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, second);
+  replaced = false;
+  state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
+  await withAiRuntime(secondSnapshot, async () => { assert.equal(aiConfig().embeddingGeneration, second); assert.equal(aiEmbeddingKey(), 'openai-embedding-secret'); });
+  await assert.rejects(changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete'), (e) => e.statusCode === 409);
+  await AiEmbeddingGeneration.updateOne({ _id: second }, { $set: { lastDeactivatedAt: new Date(Date.now() - 6 * 60000) } });
+  state = await changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete');
+  assert.equal(await AiEmbeddingChunk.countDocuments({ generation: second }), 0);
+  assert.ok(await AiEmbeddingChunk.countDocuments({ generation: first }) > 0);
+  const beforeReuse = embeddings.mock.callCount();
+  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 768 }, 'test-admin');
+  const reused = state.versions.find((v) => v._id !== first)._id;
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiEmbeddingGeneration.findById(reused)).state, 'ready');
+  assert.equal(embeddings.mock.callCount(), beforeReuse); // Identical space/text reuses vectors, not provider quota.
+  state = await createEmbeddingVersion({ revision: state.revision, connectionId: geminiId, model: 'gemini-embedding-001', dimensions: 1536 }, 'test-admin');
+  const third = state.versions.find((v) => v._id !== first && v.dimensions === 1536)._id;
+  t.mock.method(aiProvider, 'embed', async () => {
+    const latest = await readEmbeddingVersions();
+    await changeEmbeddingVersion(third, latest.revision, 'test-admin', 'cancel');
+    return [1, ...Array(1535).fill(0)];
+  });
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiEmbeddingGeneration.findById(third)).state, 'cancelled');
+  assert.equal(await AiEmbeddingChunk.countDocuments({ generation: third }), 0);
+  state = await readEmbeddingVersions();
+  state = await changeEmbeddingVersion(third, state.revision, 'test-admin', 'retry');
+  t.mock.method(aiProvider, 'embed', async () => { throw Object.assign(new Error('limit'), { aiCode: 'AI_USAGE_LIMIT' }); });
+  await withAiConfig(() => runEmbeddingBuild());
+  const paused = await AiEmbeddingGeneration.findById(third);
+  assert.equal(paused.state, 'building');
+  assert.equal(paused.failureCode, 'AI_USAGE_LIMIT');
+  assert.ok(paused.nextRunAt > new Date());
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+  assert.equal(await AiChunk.countDocuments(), legacyCount);
+  // An operator switching away during an automatic refresh must win.
+  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () { yield { key: 'document:warranty', text: 'Refreshed policy '.repeat(90), title: 'Warranty', href: '/chinh-sach-bao-hanh' }; });
+  await queueActiveEmbeddingRefresh(true);
+  let switched = false;
+  t.mock.method(aiProvider, 'embed', async () => {
+    if (!switched) {
+      switched = true;
+      let current = await readEmbeddingVersions();
+      await activateEmbeddingVersion(null, current.revision, 'operator');
+      current = await readEmbeddingVersions();
+      await activateEmbeddingVersion(first, current.revision, 'operator');
+      const flags = await management.readAiSettings();
+      await management.saveAiSettings({ ...flags.settings, revision: flags.revision, indexingEnabled: true }, 'operator');
+    }
+    return [1, ...Array(aiConfig().embeddingDimensions - 1).fill(0)];
+  });
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+});
+
+test('ordinary MongoDB builds, verifies, searches and automatically refreshes isolated semantic snapshots', async (t) => {
+  const previous = process.env.AI_CONFIG_ENCRYPTION_KEY;
+  process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+  t.mock.method(vectorInfrastructure, 'ensure', originalVectorInfrastructure.ensure);
+  t.mock.method(vectorInfrastructure, 'visible', originalVectorInfrastructure.visible);
+  const connectionId = randomUUID();
+  await AiSettings.create({ _id: 'global', enabled: true, indexingEnabled: false, semanticEnabled: false, dailyCalls: 100, activeConnectionId: connectionId, connections: [
+    { id: connectionId, name: 'Semantic fixture', provider: 'gemini', model: 'gemini-3.1-flash-lite', encryptedKey: encryptCredential('mock-embedding-key', connectionId), keyHint: '-key', checkedOk: true },
+  ] });
+  t.after(async () => {
+    clearAiCache();
+    await AiEmbeddingChunk.deleteMany({}); await AiEmbeddingGeneration.deleteMany({}); await AiSettings.deleteOne({ _id: 'global' });
+    if (previous === undefined) delete process.env.AI_CONFIG_ENCRYPTION_KEY; else process.env.AI_CONFIG_ENCRYPTION_KEY = previous;
+  });
+  let changed = false;
+  t.mock.method(knowledgeSourceProvider, 'iterate', async function* () {
+    yield { key: 'document:warranty', text: changed ? 'Updated warranty' : 'Warranty coverage', title: 'Warranty', href: '/warranty' };
+    if (!changed) yield { key: 'document:shipping', text: 'Shipping delivery', title: 'Shipping', href: '/shipping' };
+  });
+  let quotaOnce = true;
+  const embed = t.mock.method(aiProvider, 'embed', async (text) => {
+    if (text.includes('Shipping') && quotaOnce) {
+      quotaOnce = false;
+      throw Object.assign(new Error('mock daily limit'), { aiCode: 'AI_USAGE_LIMIT' });
+    }
+    return [...(text.includes('Shipping') ? [0, 1] : [1, 0]), ...Array(766).fill(0)];
+  });
+  let state = await createEmbeddingVersion({ revision: 0, connectionId, model: 'gemini-embedding-001', dimensions: 768, engine: 'exact', startSync: true }, 'test-admin');
+  const first = state.versions[0]._id;
+  assert.equal((await AiSettings.findById('global')).indexingEnabled, true);
+  await withAiConfig(() => runEmbeddingBuild());
+  const paused = await AiEmbeddingGeneration.findById(first);
+  assert.equal(paused.state, 'building'); assert.equal(paused.chunks, 1);
+  assert.equal(paused.failureCode, 'AI_USAGE_LIMIT'); assert.ok(paused.nextRunAt > new Date());
+  await AiEmbeddingGeneration.updateOne({ _id: first }, { $set: { nextRunAt: new Date(0) } });
+  await withAiConfig(() => runEmbeddingBuild());
+  const built = await AiEmbeddingGeneration.findById(first);
+  assert.equal(built.state, 'ready'); assert.equal(built.verified, 2);
+  state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
+  clearAiCache();
+  const matches = await withAiConfig(() => vectorMatches('guarantee repair'));
+  assert.equal(matches[0].key, 'document:warranty');
+  assert.ok(matches[0].score > matches[1].score);
+  assert.ok(matches.every((row) => !('embedding' in row)));
+  changed = true;
+  await queueActiveEmbeddingRefresh(true);
+  const successor = await AiEmbeddingGeneration.findOne({ parentId: first });
+  assert.ok(successor.indexName.startsWith('ai_exact_'));
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, first);
+  await withAiConfig(() => runEmbeddingBuild());
+  assert.equal((await AiSettings.findById('global')).activeEmbeddingGenerationId, successor._id);
+  const current = await withAiConfig(() => vectorMatches('guarantee repair'));
+  assert.equal(current.length, 1); assert.equal(current[0].text, 'Updated warranty');
+  assert.equal(await AiEmbeddingChunk.countDocuments({ generation: first }), 2);
+  assert.equal(embed.mock.callCount(), 5); // 2 sources, 1 failed call, 1 query, 1 changed source.
+  const aborted = new AbortController(); aborted.abort();
+  await assert.rejects(withAiConfig(() => vectorMatches('cancelled', aborted.signal)), { name: 'AbortError' });
+  const expiredIds = Array.from({ length: 18 }, () => randomUUID());
+  await AiEmbeddingGeneration.insertMany(expiredIds.map((id) => ({
+    _id: id, connectionId, provider: 'gemini', model: 'gemini-embedding-001', dimensions: 768,
+    indexName: 'ai_exact_' + id.replaceAll('-', ''), state: 'ready', autoActivate: true,
+    createdBy: 'worker', lastDeactivatedAt: new Date(Date.now() - 6 * 60000),
+  })));
+  assert.equal(await AiEmbeddingGeneration.countDocuments(), 20);
+  await queueActiveEmbeddingRefresh(true);
+  assert.equal(await AiEmbeddingGeneration.countDocuments(), 20);
+  assert.equal(await AiEmbeddingGeneration.countDocuments({ _id: { $in: expiredIds } }), 17);
+  assert.ok(await AiEmbeddingGeneration.exists({ _id: first })); // Manual rollback preserved.
+  assert.ok(await AiEmbeddingGeneration.exists({ parentId: successor._id, state: 'queued' }));
+  const shutdown = new AbortController(); shutdown.abort();
+  await withAiConfig(() => runEmbeddingBuild(shutdown.signal));
+  const interrupted = await AiEmbeddingGeneration.findOne({ parentId: successor._id });
+  assert.ok(['queued', 'building', 'verifying'].includes(interrupted.state));
+  assert.equal(interrupted.failureCode, 'AI_INDEX_INTERRUPTED');
+  assert.equal(interrupted.leaseId, null);
+  await AiEmbeddingGeneration.updateOne({ _id: interrupted._id }, { $set: { nextRunAt: new Date(0) } });
+  // Worker must load fresh database settings, even when started in a disabled request snapshot.
+  const stopWorker = withAiRuntime({ config: { ...environmentAiConfig(), enabled: false, indexingEnabled: false }, apiKey: '' }, () => startAiIndexWorker());
+  try {
+    const deadline = Date.now() + 4000;
+    let resumed;
+    do {
+      resumed = await AiEmbeddingGeneration.findById(interrupted._id);
+      if (resumed.state === 'ready') break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } while (Date.now() < deadline);
+    assert.equal(resumed.state, 'ready');
+  } finally { await stopWorker(); }
+});
+
+test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow through mocked vendor transports', async (t) => {
+  t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
+  t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
+  clearAiCache(); t.after(clearAiCache);
+  const brand = await BrandModel.create({ name: 'Providerfixture Brand', slug: 'providerfixture-brand' });
+  const category = await Categories.create({ name: 'Providerfixture Category', slug: 'providerfixture-category' });
+  const product = await Product.create({ product_name: 'Providerfixture Headphones', slug: 'providerfixture-headphones', category: category._id, brand: brand._id, price: 1000, stock: 3, is_active: true });
+  const network = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const request = JSON.parse(options.body);
+    assert.ok(['api.openai.com', 'api.x.ai', 'generativelanguage.googleapis.com'].includes(new URL(String(url)).hostname));
+    if (!request.stream) return Response.json({ choices: [{ index: 0, finish_reason: 'stop', message: { content: JSON.stringify({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, productNames: ['Providerfixture Headphones'], referencePositions: [], task: 'search', sort: 'relevance', inherit: false }) } }] });
+    const question = JSON.parse(request.messages.at(-1).content);
+    assert.equal(question.verifiedStoreData.products[0].id, String(product._id));
+    assert.equal(question.verifiedStoreData.products[0].price, 1000);
+    const chunks = [{ choices: [{ index: 0, delta: { content: 'Providerfixture Headphones có giá 1000 đồng.' }, finish_reason: null }] }, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }];
+    return new Response(chunks.map((item) => 'data: ' + JSON.stringify(item) + '\n\n').join('') + 'data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  });
+  for (const [provider, model] of [['gemini', 'gemini-3.1-flash-lite'], ['openai', 'gpt-4.1-mini'], ['xai', 'grok-4.7']]) {
+    const owner = { kind: 'guest', id: randomUUID() };
+    const conversation = await chat.createConversation(owner);
+    const input = { conversationId: String(conversation._id), requestId: randomUUID(), content: `Tìm Providerfixture Headphones (${provider})` };
+    const events = [];
+    await withAiRuntime({ config: { ...environmentAiConfig(), provider, model, enabled: true, semanticEnabled: false, vectorIndex: '', dailyCalls: 100000 }, apiKey: 'mock-vendor-credential' }, () => runChat(owner, input, new AbortController().signal, (event) => events.push(event)));
+    assert.equal(events.at(-1).type, 'chat:completed');
+    assert.equal(events.at(-1).data.products[0].id, String(product._id));
+    assert.equal((await AiTurn.findOne({ requestId: input.requestId })).status, 'completed');
+  }
+  assert.equal(network.mock.callCount(), 6);
+});
+
+test('AI management endpoints require administrative permission and never serialize server credentials', async () => {
+  const headers = { Origin: 'http://localhost:5173' };
+  assert.equal((await fetch(base + '/admin/settings', { headers })).status, 401);
+  for (const role of ['staff', 'admin']) {
+    const user = await User.create({ firstName: 'AI', lastName: 'Manager', email: `ai-${role}@example.test`, password: 'test-hash-only', role, active: true });
+    const token = generateAccessToken({ id: String(user._id), accountType: 'user', tokenVersion: 0 });
+    const response = await fetch(base + '/admin/settings', { headers: { ...headers, Authorization: `Bearer ${token}` } });
+    assert.equal(response.status, role === 'staff' ? 403 : 200);
+    if (response.ok) { const body = await response.text(); assert.ok(!body.includes('encryptedKey')); assert.ok(!body.includes('GEMINI_API_KEY')); }
+  }
 });

@@ -1,4 +1,5 @@
 export enum Permission {
+  ContentUpload = 'content:upload',
   AiView = 'ai:view',
   AiManage = 'ai:manage',
   OwnershipTransfer = 'system:transfer-ownership',

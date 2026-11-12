@@ -1,4 +1,5 @@
 import heroSlideRoutes from './routes/v1/storefront/hero-slides.route.js';
+import editorRoutes from './routes/v1/editor/editor.route.js';
 import aiRoutes from './routes/v1/ai/ai.route.js';
 import { observeRisk } from './services/ai/risk.service.js';
 import supportRoutes from './routes/v1/support/support.route.js';
@@ -62,6 +63,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(observeRisk);
 app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/editor', editorRoutes);
 app.use(express.static(path.resolve(process.cwd(), 'public')));
 
 app.get('/', (_req: Request, res: Response) => {

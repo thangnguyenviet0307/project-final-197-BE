@@ -179,3 +179,9 @@ Counters and alert recording are separate. One alert is upserted per actor/event
 - Frontend: typecheck, lint, test, test:contracts, build using pnpm.cmd.
 - Production acceptance remains separate: actual provider response quality/cost, vector index/search, allowed origins, TLS WebSocket reverse proxy timeouts, and browser layout/accessibility.
 - Evaluate Vietnamese queries for budgets, exact brand/SKU, paraphrases, missing facts, comparison, hidden products and malicious instructions. Record relevance, verified-data accuracy, time to first answer and calls/cost per conversation before tuning models.
+
+## Configuration history controls
+
+- Settings responses retain at most 100 recent audit entries, newest first. The administrative UI paginates them locally at ten entries per page, including for read-only Admin/Staff viewers.
+- `DELETE /api/v1/ai/admin/settings/audit` accepts only `{ revision }` and requires `ai:manage` (Super Admin). The web asks for inline confirmation and sends the revision captured when confirmation opened.
+- Clearing uses an atomic revision match, empties only the audit array and increments the configuration revision. Concurrent/newer writes return 409 instead of deleting newly added history. Configuration, credentials and embedding state remain unchanged; clearing does not bootstrap settings or require decrypting credentials. New configuration operations start recording history again.

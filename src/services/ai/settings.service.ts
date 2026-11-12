@@ -114,6 +114,18 @@ export async function readAiSettings() {
     legacyEmbeddingConnectionId: doc?.legacyEmbeddingConnectionId ?? null,
   };
 }
+export async function clearAiSettingsAudit(revision: number) {
+  // Do not bootstrap settings, decrypt credentials or rewrite operating state.
+  // The revision fences concurrent configuration/audit writes.
+  const result = await AiSettings.updateOne(
+    { _id: 'global', revision },
+    { $set: { audit: [] }, $inc: { revision: 1 } },
+    { runValidators: true }
+  );
+  if (!result.matchedCount)
+    throw createError(409, 'AI configuration changed. Reload before saving.');
+  return readAiSettings();
+}
 export async function editable(revision: number) {
   if (!credentialsReady())
     throw createError(503, 'AI configuration encryption is not configured');

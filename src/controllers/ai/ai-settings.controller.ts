@@ -24,6 +24,14 @@ export const read: RequestHandler = asyncHandler(async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   sendResponse(res, 200, { data: await settings.readAiSettings() });
 });
+export const clearAudit: RequestHandler = asyncHandler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  sendResponse(res, 200, {
+    data: await settings.clearAiSettingsAudit(
+      settingsRevision.parse(req.body).revision
+    ),
+  });
+});
 export const create: RequestHandler = asyncHandler(async (req, res) => {
   sendResponse(res, 201, {
     data: await settings.saveConnection(

@@ -34,6 +34,7 @@ admin.get('/embeddings', adminRateLimit, embeddings.read);
 admin.get('/status', adminRateLimit, controller.status);
 // Every operation below can change configuration, data, state or provider usage.
 admin.use(requirePermission(Permission.AiManage), adminRateLimit);
+admin.delete('/settings/audit', settings.clearAudit);
 admin.post('/embeddings', embeddings.create);
 admin.post('/embeddings/activate', embeddings.activate);
 admin.post('/embeddings/:id/retry', embeddings.change('retry'));

@@ -2489,6 +2489,7 @@ test('AI management endpoints require administrative permission and never serial
     const writes = [
       ['POST', '/settings/initialize'],
       ['PUT', '/settings'],
+      ['DELETE', '/settings/audit'],
       ['POST', '/connections'],
       ['PUT', '/connections/' + randomUUID()],
       ['DELETE', '/connections/' + randomUUID()],
@@ -2528,4 +2529,149 @@ test('AI management endpoints require administrative permission and never serial
         );
     }
   }
+});
+
+test('clearing AI audit is owner-only, revision-fenced and preserves credentials and operating settings', async (t) => {
+  const encryptionKey = process.env.AI_CONFIG_ENCRYPTION_KEY;
+  delete process.env.AI_CONFIG_ENCRYPTION_KEY;
+  t.after(() => {
+    if (encryptionKey === undefined)
+      delete process.env.AI_CONFIG_ENCRYPTION_KEY;
+    else process.env.AI_CONFIG_ENCRYPTION_KEY = encryptionKey;
+  });
+  const user = await User.create({
+    firstName: 'Audit',
+    lastName: 'Owner',
+    email: `audit-${randomUUID()}@example.test`,
+    password: 'test-hash',
+    role: 'super_admin',
+    active: true,
+  });
+  const token = generateAccessToken({
+    id: String(user._id),
+    accountType: 'user',
+    tokenVersion: 0,
+  });
+  const headers = {
+    Origin: 'http://localhost:5173',
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  const audit = Array.from({ length: 23 }, (_, index) => ({
+    action: 'settings.updated',
+    actor: String(user._id),
+    at: new Date(Date.now() - index * 1000),
+  }));
+  const connectionId = randomUUID();
+  await AiSettings.updateOne(
+    { _id: 'global' },
+    {
+      $setOnInsert: {
+        revision: 0,
+        dailyCalls: 123,
+        activeConnectionId: connectionId,
+        connections: [
+          {
+            id: connectionId,
+            name: 'Audit fixture',
+            provider: 'gemini',
+            model: 'gemini-3.1-flash-lite',
+            encryptedKey: 'test-ciphertext-only',
+            keyHint: 'test',
+            checkedOk: true,
+          },
+        ],
+      },
+    },
+    { upsert: true }
+  );
+  await AiSettings.updateOne(
+    { _id: 'global' },
+    { $set: { audit }, $inc: { revision: 1 } }
+  );
+  const read = () =>
+    AiSettings.findById('global').select('+connections.encryptedKey').lean();
+  const before = await read();
+  const clear = (body) =>
+    fetch(base + '/admin/settings/audit', {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify(body),
+    });
+  assert.equal(
+    (
+      await fetch(base + '/admin/settings/audit', {
+        method: 'DELETE',
+        headers: { Origin: headers.Origin, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision: before.revision }),
+      })
+    ).status,
+    401
+  );
+  const customerToken = generateAccessToken({
+    id: String(user._id),
+    accountType: 'customer',
+    tokenVersion: 0,
+  });
+  assert.equal(
+    (
+      await fetch(base + '/admin/settings/audit', {
+        method: 'DELETE',
+        headers: { ...headers, Authorization: `Bearer ${customerToken}` },
+        body: JSON.stringify({ revision: before.revision }),
+      })
+    ).status,
+    403
+  );
+  assert.equal((await clear({ revision: before.revision - 1 })).status, 409);
+  assert.equal(
+    (await clear({ revision: before.revision, extra: true })).status,
+    400
+  );
+  assert.deepEqual((await read()).audit, before.audit);
+  // A new audit/configuration update invalidates the already-open confirmation.
+  await AiSettings.updateOne(
+    { _id: 'global' },
+    {
+      $push: {
+        audit: {
+          action: 'connection.tested',
+          actor: String(user._id),
+          at: new Date(),
+        },
+      },
+      $inc: { revision: 1 },
+    }
+  );
+  assert.equal((await clear({ revision: before.revision })).status, 409);
+  const current = await read();
+  const responses = await Promise.all([
+    clear({ revision: current.revision }),
+    clear({ revision: current.revision }),
+  ]);
+  assert.deepEqual(
+    responses.map((response) => response.status).sort(),
+    [200, 409]
+  );
+  const result = await responses
+    .find((response) => response.status === 200)
+    .json();
+  assert.deepEqual(result.data.audit, []);
+  assert.equal(result.data.revision, current.revision + 1);
+  assert.ok(!JSON.stringify(result).includes('encryptedKey'));
+  const after = await read();
+  assert.deepEqual(after.audit, []);
+  for (const key of [
+    'connections',
+    'enabled',
+    'semanticEnabled',
+    'indexingEnabled',
+    'riskEnabled',
+    'dailyCalls',
+    'activeConnectionId',
+    'activeEmbeddingGenerationId',
+    'embeddingEpoch',
+    'legacyEmbeddingConnectionId',
+  ])
+    assert.deepEqual(after[key], current[key], key);
 });

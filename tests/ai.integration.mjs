@@ -1376,7 +1376,7 @@ test('index writes are fenced if ownership changes during an embedding call', as
   );
   assert.equal(await AiChunk.countDocuments({ key: 'document:fenced' }), 0);
 });
-test('repeated blocked requests aggregate one risk alert and indexing cannot consume the interactive allowance', async () => {
+test('anti-spam still blocks repeated requests while provider attempt counters have no daily cap', async () => {
   const key = 'limit-test-' + randomUUID();
   await reserveUsage(key, 1, 60000);
   const blocked = await Promise.allSettled(
@@ -1393,16 +1393,20 @@ test('repeated blocked requests aggregate one risk alert and indexing cannot con
   process.env.AI_DAILY_CALL_LIMIT = '8';
   try {
     await AiCounter.deleteMany({ _id: /^provider-/ });
-    await reserveProviderCall('indexing');
-    await reserveProviderCall('indexing');
-    await assert.rejects(
-      reserveProviderCall('indexing'),
-      (e) => e.statusCode === 429
+    await Promise.all(
+      Array.from({ length: 120 }, () => reserveProviderCall('indexing'))
     );
-    for (let i = 0; i < 6; i++) await reserveProviderCall('interactive');
-    await assert.rejects(
-      reserveProviderCall('interactive'),
-      (e) => e.statusCode === 429
+    await Promise.all(
+      Array.from({ length: 120 }, () => reserveProviderCall('interactive'))
+    );
+    const bucket = Math.floor(Date.now() / DAY);
+    assert.equal(
+      (await AiCounter.findById(`provider-global:${bucket}`)).count,
+      240
+    );
+    assert.equal(
+      (await AiCounter.findById(`provider-indexing:${bucket}`)).count,
+      120
     );
   } finally {
     delete process.env.AI_DAILY_CALL_LIMIT;
@@ -1652,200 +1656,50 @@ test('AI keyword and semantic candidates share storefront descendant and additio
   );
 });
 
-test('dynamic Gemini configuration encrypts credentials, checks activation, fences updates and preserves running snapshots', async (t) => {
-  const previousKey = process.env.GEMINI_API_KEY;
-  const previousEncryption = process.env.AI_CONFIG_ENCRYPTION_KEY;
-  delete process.env.GEMINI_API_KEY;
-  process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
+test('environment credentials override legacy database credentials and web settings never save keys', async (t) => {
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'environment-secret-not-in-db';
   t.after(async () => {
     await AiSettings.deleteOne({ _id: 'global' });
-    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
-    else process.env.GEMINI_API_KEY = previousKey;
-    if (previousEncryption === undefined)
-      delete process.env.AI_CONFIG_ENCRYPTION_KEY;
-    else process.env.AI_CONFIG_ENCRYPTION_KEY = previousEncryption;
+    if (previous === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previous;
   });
-  let state = await management.saveConnection(
+  let state = await management.saveAiSettings(
     {
       revision: 0,
-      name: 'First',
-      provider: 'gemini',
-      model: 'gemini-first',
-      apiKey: 'first-secret-key-12345',
-    },
-    'admin-test'
-  );
-  const first = state.connections[0];
-  assert.equal(state.revision, 1);
-  assert.ok(!JSON.stringify(state).includes('first-secret-key'));
-  const raw = await AiSettings.collection.findOne({ _id: 'global' });
-  assert.ok(raw.connections[0].encryptedKey.startsWith('v1.'));
-  assert.ok(!JSON.stringify(raw).includes('first-secret-key'));
-  assert.equal(
-    (await AiSettings.findById('global').lean()).connections[0].encryptedKey,
-    undefined
-  );
-  await assert.rejects(
-    management.saveAiSettings(
-      {
-        ...state.settings,
-        revision: state.revision,
-        activeConnectionId: first.id,
-        enabled: true,
-      },
-      'admin-test'
-    ),
-    (e) => e.statusCode === 400
-  );
-  t.mock.method(aiProvider, 'interpretQuery', async () => ({
-    search: '',
-    brand: null,
-    category: null,
-    minPrice: null,
-    maxPrice: null,
-  }));
-  t.mock.method(aiProvider, 'answerStream', async function* () {
-    assert.ok(aiApiKey().includes('secret-key'));
-    yield 'Ready';
-  });
-  state = await management.testConnection(
-    first.id,
-    state.revision,
-    'admin-test',
-    new AbortController().signal
-  );
-  assert.equal(state.connections[0].checkedOk, true);
-  state = await management.saveAiSettings(
-    {
-      ...state.settings,
-      revision: state.revision,
-      activeConnectionId: first.id,
       enabled: true,
-      dailyCalls: 37,
-      riskEnabled: true,
+      semanticEnabled: false,
+      indexingEnabled: false,
+      riskEnabled: false,
     },
-    'admin-test'
+    'test-admin'
   );
+  const raw = await AiSettings.collection.findOne({ _id: 'global' });
+  assert.deepEqual(raw.connections, []);
+  assert.ok(!JSON.stringify(raw).includes(process.env.GEMINI_API_KEY));
+  assert.ok(!JSON.stringify(state).includes(process.env.GEMINI_API_KEY));
+  assert.equal(state.credentialSource, 'environment');
   const snapshot = await resolveAiRuntime();
-  assert.equal(snapshot.config.enabled, true);
-  assert.equal(snapshot.config.dailyCalls, 37);
-  assert.equal(snapshot.apiKey, 'first-secret-key-12345');
+  assert.equal(snapshot.apiKey, process.env.GEMINI_API_KEY);
   await assert.rejects(
-    management.deleteConnection(first.id, state.revision, 'admin-test'),
+    management.saveAiSettings({ ...state.settings, revision: 0 }, 'test-admin'),
     (e) => e.statusCode === 409
   );
-  await assert.rejects(
-    management.saveConnection(
-      {
-        revision: state.revision,
-        name: 'Edit active',
-        provider: 'gemini',
-        model: 'gemini-new',
-      },
-      'admin-test',
-      first.id
-    ),
-    (e) => e.statusCode === 409
-  );
-  state = await management.saveConnection(
-    {
-      revision: state.revision,
-      name: 'Second',
-      provider: 'gemini',
-      model: 'gemini-second',
-      apiKey: 'second-secret-key-67890',
-    },
-    'admin-test'
-  );
-  const second = state.connections.find((item) => item.name === 'Second');
-  state = await management.testConnection(
-    second.id,
-    state.revision,
-    'admin-test',
-    new AbortController().signal
-  );
-  state = await management.saveAiSettings(
-    {
+  const { settingsInput } =
+    await import('../dist/validations/ai/ai-settings.validation.js');
+  assert.equal(
+    settingsInput.safeParse({
       ...state.settings,
       revision: state.revision,
-      activeConnectionId: second.id,
-    },
-    'admin-test'
-  );
-  await withAiRuntime(snapshot, async () => {
-    assert.equal(aiConfig().model, 'gemini-first');
-    assert.equal(aiApiKey(), 'first-secret-key-12345');
-  });
-  assert.equal((await resolveAiRuntime()).config.model, 'gemini-second');
-  const concurrent = await Promise.allSettled(
-    [40, 41].map((dailyCalls) =>
-      management.saveAiSettings(
-        { ...state.settings, revision: state.revision, dailyCalls },
-        'admin-test'
-      )
-    )
-  );
-  assert.equal(
-    concurrent.filter((item) => item.status === 'fulfilled').length,
-    1
-  );
-  assert.equal(
-    concurrent.find((item) => item.status === 'rejected').reason.statusCode,
-    409
-  );
-  state = await management.readAiSettings();
-  state = await management.saveAiSettings(
-    {
-      ...state.settings,
-      revision: state.revision,
-      enabled: false,
-      activeConnectionId: null,
-    },
-    'admin-test'
-  );
-  state = await management.saveConnection(
-    {
-      revision: state.revision,
-      name: 'Second edited',
-      provider: 'gemini',
-      model: 'gemini-edited',
-      apiKey: 'replacement-secret-key-0000',
-    },
-    'admin-test',
-    second.id
-  );
-  assert.equal(
-    state.connections.find((item) => item.id === second.id).checkedOk,
+      apiKey: 'no',
+    }).success,
     false
   );
-  t.mock.method(aiProvider, 'interpretQuery', async () => {
-    throw Object.assign(new Error('provider-secret-response'), { status: 429 });
-  });
-  state = await management.testConnection(
-    second.id,
-    state.revision,
-    'admin-test',
-    new AbortController().signal
-  );
-  assert.equal(
-    state.connections.find((item) => item.id === second.id).checkCode,
-    'AI_RATE_LIMITED'
-  );
-  assert.ok(!JSON.stringify(state).includes('provider-secret-response'));
-  state = await management.deleteConnection(
-    second.id,
-    state.revision,
-    'admin-test'
-  );
-  assert.ok(!state.connections.some((item) => item.id === second.id));
-  assert.ok(state.audit.some((entry) => entry.action === 'connection.deleted'));
-  process.env.GEMINI_API_KEY = 'environment-secret-must-not-fall-back';
-  const stopped = await resolveAiRuntime();
-  assert.equal(stopped.config.enabled, false);
-  assert.equal(stopped.apiKey, '');
 });
 
 test('versioned embeddings fence index lag, isolate dimensions/keys, switch atomically, roll back and cancel safely', async (t) => {
+  const priorGemini = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'gemini-embedding-secret';
   const previous = process.env.AI_CONFIG_ENCRYPTION_KEY;
   process.env.AI_CONFIG_ENCRYPTION_KEY = randomBytes(32).toString('hex');
   const geminiId = randomUUID(),
@@ -1856,7 +1710,6 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
     enabled: true,
     indexingEnabled: true,
     semanticEnabled: false,
-    dailyCalls: 100,
     activeConnectionId: openaiId,
     connections: [
       {
@@ -1880,6 +1733,8 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
     ],
   });
   t.after(async () => {
+    if (priorGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = priorGemini;
     clearAiCache();
     await AiEmbeddingChunk.deleteMany({});
     await AiEmbeddingGeneration.deleteMany({});
@@ -1945,10 +1800,6 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
     (await AiSettings.findById('global')).activeEmbeddingGenerationId,
     null
   );
-  await assert.rejects(
-    management.deleteConnection(geminiId, state.revision, 'test-admin'),
-    (e) => e.statusCode === 409
-  );
   visible = true;
   await AiEmbeddingGeneration.updateOne(
     { _id: first },
@@ -1961,16 +1812,16 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
   assert.equal(embeddings.mock.callCount(), generated); // Verifying again never re-embeds data.
   state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
   const firstSnapshot = await resolveAiRuntime();
-  assert.equal(firstSnapshot.config.provider, 'openai');
-  assert.equal(firstSnapshot.apiKey, 'openai-embedding-secret');
+  assert.equal(firstSnapshot.config.provider, 'gemini');
+  assert.equal(firstSnapshot.apiKey, 'gemini-embedding-secret');
   assert.equal(firstSnapshot.config.embeddingProvider, 'gemini');
   assert.equal(firstSnapshot.embeddingApiKey, 'gemini-embedding-secret');
   assert.equal(firstSnapshot.config.embeddingDimensions, 768);
   state = await createEmbeddingVersion(
     {
       revision: state.revision,
-      connectionId: openaiId,
-      model: 'text-embedding-3-small',
+      connectionId: geminiId,
+      model: 'gemini-embedding-001',
       dimensions: 1536,
     },
     'test-admin'
@@ -1980,7 +1831,7 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
   assert.equal((await AiEmbeddingGeneration.findById(second)).state, 'ready');
   state = await activateEmbeddingVersion(second, state.revision, 'test-admin');
   const secondSnapshot = await resolveAiRuntime();
-  assert.equal(secondSnapshot.config.embeddingProvider, 'openai');
+  assert.equal(secondSnapshot.config.embeddingProvider, 'gemini');
   assert.equal(secondSnapshot.config.embeddingDimensions, 1536);
   clearAiCache();
   const searches = [];
@@ -2013,7 +1864,7 @@ test('versioned embeddings fence index lag, isolate dimensions/keys, switch atom
   state = await activateEmbeddingVersion(first, state.revision, 'test-admin');
   await withAiRuntime(secondSnapshot, async () => {
     assert.equal(aiConfig().embeddingGeneration, second);
-    assert.equal(aiEmbeddingKey(), 'openai-embedding-secret');
+    assert.equal(aiEmbeddingKey(), 'gemini-embedding-secret');
   });
   await assert.rejects(
     changeEmbeddingVersion(second, state.revision, 'test-admin', 'delete'),
@@ -2142,13 +1993,18 @@ test('ordinary MongoDB builds, verifies, searches and automatically refreshes is
     'visible',
     originalVectorInfrastructure.visible
   );
+  const previousGemini = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'mock-embedding-key';
+  t.after(() => {
+    if (previousGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousGemini;
+  });
   const connectionId = randomUUID();
   await AiSettings.create({
     _id: 'global',
     enabled: true,
     indexingEnabled: false,
     semanticEnabled: false,
-    dailyCalls: 100,
     activeConnectionId: connectionId,
     connections: [
       {
@@ -2218,10 +2074,7 @@ test('ordinary MongoDB builds, verifies, searches and automatically refreshes is
   assert.equal(paused.chunks, 1);
   assert.equal(paused.failureCode, 'AI_USAGE_LIMIT');
   assert.ok(paused.nextRunAt > new Date());
-  await AiEmbeddingGeneration.updateOne(
-    { _id: first },
-    { $set: { nextRunAt: new Date(0) } }
-  );
+  // Removed website budgets must not keep an old job paused until midnight.
   await withAiConfig(() => runEmbeddingBuild());
   const built = await AiEmbeddingGeneration.findById(first);
   assert.equal(built.state, 'ready');
@@ -2324,7 +2177,7 @@ test('ordinary MongoDB builds, verifies, searches and automatically refreshes is
   }
 });
 
-test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow through mocked vendor transports', async (t) => {
+test('Gemini, Groq, OpenRouter and Cloudflare run the same chat/retrieval/persistence flow through mocked vendor transports', async (t) => {
   t.mock.method(
     aiProvider,
     'interpretQuery',
@@ -2354,8 +2207,9 @@ test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow throug
     const request = JSON.parse(options.body);
     assert.ok(
       [
-        'api.openai.com',
-        'api.x.ai',
+        'api.groq.com',
+        'openrouter.ai',
+        'api.cloudflare.com',
         'generativelanguage.googleapis.com',
       ].includes(new URL(String(url)).hostname)
     );
@@ -2408,8 +2262,9 @@ test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow throug
   });
   for (const [provider, model] of [
     ['gemini', 'gemini-3.1-flash-lite'],
-    ['openai', 'gpt-4.1-mini'],
-    ['xai', 'grok-4.7'],
+    ['groq', 'llama-3.3-70b-versatile'],
+    ['openrouter', 'openrouter/free'],
+    ['cloudflare', '@cf/meta/llama-3.1-8b-instruct'],
   ]) {
     const owner = { kind: 'guest', id: randomUUID() };
     const conversation = await chat.createConversation(owner);
@@ -2428,9 +2283,18 @@ test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow throug
           enabled: true,
           semanticEnabled: false,
           vectorIndex: '',
-          dailyCalls: 100000,
         },
         apiKey: 'mock-vendor-credential',
+        cloudflareAccountId: 'a'.repeat(32),
+        connections: [
+          {
+            id: provider,
+            provider,
+            model,
+            apiKey: 'mock-vendor-credential',
+            account: provider,
+          },
+        ],
       },
       () =>
         runChat(owner, input, new AbortController().signal, (event) =>
@@ -2444,7 +2308,190 @@ test('Gemini, OpenAI and xAI run the same chat/retrieval/persistence flow throug
       'completed'
     );
   }
-  assert.equal(network.mock.callCount(), 6);
+  assert.equal(network.mock.callCount(), 8);
+});
+
+test('daily quota is shared across runtime snapshots and fallback keeps the same turn and stored history', async (t) => {
+  const { AiProviderState } =
+    await import('../dist/models/ai/ai-provider-state.model.js');
+  await AiProviderState.init();
+  t.after(() => AiProviderState.deleteMany({}));
+  t.mock.method(
+    aiProvider,
+    'interpretQuery',
+    originalAIProvider.interpretQuery
+  );
+  t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
+  clearAiCache();
+  t.after(clearAiCache);
+  const account = randomUUID();
+  const connections = [
+    {
+      id: 'gemini:0',
+      provider: 'gemini',
+      model: 'gemini-primary',
+      apiKey: 'env-one',
+      account,
+    },
+    {
+      id: 'gemini:1',
+      provider: 'gemini',
+      model: 'gemini-secondary',
+      apiKey: 'env-one',
+      account,
+    },
+    {
+      id: 'groq:0',
+      provider: 'groq',
+      model: 'llama-fallback',
+      apiKey: 'env-two',
+      account: randomUUID(),
+    },
+  ];
+  const snapshot = {
+    config: {
+      ...environmentAiConfig(),
+      enabled: true,
+      semanticEnabled: false,
+      vectorIndex: '',
+    },
+    apiKey: 'env-one',
+    connections,
+  };
+  const owner = { kind: 'guest', id: randomUUID() };
+  const conversation = await chat.createConversation(owner);
+  const prior = await AiTurn.create({
+    conversationId: conversation._id,
+    requestId: randomUUID(),
+    content: 'Old question',
+    answer: 'Unchanged old answer',
+    status: 'completed',
+    expiresAt: conversation.expiresAt,
+  });
+  let geminiCalls = 0;
+  const network = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const body = JSON.parse(options.body);
+    if (String(url).includes('googleapis.com')) {
+      geminiCalls++;
+      return Response.json(
+        { error: { code: 429, message: 'daily quota exceeded' } },
+        { status: 429 }
+      );
+    }
+    if (!body.stream)
+      return Response.json({
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: {
+              content: JSON.stringify({
+                search: 'Providerfixture',
+                brand: null,
+                category: null,
+                minPrice: null,
+                maxPrice: null,
+                task: 'search',
+                sort: 'relevance',
+                productNames: ['Providerfixture Headphones'],
+                referencePositions: [],
+                inherit: false,
+              }),
+            },
+          },
+        ],
+      });
+    assert.ok(
+      body.messages.some(
+        (m) => m.role === 'assistant' && m.content === 'Unchanged old answer'
+      )
+    );
+    return new Response(
+      'data: ' +
+        JSON.stringify({
+          choices: [
+            {
+              index: 0,
+              delta: { content: 'Fallback answer' },
+              finish_reason: null,
+            },
+          ],
+        }) +
+        '\n\ndata: ' +
+        JSON.stringify({
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        }) +
+        '\n\ndata: [DONE]\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } }
+    );
+  });
+  const input = {
+    conversationId: String(conversation._id),
+    requestId: randomUUID(),
+    content: 'T?m Providerfixture Headphones',
+  };
+  const events = [];
+  await withAiRuntime(snapshot, () =>
+    runChat(owner, input, new AbortController().signal, (e) => events.push(e))
+  );
+  assert.equal(events.at(-1).type, 'chat:completed');
+  assert.equal(geminiCalls, 1); // Same-account second model and later generation stage both skip the daily block.
+  assert.equal(
+    await AiTurn.countDocuments({
+      conversationId: conversation._id,
+      requestId: input.requestId,
+    }),
+    1
+  );
+  assert.equal(
+    (await AiTurn.findById(prior._id)).answer,
+    'Unchanged old answer'
+  );
+  assert.equal(
+    (await AiTurn.findOne({ requestId: input.requestId })).answer,
+    'Fallback answer'
+  );
+  const before = network.mock.callCount();
+  await withAiRuntime({ ...snapshot }, () =>
+    aiProvider.interpretQuery('new uncached query')
+  );
+  assert.equal(network.mock.callCount(), before + 1);
+  assert.equal(geminiCalls, 1);
+});
+
+test('legacy OpenAI embedding metadata is preserved but cannot run, activate or auto-refresh', async (t) => {
+  t.mock.method(vectorInfrastructure, 'ensure', async () => 'legacy-index');
+  const id = randomUUID();
+  await AiSettings.create({
+    _id: 'global',
+    enabled: true,
+    indexingEnabled: true,
+    activeEmbeddingGenerationId: id,
+  });
+  await AiEmbeddingGeneration.create({
+    _id: id,
+    connectionId: randomUUID(),
+    provider: 'openai',
+    model: 'text-embedding-3-small',
+    dimensions: 1536,
+    indexName: 'legacy',
+    state: 'ready',
+    createdBy: 'legacy',
+    finishedAt: new Date(0),
+  });
+  t.after(async () => {
+    await AiSettings.deleteOne({ _id: 'global' });
+    await AiEmbeddingGeneration.deleteOne({ _id: id });
+  });
+  const snapshot = await resolveAiRuntime();
+  assert.equal(snapshot.config.semanticEnabled, false);
+  assert.equal(snapshot.config.embeddingGeneration, null);
+  await queueActiveEmbeddingRefresh(true);
+  assert.equal(await AiEmbeddingGeneration.countDocuments(), 1);
+  await assert.rejects(
+    activateEmbeddingVersion(id, 0, 'operator'),
+    (e) => e.statusCode === 409
+  );
+  assert.ok(await AiEmbeddingGeneration.findById(id));
 });
 
 test('AI management endpoints require administrative permission and never serialize server credentials', async () => {
@@ -2476,5 +2523,233 @@ test('AI management endpoints require administrative permission and never serial
       assert.ok(!body.includes('encryptedKey'));
       assert.ok(!body.includes('GEMINI_API_KEY'));
     }
+  }
+});
+
+test('activation checks JSON and streaming before enabling AI, supports first use and preserves flags on failure/conflict', async (t) => {
+  const previous = {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    AI_FORCE_DISABLED: process.env.AI_FORCE_DISABLED,
+  };
+  process.env.GEMINI_API_KEY = 'activation-mock-key';
+  process.env.AI_FORCE_DISABLED = 'false';
+  t.after(async () => {
+    await AiSettings.deleteOne({ _id: 'global' });
+    for (const [k, v] of Object.entries(previous)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  let fail = false,
+    duringProbe;
+  const intent = t.mock.method(aiProvider, 'interpretQuery', async () => {
+    assert.equal(aiConfig().enabled, true);
+    if (duringProbe) await duringProbe();
+    return {
+      search: '',
+      brand: null,
+      category: null,
+      minPrice: null,
+      maxPrice: null,
+    };
+  });
+  t.mock.method(aiProvider, 'answerStream', async function* () {
+    if (fail) throw new Error('secret-provider-payload');
+    yield 'Connected';
+  });
+  const first = await management.activateAi(
+    0,
+    'activation-operator',
+    new AbortController().signal
+  );
+  assert.equal(first.settings.enabled, true);
+  assert.equal(first.revision, 1);
+  assert.equal(first.audit[0].action, 'settings.activated');
+  assert.ok(!JSON.stringify(first).includes('activation-mock-key'));
+  await AiSettings.updateOne(
+    { _id: 'global' },
+    { $set: { enabled: false, riskEnabled: true } }
+  );
+  fail = true;
+  await assert.rejects(
+    management.activateAi(1, 'operator', new AbortController().signal),
+    (e) =>
+      e.statusCode === 503 && !e.message.includes('secret-provider-payload')
+  );
+  assert.equal((await AiSettings.findById('global')).enabled, false);
+  assert.equal((await AiSettings.findById('global')).revision, 1);
+  fail = false;
+  duringProbe = () =>
+    AiSettings.updateOne({ _id: 'global' }, { $inc: { revision: 1 } });
+  await assert.rejects(
+    management.activateAi(1, 'operator', new AbortController().signal),
+    (e) => e.statusCode === 409
+  );
+  assert.equal((await AiSettings.findById('global')).enabled, false);
+  duringProbe = undefined;
+  const retried = await management.activateAi(
+    2,
+    'operator',
+    new AbortController().signal
+  );
+  assert.equal(retried.settings.enabled, true);
+  assert.equal(retried.settings.riskEnabled, true);
+  const count = intent.mock.callCount();
+  process.env.AI_FORCE_DISABLED = 'true';
+  await assert.rejects(
+    management.activateAi(3, 'operator', new AbortController().signal),
+    (e) => e.statusCode === 409
+  );
+  assert.equal(intent.mock.callCount(), count);
+  process.env.AI_FORCE_DISABLED = 'false';
+  await assert.rejects(
+    management.activateAi(3, 'operator', AbortSignal.abort()),
+    (e) => e.name === 'AbortError'
+  );
+  assert.equal(intent.mock.callCount(), count);
+});
+test('activation endpoint rejects Admin and only Super Admin can activate with confirmation', async (t) => {
+  const previous = process.env.AI_FORCE_DISABLED;
+  process.env.AI_FORCE_DISABLED = 'false';
+  t.after(async () => {
+    await AiSettings.deleteOne({ _id: 'global' });
+    if (previous === undefined) delete process.env.AI_FORCE_DISABLED;
+    else process.env.AI_FORCE_DISABLED = previous;
+  });
+  const key = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'http-activation-key';
+  t.after(() => {
+    if (key === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = key;
+  });
+  const intent = t.mock.method(aiProvider, 'interpretQuery', async () => ({
+    search: '',
+  }));
+  t.mock.method(aiProvider, 'answerStream', async function* () {
+    yield 'OK';
+  });
+  for (const role of ['admin', 'super_admin']) {
+    const user = await User.create({
+      firstName: 'Activate',
+      lastName: 'Operator',
+      email: `activation-${role}@example.test`,
+      password: 'test-hash',
+      role,
+      active: true,
+    });
+    const token = generateAccessToken({
+      id: String(user._id),
+      accountType: 'user',
+      tokenVersion: 0,
+    });
+    const response = await fetch(base + '/admin/settings/activate', {
+      method: 'POST',
+      headers: {
+        Origin: 'http://localhost:5173',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ revision: 0, confirm: true }),
+    });
+    assert.equal(response.status, role === 'admin' ? 403 : 200);
+    if (role === 'admin') assert.equal(intent.mock.callCount(), 0);
+    else {
+      const body = await response.json();
+      assert.equal(body.data.settings.enabled, true);
+    }
+  }
+});
+
+test('clearing configuration audit is revision-fenced and preserves all other stored settings', async (t) => {
+  await AiSettings.create({
+    _id: 'global',
+    revision: 4,
+    enabled: true,
+    riskEnabled: true,
+    indexingEnabled: false,
+    connections: [
+      {
+        id: randomUUID(),
+        name: 'Legacy metadata',
+        provider: 'gemini',
+        model: 'gemini-test',
+        encryptedKey: 'legacy-ciphertext',
+        keyHint: 'text',
+      },
+    ],
+    audit: [{ action: 'settings.updated', actor: 'operator', at: new Date() }],
+  });
+  t.after(() => AiSettings.deleteOne({ _id: 'global' }));
+  const before = await AiSettings.collection.findOne({ _id: 'global' });
+  const attempts = await Promise.allSettled([
+    management.clearAiSettingsAudit(4),
+    management.clearAiSettingsAudit(4),
+  ]);
+  assert.equal(attempts.filter((a) => a.status === 'fulfilled').length, 1);
+  assert.equal(
+    attempts.find((a) => a.status === 'rejected').reason.statusCode,
+    409
+  );
+  const after = await AiSettings.collection.findOne({ _id: 'global' });
+  assert.deepEqual(after.audit, []);
+  assert.equal(after.revision, 5);
+  assert.deepEqual(after.connections, before.connections);
+  for (const key of [
+    'enabled',
+    'semanticEnabled',
+    'indexingEnabled',
+    'riskEnabled',
+    'activeEmbeddingGenerationId',
+    'embeddingEpoch',
+  ])
+    assert.deepEqual(after[key], before[key]);
+});
+test('only Super Admin can clear configuration audit through HTTP and confirmation is required', async (t) => {
+  await AiSettings.create({
+    _id: 'global',
+    revision: 2,
+    enabled: true,
+    audit: [{ action: 'settings.updated', actor: 'operator', at: new Date() }],
+  });
+  t.after(() => AiSettings.deleteOne({ _id: 'global' }));
+  const endpoint = base + '/admin/settings/audit';
+  for (const role of ['staff', 'admin', 'super_admin']) {
+    const user =
+      (await User.findOne({ role })) ??
+      (await User.create({
+        firstName: 'Audit',
+        lastName: 'Operator',
+        email: `audit-${role}@example.test`,
+        password: 'test-hash',
+        role,
+        active: true,
+      }));
+    const token = generateAccessToken({
+      id: String(user._id),
+      accountType: 'user',
+      tokenVersion: 0,
+    });
+    const headers = {
+      Origin: 'http://localhost:5173',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+    if (role === 'super_admin') {
+      const unconfirmed = await fetch(endpoint, {
+        method: 'DELETE',
+        headers,
+        body: JSON.stringify({ revision: 2, confirm: false }),
+      });
+      assert.equal(unconfirmed.status, 400);
+    }
+    const response = await fetch(endpoint, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ revision: 2, confirm: true }),
+    });
+    assert.equal(response.status, role === 'super_admin' ? 200 : 403);
+    const stored = await AiSettings.findById('global');
+    assert.equal(stored.audit.length, role === 'super_admin' ? 0 : 1);
+    assert.equal(stored.enabled, true);
   }
 });

@@ -53,8 +53,15 @@ export async function runEmbeddingBuild(parentSignal?: AbortSignal) {
   const generation = await AiEmbeddingGeneration.findOneAndUpdate(
     {
       state: { $in: ['queued', 'building', 'verifying'] },
-      nextRunAt: { $lte: new Date() },
-      $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }],
+      $and: [
+        {
+          $or: [
+            { nextRunAt: { $lte: new Date() } },
+            { failureCode: 'AI_USAGE_LIMIT' },
+          ],
+        },
+        { $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }] },
+      ],
     },
     { $set: { leaseId: lease, leaseUntil: new Date(Date.now() + 120000) } },
     { returnDocument: 'after', sort: { createdAt: 1 } }
@@ -320,6 +327,7 @@ export async function queueActiveEmbeddingRefresh(force = false) {
   ).lean();
   if (
     !active ||
+    active.provider !== 'gemini' ||
     (!force &&
       (!active.finishedAt ||
         active.finishedAt.getTime() > Date.now() - 15 * 60000))
@@ -367,11 +375,7 @@ export async function queueActiveEmbeddingRefresh(force = false) {
       revision: settings.revision,
       connectionId: active.connectionId,
       engine: isExactVectorIndex(active.indexName) ? 'exact' : 'atlas',
-      model: active.model as
-        | 'gemini-embedding-001'
-        | 'gemini-embedding-2'
-        | 'text-embedding-3-small'
-        | 'text-embedding-3-large',
+      model: active.model as 'gemini-embedding-001' | 'gemini-embedding-2',
       dimensions: active.dimensions as 768 | 1536 | 3072,
     },
     'worker',

@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import { z } from 'zod';
 import { aiConfig, aiEmbeddingKey } from '../config.js';
 import { aiError } from '../failures.js';
@@ -19,23 +18,9 @@ export async function embed(
     AbortSignal.timeout(60000),
   ]);
   let vector: unknown;
-  if (config.embeddingProvider === 'openai') {
-    const client = new OpenAI({
-      baseURL: 'https://api.openai.com/v1/',
-      apiKey: key,
-      timeout: 60000,
-      maxRetries: 0,
-    });
-    const result = await client.embeddings.create(
-      {
-        model: config.embeddingModel,
-        input: text.slice(0, 12000),
-        dimensions: config.embeddingDimensions,
-      },
-      { signal: requestSignal }
-    );
-    vector = result.data[0]?.embedding;
-  } else {
+  if (config.embeddingProvider !== 'gemini')
+    throw aiError('AI_UNAVAILABLE', 503);
+  {
     const result = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.embeddingModel)}:embedContent`,
       {

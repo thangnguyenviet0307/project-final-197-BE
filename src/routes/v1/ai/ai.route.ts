@@ -33,6 +33,7 @@ admin.use(
   createAuthRateLimit(30, 60000)
 );
 admin.get('/settings', settings.read);
+admin.delete('/settings/audit', settings.clearAudit);
 admin.get('/embeddings', embeddings.read);
 admin.post('/embeddings', embeddings.create);
 admin.post('/embeddings/activate', embeddings.activate);
@@ -40,15 +41,12 @@ admin.post('/embeddings/:id/retry', embeddings.change('retry'));
 admin.post('/embeddings/:id/cancel', embeddings.change('cancel'));
 admin.delete('/embeddings/:id', embeddings.change('delete'));
 admin.post('/settings/initialize', settings.initialize);
-admin.put('/settings', settings.save);
-admin.post('/connections', settings.create);
-admin.put('/connections/:id', settings.update);
-admin.delete('/connections/:id', settings.remove);
 admin.post(
-  '/connections/:id/test',
-  createAuthRateLimit(4, 60000),
-  settings.test
+  '/settings/activate',
+  createAuthRateLimit(2, 60000),
+  settings.activate
 );
+admin.put('/settings', settings.save);
 admin.get('/status', controller.status);
 admin.post('/reindex', controller.reindex);
 router.use('/admin', admin);

@@ -18,7 +18,10 @@ function apiKey() {
 }
 const client = (adapter: ChatAdapterOptions) => {
   return new OpenAI({
-    baseURL: adapter.baseURL,
+    baseURL:
+      typeof adapter.baseURL === 'function'
+        ? adapter.baseURL()
+        : adapter.baseURL,
     apiKey: apiKey(),
     timeout: 60000,
     maxRetries: 0,
@@ -57,6 +60,15 @@ async function* answerStream(
   let completed = false;
   for await (const event of stream) {
     signal.throwIfAborted();
+    const upstream = event as unknown as {
+      error?: { code?: number | string; message?: string };
+    };
+    if (upstream.error)
+      throw Object.assign(new Error('Provider stream failed'), {
+        error: upstream.error,
+        status: Number(upstream.error.code),
+      });
+    if (!Array.isArray(event.choices)) throw aiError('AI_INVALID_RESPONSE');
     for (const choice of event.choices) {
       if (choice.index !== 0) continue;
       if (completed) throw aiError('AI_INVALID_RESPONSE');
@@ -104,7 +116,12 @@ async function interpretQuery(
       model: aiConfig().model,
       ...adapter.tokenOptions(aiConfig().model, aiConfig().intentTokens),
       messages: [
-        { role: 'system', content: intentInstructions },
+        {
+          role: 'system',
+          content:
+            intentInstructions +
+            '\nJSON fields: search:string, brand:string|null, category:string|null, minPrice:number|null, maxPrice:number|null, sort:price_asc|price_desc|newest|relevance, task:search|compare|policy, productNames:string[], referencePositions:number[], inherit:boolean. Return only this JSON object.',
+        },
         {
           role: 'user',
           content: JSON.stringify({
@@ -113,52 +130,57 @@ async function interpretQuery(
           }),
         },
       ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'product_search',
-          strict: true,
-          schema: {
-            type: 'object',
-            properties: {
-              search: { type: 'string' },
-              sort: {
-                type: 'string',
-                enum: ['price_asc', 'price_desc', 'newest', 'relevance'],
+      response_format: adapter.jsonObject
+        ? { type: 'json_object' }
+        : {
+            type: 'json_schema',
+            json_schema: {
+              name: 'product_search',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  search: { type: 'string' },
+                  sort: {
+                    type: 'string',
+                    enum: ['price_asc', 'price_desc', 'newest', 'relevance'],
+                  },
+                  task: {
+                    type: 'string',
+                    enum: ['search', 'compare', 'policy'],
+                  },
+                  productNames: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    maxItems: 6,
+                  },
+                  referencePositions: {
+                    type: 'array',
+                    items: { type: 'integer', minimum: 1, maximum: 20 },
+                    maxItems: 6,
+                  },
+                  inherit: { type: 'boolean' },
+                  brand: { type: ['string', 'null'] },
+                  category: { type: ['string', 'null'] },
+                  minPrice: { type: ['number', 'null'] },
+                  maxPrice: { type: ['number', 'null'] },
+                },
+                required: [
+                  'search',
+                  'brand',
+                  'category',
+                  'minPrice',
+                  'maxPrice',
+                  'sort',
+                  'task',
+                  'productNames',
+                  'referencePositions',
+                  'inherit',
+                ],
+                additionalProperties: false,
               },
-              task: { type: 'string', enum: ['search', 'compare', 'policy'] },
-              productNames: {
-                type: 'array',
-                items: { type: 'string' },
-                maxItems: 6,
-              },
-              referencePositions: {
-                type: 'array',
-                items: { type: 'integer', minimum: 1, maximum: 20 },
-                maxItems: 6,
-              },
-              inherit: { type: 'boolean' },
-              brand: { type: ['string', 'null'] },
-              category: { type: ['string', 'null'] },
-              minPrice: { type: ['number', 'null'] },
-              maxPrice: { type: ['number', 'null'] },
             },
-            required: [
-              'search',
-              'brand',
-              'category',
-              'minPrice',
-              'maxPrice',
-              'sort',
-              'task',
-              'productNames',
-              'referencePositions',
-              'inherit',
-            ],
-            additionalProperties: false,
           },
-        },
-      },
     },
     { ...(signal ? { signal } : {}) }
   );
@@ -174,7 +196,8 @@ async function interpretQuery(
 }
 
 export interface ChatAdapterOptions {
-  baseURL: string;
+  baseURL: string | (() => string);
+  jsonObject?: boolean;
   tokenOptions: (
     model: string,
     tokens: number

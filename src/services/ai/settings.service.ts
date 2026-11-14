@@ -1,78 +1,50 @@
-import { AiEmbeddingGeneration } from '../../models/ai/ai-embedding.model.js';
-import { providerModels, type AiProviderId } from './providers/catalog.js';
-import { randomUUID } from 'node:crypto';
 import createError from 'http-errors';
 import type { z } from 'zod';
 import { AiSettings } from '../../models/ai/ai-settings.model.js';
-import {
-  connectionInput,
-  settingsInput,
-} from '../../validations/ai/ai-settings.validation.js';
-import {
-  credentialsReady,
-  encryptCredential,
-  decryptCredential,
-} from './credentials.js';
+import { AiEmbeddingGeneration } from '../../models/ai/ai-embedding.model.js';
+import { AiProviderState } from '../../models/ai/ai-provider-state.model.js';
+import { settingsInput } from '../../validations/ai/ai-settings.validation.js';
 import { environmentAiConfig, withAiRuntime } from './config.js';
 import { aiProvider } from './providers/provider.js';
-import { classifyAiFailure } from './failures.js';
-
-interface ConnectionRecord {
-  id: string;
-  name: string;
-  provider: AiProviderId;
-  model: string;
-  encryptedKey: string;
-  keyHint: string;
-  checkedAt?: Date | null;
-  checkedOk: boolean;
-  checkCode?: string | null;
-}
-interface Settings {
-  revision: number;
-  enabled: boolean;
-  semanticEnabled: boolean;
-  indexingEnabled: boolean;
-  riskEnabled: boolean;
-  dailyCalls: number;
-  activeConnectionId: string | null;
-  activeEmbeddingGenerationId?: string | null;
-  embeddingEpoch?: number;
-  legacyEmbeddingConnectionId?: string | null;
-  connections: ConnectionRecord[];
-  audit: {
-    action?: string | null;
-    actor?: string | null;
-    at?: Date | null;
-    connectionId?: string | null;
-  }[];
-}
-const load = () =>
-  AiSettings.findById('global')
-    .select('+connections.encryptedKey')
-    .maxTimeMS(5000)
-    .lean<Settings>();
+import { aiError, classifyAiFailure } from './failures.js';
+import {
+  environmentConnections,
+  environmentRoutingInventory,
+  ENV_EMBEDDING_ID,
+} from './provider-environment.js';
 const defaults = () => {
-  const config = environmentAiConfig();
+  const c = environmentAiConfig();
   return {
-    enabled: config.enabled,
-    semanticEnabled: config.semanticEnabled,
-    indexingEnabled: config.indexingEnabled,
-    riskEnabled: config.riskEnabled,
-    dailyCalls: config.dailyCalls,
-    activeConnectionId: null as string | null,
+    enabled: c.enabled,
+    semanticEnabled: c.semanticEnabled,
+    indexingEnabled: c.indexingEnabled,
+    riskEnabled: c.riskEnabled,
   };
 };
 export async function readAiSettings() {
-  const doc = await AiSettings.findById('global').maxTimeMS(5000).lean();
-  const hasVersions = !!(await AiEmbeddingGeneration.exists({}));
+  const [doc, hasVersions, states] = await Promise.all([
+    AiSettings.findById('global').maxTimeMS(5000).lean(),
+    AiEmbeddingGeneration.exists({}),
+    AiProviderState.find({ until: { $gt: new Date() } })
+      .maxTimeMS(5000)
+      .lean(),
+  ]);
+  const pool = environmentConnections();
+  const generation = doc?.activeEmbeddingGenerationId
+    ? await AiEmbeddingGeneration.findById(
+        doc.activeEmbeddingGenerationId
+      ).lean()
+    : null;
   return {
     source: doc ? 'database' : 'environment',
+    credentialSource: 'environment',
+    automaticRouting: true,
     revision: doc?.revision ?? 0,
-    encryptionReady: credentialsReady(),
-    vectorReady: !!environmentAiConfig().vectorIndex || hasVersions,
-    semanticReady:
-      !!doc?.activeEmbeddingGenerationId || !!environmentAiConfig().vectorIndex,
+    encryptionReady: true, // Compatibility field: web operations no longer require encryption.
+    vectorReady: !!environmentAiConfig().vectorIndex || !!hasVersions,
+    semanticReady: generation
+      ? generation.provider === 'gemini' && generation.state === 'ready'
+      : !!environmentAiConfig().vectorIndex,
     emergencyDisabled: process.env['AI_FORCE_DISABLED'] === 'true',
     settings: doc
       ? {
@@ -80,366 +52,204 @@ export async function readAiSettings() {
           semanticEnabled: doc.semanticEnabled,
           indexingEnabled: doc.indexingEnabled,
           riskEnabled: doc.riskEnabled,
-          dailyCalls: doc.dailyCalls,
-          activeConnectionId: doc.activeConnectionId,
-          activeEmbeddingGenerationId: doc.activeEmbeddingGenerationId ?? null,
-          legacyEmbeddingConnectionId: doc.legacyEmbeddingConnectionId ?? null,
         }
       : defaults(),
-    connections: (doc?.connections ?? []).map(
-      ({
-        id,
-        name,
-        provider,
-        model,
-        keyHint,
-        checkedAt,
-        checkedOk,
-        checkCode,
-      }) => ({
-        id,
-        name,
-        provider,
-        model,
-        keyHint,
-        checkedAt,
-        checkedOk,
-        checkCode,
-      })
-    ),
+    routing: environmentRoutingInventory().map((item) => {
+      const c = pool.find(
+        (c) => c.provider === item.provider && c.model === item.model
+      );
+      return {
+        ...item,
+        retryAt: c
+          ? (states
+              .filter(
+                (s) =>
+                  s._id === `account:${c.account}` ||
+                  s._id === `model:${c.account}:${c.model}`
+              )
+              .sort((a, b) => b.until.getTime() - a.until.getTime())[0]
+              ?.until ?? null)
+          : null,
+      };
+    }),
+    connections: process.env['GEMINI_API_KEY']?.trim()
+      ? [
+          {
+            id: ENV_EMBEDDING_ID,
+            name: 'Gemini (.env)',
+            provider: 'gemini',
+            model: environmentAiConfig().embeddingModel,
+            checkedOk: true,
+            keyHint: '',
+          },
+        ]
+      : [],
     audit: (doc?.audit ?? []).slice().reverse(),
-    suggestedModels: [...providerModels.gemini],
-    providerModels,
     activeEmbeddingGenerationId: doc?.activeEmbeddingGenerationId ?? null,
-    legacyEmbeddingConnectionId: doc?.legacyEmbeddingConnectionId ?? null,
   };
 }
 export async function editable(revision: number) {
-  if (!credentialsReady())
-    throw createError(503, 'AI configuration encryption is not configured');
-  let doc = await load();
+  let doc = await AiSettings.findById('global').maxTimeMS(5000).lean();
   if (!doc) {
-    const key = process.env['GEMINI_API_KEY']?.trim();
-    const config = defaults();
-    const id = randomUUID();
-    const connections = key
-      ? [
-          {
-            id,
-            name: 'Environment bootstrap',
-            provider: 'gemini',
-            model: environmentAiConfig().model,
-            encryptedKey: encryptCredential(key, id),
-            keyHint: key.slice(-4),
-            checkedOk: false,
-          },
-        ]
-      : [];
     try {
       await AiSettings.updateOne(
         { _id: 'global' },
-        {
-          $setOnInsert: {
-            ...config,
-            enabled: config.enabled && !!key,
-            activeConnectionId: key ? id : null,
-            legacyEmbeddingConnectionId: key ? id : null,
-            connections,
-            revision: 0,
-          },
-        },
+        { $setOnInsert: { ...defaults(), revision: 0 } },
         { upsert: true }
       );
-    } catch (error) {
-      if (!(
-        error &&
-        typeof error === 'object' &&
-        'code' in error &&
-        error.code === 11000
-      ))
-        throw error;
+    } catch (e) {
+      if (!(e && typeof e === 'object' && 'code' in e && e.code === 11000))
+        throw e;
     }
-    doc = await load();
+    doc = await AiSettings.findById('global').maxTimeMS(5000).lean();
   }
   if (!doc || doc.revision !== revision)
     throw createError(409, 'AI configuration changed. Reload before saving.');
   return doc;
 }
-export async function commit(
-  doc: Settings,
-  actor: string,
-  action: string,
-  connectionId?: string
-) {
-  const audit = [
-    ...doc.audit,
-    {
-      action,
-      actor,
-      at: new Date(),
-      ...(connectionId ? { connectionId } : {}),
-    },
-  ].slice(-100);
+export async function initializeAiSettings(revision: number, actor: string) {
+  await editable(revision);
+  // Initialization never imports credentials or resets existing operating flags.
+  void actor;
+  return readAiSettings();
+}
+export async function clearAiSettingsAudit(revision: number) {
   const result = await AiSettings.updateOne(
-    { _id: 'global', revision: doc.revision },
-    {
-      $set: {
-        enabled: doc.enabled,
-        semanticEnabled: doc.semanticEnabled,
-        indexingEnabled: doc.indexingEnabled,
-        riskEnabled: doc.riskEnabled,
-        dailyCalls: doc.dailyCalls,
-        activeConnectionId: doc.activeConnectionId,
-        activeEmbeddingGenerationId: doc.activeEmbeddingGenerationId ?? null,
-        legacyEmbeddingConnectionId: doc.legacyEmbeddingConnectionId ?? null,
-        connections: doc.connections,
-        audit,
+    { _id: 'global', revision },
+    { $set: { audit: [] }, $inc: { revision: 1 } }
+  );
+  if (
+    !result.modifiedCount &&
+    (revision !== 0 || (await AiSettings.exists({ _id: 'global' })))
+  )
+    throw createError(
+      409,
+      'Cấu hình AI đã thay đổi. Hãy tải lại và xác nhận xóa lịch sử lần nữa.'
+    );
+  return readAiSettings();
+}
+export async function activateAi(
+  revision: number,
+  actor: string,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted();
+  if (process.env['AI_FORCE_DISABLED'] === 'true')
+    throw createError(
+      409,
+      'AI đang bị tắt khẩn cấp trên máy chủ. Hãy đặt AI_FORCE_DISABLED=false và khởi động lại backend.'
+    );
+  const connections = environmentConnections();
+  if (!connections.length)
+    throw createError(
+      400,
+      'Chưa có kết nối AI hợp lệ. Hãy cấu hình khóa API trên máy chủ.'
+    );
+  const current = await AiSettings.findById('global').maxTimeMS(5000).lean();
+  if ((current?.revision ?? 0) !== revision)
+    throw createError(
+      409,
+      'Cấu hình AI đã thay đổi. Hãy tải lại trang trước khi kích hoạt.'
+    );
+  try {
+    await withAiRuntime(
+      {
+        config: { ...environmentAiConfig(), enabled: true },
+        apiKey: connections[0]!.apiKey,
+        embeddingApiKey: process.env['GEMINI_API_KEY']?.trim() ?? '',
+        connections,
+        cloudflareAccountId: process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '',
       },
+      async () => {
+        await aiProvider.interpretQuery('Tìm sản phẩm trong cửa hàng', signal);
+        let answer = '';
+        for await (const text of aiProvider.answerStream(
+          'Xin chào',
+          JSON.stringify({ products: [], sources: [] }),
+          [],
+          signal
+        )) {
+          answer += text;
+          if (answer.length > 16000) throw aiError('AI_OUTPUT_LIMIT');
+        }
+        if (!answer.trim()) throw aiError('AI_INVALID_RESPONSE');
+      }
+    );
+  } catch (error) {
+    signal.throwIfAborted();
+    const failure = classifyAiFailure(error, 'generation');
+    throw aiError(failure.code, failure.code === 'AI_RATE_LIMITED' ? 429 : 503);
+  }
+  signal.throwIfAborted();
+  if (process.env['AI_FORCE_DISABLED'] === 'true')
+    throw createError(409, 'AI đang bị tắt khẩn cấp trên máy chủ.');
+  await editable(revision);
+  signal.throwIfAborted();
+  const result = await AiSettings.updateOne(
+    { _id: 'global', revision },
+    {
+      $set: { enabled: true },
       $inc: { revision: 1 },
+      $push: {
+        audit: {
+          $each: [{ action: 'settings.activated', actor, at: new Date() }],
+          $slice: -100,
+        },
+      },
+    }
+  );
+  if (!result.modifiedCount)
+    throw createError(
+      409,
+      'Cấu hình AI đã thay đổi trong lúc kiểm tra. Hãy tải lại trang.'
+    );
+  return readAiSettings();
+}
+export async function saveAiSettings(
+  input: z.infer<typeof settingsInput>,
+  actor: string
+) {
+  const doc = await editable(input.revision);
+  if (input.enabled && !environmentConnections().length)
+    throw createError(
+      400,
+      'Configure AI providers in the server environment first'
+    );
+  if (input.indexingEnabled && !process.env['GEMINI_API_KEY']?.trim())
+    throw createError(400, 'Indexing requires a Gemini environment key');
+  if (input.semanticEnabled) {
+    const g = doc.activeEmbeddingGenerationId
+      ? await AiEmbeddingGeneration.findOne({
+          _id: doc.activeEmbeddingGenerationId,
+          provider: 'gemini',
+          state: 'ready',
+        }).lean()
+      : null;
+    if (
+      !process.env['GEMINI_API_KEY']?.trim() ||
+      (!g && !environmentAiConfig().vectorIndex)
+    )
+      throw createError(
+        400,
+        'Chưa có dữ liệu tìm kiếm ngữ nghĩa sẵn sàng. Hãy tạo phiên bản kiến thức Gemini, chờ đồng bộ hoàn tất và kích hoạt phiên bản đó; hoặc tắt Tìm kiếm ngữ nghĩa để lưu và sử dụng chatbot trước.'
+      );
+  }
+  const { revision, ...flags } = input;
+  const result = await AiSettings.updateOne(
+    { _id: 'global', revision },
+    {
+      $set: flags,
+      $inc: { revision: 1 },
+      $push: {
+        audit: {
+          $each: [{ action: 'settings.updated', actor, at: new Date() }],
+          $slice: -100,
+        },
+      },
     },
     { runValidators: true }
   );
   if (!result.modifiedCount)
     throw createError(409, 'AI configuration changed. Reload before saving.');
   return readAiSettings();
-}
-export async function saveConnection(
-  input: z.infer<typeof connectionInput>,
-  actor: string,
-  id?: string
-) {
-  const doc = await editable(input.revision);
-  const connection = id
-    ? doc.connections.find((item) => item.id === id)
-    : undefined;
-  if (id && !connection) throw createError(404, 'AI connection not found');
-  if (id === doc.activeConnectionId)
-    throw createError(
-      409,
-      'Deactivate this connection before changing its model or key.'
-    );
-  if (connection) {
-    const changed =
-      connection.model !== input.model ||
-      connection.provider !== input.provider ||
-      !!input.apiKey;
-    if (
-      changed &&
-      (await AiEmbeddingGeneration.exists({ connectionId: connection.id }))
-    )
-      throw createError(
-        409,
-        'This connection is referenced by an embedding version. Create a new connection or remove unused versions first.'
-      );
-    if (
-      doc.legacyEmbeddingConnectionId === connection.id &&
-      input.provider !== 'gemini'
-    ) {
-      if (
-        !doc.activeEmbeddingGenerationId &&
-        (doc.semanticEnabled || doc.indexingEnabled)
-      )
-        throw createError(
-          409,
-          'This connection supplies legacy embeddings. Switch to an embedding version first.'
-        );
-      doc.legacyEmbeddingConnectionId = null;
-    }
-    if (connection.provider !== input.provider && !input.apiKey)
-      throw createError(
-        400,
-        'A new API key is required when changing providers'
-      );
-    connection.provider = input.provider;
-    connection.name = input.name;
-    connection.model = input.model;
-    if (input.apiKey) {
-      connection.encryptedKey = encryptCredential(input.apiKey, connection.id);
-      connection.keyHint = input.apiKey.slice(-4);
-    }
-    if (changed) {
-      connection.checkedOk = false;
-      delete connection.checkedAt;
-      delete connection.checkCode;
-    }
-  } else {
-    if (!input.apiKey)
-      throw createError(400, 'An API key is required for a new connection');
-    if (doc.connections.length >= 20)
-      throw createError(400, 'Maximum 20 AI connections');
-    const nextId = randomUUID();
-    doc.connections.push({
-      id: nextId,
-      name: input.name,
-      provider: input.provider,
-      model: input.model,
-      encryptedKey: encryptCredential(input.apiKey, nextId),
-      keyHint: input.apiKey.slice(-4),
-      checkedOk: false,
-    });
-  }
-  return commit(
-    doc,
-    actor,
-    id ? 'connection.updated' : 'connection.created',
-    id ?? doc.connections.at(-1)!.id
-  );
-}
-export async function deleteConnection(
-  id: string,
-  revision: number,
-  actor: string
-) {
-  const doc = await editable(revision);
-  if (doc.activeConnectionId === id)
-    throw createError(409, 'Deactivate this connection before deleting it.');
-  if (await AiEmbeddingGeneration.exists({ connectionId: id }))
-    throw createError(
-      409,
-      'Remove embedding versions referencing this connection before deleting it.'
-    );
-  if (doc.legacyEmbeddingConnectionId === id) {
-    if (
-      !doc.activeEmbeddingGenerationId &&
-      (doc.semanticEnabled || doc.indexingEnabled)
-    )
-      throw createError(
-        409,
-        'This connection supplies legacy embeddings. Switch versions or disable vector features first.'
-      );
-    doc.legacyEmbeddingConnectionId = null;
-  }
-  if (!doc.connections.some((item) => item.id === id))
-    throw createError(404, 'AI connection not found');
-  doc.connections = doc.connections.filter((item) => item.id !== id);
-  return commit(doc, actor, 'connection.deleted', id);
-}
-export async function initializeAiSettings(revision: number, actor: string) {
-  const doc = await editable(revision);
-  return commit(doc, actor, 'settings.initialized');
-}
-export async function saveAiSettings(
-  input: z.infer<typeof settingsInput>,
-  actor: string
-) {
-  if (input.indexingEnabled && input.dailyCalls < 4)
-    throw createError(
-      400,
-      'Automatic indexing requires a daily call limit of at least 4'
-    );
-  const doc = await editable(input.revision);
-  if (!doc.legacyEmbeddingConnectionId && !doc.activeEmbeddingGenerationId) {
-    const previous = doc.connections.find(
-      (item) => item.id === doc.activeConnectionId
-    );
-    if (previous?.provider === 'gemini')
-      doc.legacyEmbeddingConnectionId = previous.id;
-  }
-  const selected = doc.connections.find(
-    (item) => item.id === input.activeConnectionId
-  );
-  if (input.activeConnectionId && !selected)
-    throw createError(400, 'AI connection not found');
-  if (input.enabled && !selected)
-    throw createError(400, 'Select an AI connection before enabling AI');
-  if (
-    selected &&
-    (doc.activeConnectionId !== selected.id ||
-      (!doc.enabled && input.enabled)) &&
-    !selected.checkedOk
-  )
-    throw createError(
-      400,
-      'Test this connection successfully before activating it'
-    );
-  if (
-    (input.semanticEnabled &&
-      !doc.activeEmbeddingGenerationId &&
-      !environmentAiConfig().vectorIndex) ||
-    (input.indexingEnabled &&
-      !environmentAiConfig().vectorIndex &&
-      !(await AiEmbeddingGeneration.exists({})))
-  )
-    throw createError(
-      400,
-      'Configure AI_VECTOR_INDEX on the server before enabling vector features'
-    );
-  const legacyId =
-    doc.legacyEmbeddingConnectionId ??
-    (selected?.provider === 'gemini' ? selected.id : null);
-  if (
-    input.semanticEnabled &&
-    !doc.activeEmbeddingGenerationId &&
-    !doc.connections.some(
-      (item) => item.id === legacyId && item.provider === 'gemini'
-    )
-  )
-    throw createError(
-      400,
-      'Choose an embedding version before enabling semantic retrieval with this provider.'
-    );
-  if (
-    !doc.legacyEmbeddingConnectionId &&
-    selected?.provider === 'gemini' &&
-    !doc.activeEmbeddingGenerationId
-  )
-    doc.legacyEmbeddingConnectionId = selected.id;
-  Object.assign(doc, input);
-  return commit(doc, actor, 'settings.updated');
-}
-export async function testConnection(
-  id: string,
-  revision: number,
-  actor: string,
-  signal: AbortSignal
-) {
-  const doc = await editable(revision);
-  const connection = doc.connections.find((item) => item.id === id);
-  if (!connection?.encryptedKey)
-    throw createError(404, 'AI connection not found');
-  const base = environmentAiConfig();
-  const config = {
-    ...base,
-    source: 'database' as const,
-    revision: doc.revision,
-    model: connection.model,
-    provider: connection.provider,
-    enabled: true,
-    dailyCalls: doc.dailyCalls,
-    chatTokens: Math.max(1024, Math.min(base.chatTokens, 2048)),
-  };
-  let ok = false,
-    code = 'AI_PROVIDER_ERROR';
-  try {
-    await withAiRuntime(
-      {
-        config,
-        apiKey: decryptCredential(connection.encryptedKey, connection.id),
-      },
-      async () => {
-        await aiProvider.interpretQuery(
-          'Find headphones under 500000 VND',
-          signal
-        );
-        let answer = '';
-        for await (const delta of aiProvider.answerStream(
-          'Xin chào',
-          JSON.stringify({ products: [], sources: [] }),
-          [],
-          signal
-        ))
-          answer += delta;
-        if (!answer.trim()) throw new Error('Empty response');
-      }
-    );
-    ok = true;
-    code = 'OK';
-  } catch (error) {
-    signal.throwIfAborted();
-    code = classifyAiFailure(error, 'generation').code;
-  }
-  connection.checkedOk = ok;
-  connection.checkedAt = new Date();
-  connection.checkCode = code;
-  return commit(doc, actor, 'connection.tested', id);
 }

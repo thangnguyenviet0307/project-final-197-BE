@@ -6,7 +6,7 @@ import {
   environmentAiConfig,
   withAiRuntime,
 } from '../dist/services/ai/config.js';
-import { connectionInput } from '../dist/validations/ai/ai-settings.validation.js';
+import { compatibleChatModel } from '../dist/services/ai/providers/catalog.js';
 import { embeddingVersionInput } from '../dist/validations/ai/ai-embedding.validation.js';
 import {
   compatibleVectorIndex,
@@ -40,13 +40,30 @@ for (const [provider, model, endpoint] of [
     'gemini-3.1-flash-lite',
     'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
   ],
-  ['openai', 'gpt-5.4-mini', 'https://api.openai.com/v1/chat/completions'],
-  ['xai', 'grok-4.7', 'https://api.x.ai/v1/chat/completions'],
+  [
+    'groq',
+    'llama-3.3-70b-versatile',
+    'https://api.groq.com/openai/v1/chat/completions',
+  ],
+  [
+    'openrouter',
+    'openrouter/free',
+    'https://openrouter.ai/api/v1/chat/completions',
+  ],
+  [
+    'cloudflare',
+    '@cf/meta/llama-3.1-8b-instruct',
+    'https://api.cloudflare.com/client/v4/accounts/' +
+      'a'.repeat(32) +
+      '/ai/v1/chat/completions',
+  ],
 ])
   test(`${provider} uses its own endpoint/key, strict JSON and streaming with no provider fallback`, async (t) => {
-    t.mock.method(mongoose.Query.prototype, 'exec', async () => ({
-      modifiedCount: 1,
-    }));
+    t.mock.method(mongoose.Query.prototype, 'exec', async function () {
+      return this.model.modelName === 'AiProviderState' && this.op === 'findOne'
+        ? null
+        : { modifiedCount: 1 };
+    });
     let fail = false;
     const requests = [];
     const network = t.mock.method(globalThis, 'fetch', async (url, init) => {
@@ -91,6 +108,16 @@ for (const [provider, model, endpoint] of [
       {
         config: { ...environmentAiConfig(), enabled: true, provider, model },
         apiKey: `${provider}-credential`,
+        cloudflareAccountId: 'a'.repeat(32),
+        connections: [
+          {
+            id: provider,
+            provider,
+            model,
+            apiKey: `${provider}-credential`,
+            account: provider,
+          },
+        ],
       },
       async () => {
         assert.deepEqual(
@@ -106,13 +133,11 @@ for (const [provider, model, endpoint] of [
         ))
           answer += delta;
         assert.equal(answer, 'Hello');
-        assert.equal(requests[0].response_format.json_schema.strict, true);
-        if (provider === 'openai') {
-          assert.equal(requests[0].max_completion_tokens, 1536);
-          assert.equal(requests[0].store, false);
-        } else assert.equal(requests[0].max_tokens, 1536);
-        if (provider === 'xai')
-          assert.equal('reasoning_effort' in requests[0], false);
+        assert.equal(
+          requests[0].response_format.type,
+          provider === 'gemini' ? 'json_schema' : 'json_object'
+        );
+        assert.equal(requests[0].max_tokens, 1536);
         fail = true;
         await assert.rejects(
           aiProvider.interpretQuery('q'),
@@ -129,79 +154,15 @@ for (const [provider, model, endpoint] of [
     );
   });
 
-test('OpenAI embeddings use the embedding credential/dimensions independently from xAI chat', async (t) => {
-  t.mock.method(mongoose.Query.prototype, 'exec', async () => ({
-    modifiedCount: 1,
-  }));
-  t.mock.method(globalThis, 'fetch', async (url, init) => {
-    assert.equal(String(url), 'https://api.openai.com/v1/embeddings');
-    assert.equal(
-      new Headers(init.headers).get('authorization'),
-      'Bearer embedding-only-key'
-    );
-    assert.equal(JSON.parse(init.body).dimensions, 768);
-    return Response.json({
-      data: [{ embedding: [3, 4, ...Array(766).fill(0)] }],
-    });
-  });
-  await withAiRuntime(
-    {
-      config: {
-        ...environmentAiConfig(),
-        enabled: true,
-        provider: 'xai',
-        model: 'grok-4.7',
-        embeddingProvider: 'openai',
-        embeddingModel: 'text-embedding-3-small',
-        embeddingDimensions: 768,
-      },
-      apiKey: 'xai-chat-key',
-      embeddingApiKey: 'embedding-only-key',
-    },
-    async () => {
-      const vector = await aiProvider.embed('public source');
-      assert.equal(vector.length, 768);
-      assert.equal(vector[0], 0.6);
-      assert.equal(vector[1], 0.8);
-    }
-  );
-});
-
 test('provider/model pairing and vector index definitions cannot mix embedding spaces', () => {
-  const base = { revision: 0, name: 'Connection', apiKey: 'mock-api-key-long' };
-  assert.ok(
-    connectionInput.safeParse({
-      ...base,
-      provider: 'openai',
-      model: 'gpt-4.1-mini',
-    }).success
-  );
-  assert.ok(
-    connectionInput.safeParse({ ...base, provider: 'xai', model: 'grok-4.7' })
-      .success
-  );
-  assert.equal(
-    connectionInput.safeParse({
-      ...base,
-      provider: 'openai',
-      model: 'gemini-3.1-flash-lite',
-    }).success,
-    false
-  );
-  assert.equal(
-    connectionInput.safeParse({
-      ...base,
-      provider: 'openai',
-      model: 'gpt-image-1',
-    }).success,
-    false
-  );
+  assert.equal(compatibleChatModel('openrouter', 'openai/gpt-paid'), false);
+  assert.equal(compatibleChatModel('openrouter', 'openrouter/free'), true);
   assert.equal(
     embeddingVersionInput.safeParse({
       revision: 0,
       connectionId: '6c90df97-2427-4ef9-9fe0-61d04c68dd73',
       model: 'text-embedding-3-small',
-      dimensions: 3072,
+      dimensions: 1536,
     }).success,
     false
   );

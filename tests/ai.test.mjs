@@ -152,18 +152,14 @@ test('disabled provider rejects before any paid requests', async (t) => {
     else process.env.AI_ENABLED = previous;
   }
 });
-test('AI activation requires explicit credentials/budget; staff cannot administer AI', () => {
+test('AI activation requires explicit credentials; staff cannot administer AI', () => {
   assert.throws(
     () => validateAiEnvironment({ AI_ENABLED: 'true' }),
     /requires/
   );
   assert.throws(
-    () => validateAiEnvironment({ AI_DAILY_CALL_LIMIT: '-1' }),
-    /Invalid/
-  );
-  assert.throws(
     () => validateAiEnvironment({ AI_INDEX_ENABLED: 'true' }),
-    /VECTOR_INDEX/
+    /GEMINI_API_KEY/
   );
   assert.equal(hasPermission('admin', Permission.AiManage), true);
   assert.equal(hasPermission('staff', Permission.AiManage), false);

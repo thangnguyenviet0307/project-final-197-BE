@@ -25,7 +25,6 @@ const settingsSchema = new Schema(
     semanticEnabled: { type: Boolean, default: false },
     indexingEnabled: { type: Boolean, default: false },
     riskEnabled: { type: Boolean, default: false },
-    dailyCalls: { type: Number, default: 100 },
     activeConnectionId: { type: String, default: null },
     activeEmbeddingGenerationId: { type: String, default: null },
     embeddingEpoch: { type: Number, default: 0 },

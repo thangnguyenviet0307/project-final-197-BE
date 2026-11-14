@@ -14,7 +14,7 @@ import {
   vectorInfrastructure,
   vectorDefinition,
 } from './vector-infrastructure.js';
-import { decryptCredential } from './credentials.js';
+import { ENV_EMBEDDING_ID } from './provider-environment.js';
 import { environmentAiConfig, type AiRuntime } from './config.js';
 
 export async function readEmbeddingVersions() {
@@ -47,27 +47,26 @@ export async function createEmbeddingVersion(
   parentId: string | null = null
 ) {
   const doc = await editable(input.revision);
-  if (input.startSync && doc.dailyCalls < 4)
+  if (!['gemini-embedding-001', 'gemini-embedding-2'].includes(input.model))
     throw createError(
       400,
-      'Automatic indexing requires a daily call limit of at least 4'
+      'Only Gemini environment embedding models are supported'
     );
   if (input.startSync && !doc.enabled)
     throw createError(
       409,
       'Enable the AI assistant before starting synchronization'
     );
-  const connection = doc.connections.find(
-    (item) => item.id === input.connectionId
-  );
-  if (!connection || !connection.checkedOk)
-    throw createError(400, 'Choose a successfully tested connection');
-  const provider = input.model.startsWith('gemini-') ? 'gemini' : 'openai';
-  if (connection.provider !== provider)
-    throw createError(
-      400,
-      'Embedding model and connection provider do not match'
-    );
+  if (!process.env['GEMINI_API_KEY']?.trim())
+    throw createError(400, 'GEMINI_API_KEY must be configured on the server');
+  if (
+    input.connectionId !== ENV_EMBEDDING_ID &&
+    !doc.connections.some(
+      (c) => c.id === input.connectionId && c.provider === 'gemini'
+    )
+  )
+    throw createError(400, 'Use the environment Gemini embedding connection');
+  const provider = 'gemini';
   const id = randomUUID();
   await mongoose.connection.transaction(async (session) => {
     if ((await AiEmbeddingGeneration.countDocuments().session(session)) >= 20)
@@ -123,28 +122,22 @@ export async function createEmbeddingVersion(
 export async function generationRuntime(id: string): Promise<AiRuntime> {
   const [generation, settings] = await Promise.all([
     AiEmbeddingGeneration.findById(id).lean(),
-    AiSettings.findById('global').select('+connections.encryptedKey').lean(),
+    AiSettings.findById('global').lean(),
   ]);
-  const connection = settings?.connections.find(
-    (item) => item.id === generation?.connectionId
-  );
-  if (
-    !generation ||
-    !connection?.encryptedKey ||
-    connection.provider !== generation.provider
-  )
-    throw createError(409, 'Embedding connection is unavailable');
-  const key = decryptCredential(connection.encryptedKey, connection.id);
+  const key = process.env['GEMINI_API_KEY']?.trim();
+  if (!generation || generation.provider !== 'gemini' || !key)
+    throw createError(
+      409,
+      'A Gemini environment embedding connection is required'
+    );
   return {
     config: {
       ...environmentAiConfig(),
       enabled: true,
-      provider: connection.provider,
-      model: connection.model,
+      provider: 'gemini',
       source: 'database',
-      revision: settings!.revision,
-      dailyCalls: settings!.dailyCalls,
-      embeddingProvider: generation.provider,
+      revision: settings?.revision ?? 0,
+      embeddingProvider: 'gemini',
       embeddingModel: generation.model,
       embeddingDimensions: generation.dimensions,
       embeddingGeneration: generation._id,
@@ -175,6 +168,14 @@ export async function activateEmbeddingVersion(
   if (id && !generation)
     throw createError(409, 'Embedding version is not ready');
   if (generation) {
+    if (
+      generation.provider !== 'gemini' ||
+      !process.env['GEMINI_API_KEY']?.trim()
+    )
+      throw createError(
+        409,
+        'A Gemini environment embedding connection is required'
+      );
     let indexId: string;
     try {
       indexId = await vectorInfrastructure.ensure(generation);
@@ -189,14 +190,6 @@ export async function activateEmbeddingVersion(
         409,
         'The physical vector index changed. Rebuild this version before activation.'
       );
-    if (
-      !doc.connections.some(
-        (item) =>
-          item.id === generation.connectionId &&
-          item.provider === generation.provider
-      )
-    )
-      throw createError(409, 'Embedding connection is unavailable');
   }
   await mongoose.connection.transaction(async (session) => {
     if (generation) {

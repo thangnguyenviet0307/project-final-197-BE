@@ -8,6 +8,8 @@ import { validateAiEnvironment } from '../dist/services/ai/environment.js';
 function configure(t) {
   for (const [key, value] of Object.entries({
     AI_ENABLED: 'true',
+    AI_PROVIDER_ORDER: 'gemini',
+    GEMINI_CHAT_MODELS: 'gemini-3.1-flash-lite',
     GEMINI_API_KEY: 'mock-gemini-key',
     AI_CHAT_MODEL: 'gemini-3.1-flash-lite',
     AI_EMBEDDING_MODEL: 'gemini-embedding-001',
@@ -19,9 +21,11 @@ function configure(t) {
       else process.env[key] = previous;
     });
   }
-  t.mock.method(mongoose.Query.prototype, 'exec', async () => ({
-    modifiedCount: 1,
-  }));
+  t.mock.method(mongoose.Query.prototype, 'exec', async function () {
+    return this.model.modelName === 'AiProviderState' && this.op === 'findOne'
+      ? null
+      : { modifiedCount: 1 };
+  });
 }
 const intent = {
   search: 'tai nghe',
@@ -192,21 +196,30 @@ test('Gemini embeddings keep the 1536-dimension index contract and normalize vec
   );
 });
 
-test('Gemini activation needs its own credential and an explicit application limit', () => {
+test('AI activation needs a configured provider without a website daily limit', () => {
   assert.throws(
     () =>
       validateAiEnvironment({
         AI_ENABLED: 'true',
         OPENAI_API_KEY: 'old-key',
-        AI_DAILY_CALL_LIMIT: '100',
       }),
-    /GEMINI_API_KEY/
+    /configured AI provider/
   );
   assert.doesNotThrow(() =>
     validateAiEnvironment({
       AI_ENABLED: 'true',
       GEMINI_API_KEY: 'mock-only',
-      AI_DAILY_CALL_LIMIT: '100',
+    })
+  );
+});
+
+test('legacy daily environment caps are ignored and key-only Groq activation uses a default model', () => {
+  assert.doesNotThrow(() =>
+    validateAiEnvironment({
+      AI_ENABLED: 'true',
+      GROQ_API_KEY: 'mock',
+      AI_DAILY_CALL_LIMIT: '1',
+      GROQ_DAILY_CALL_LIMIT: '1',
     })
   );
 });

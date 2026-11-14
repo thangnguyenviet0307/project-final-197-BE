@@ -1,6 +1,6 @@
 import createError from 'http-errors';
 import { AiCounter, AiRiskEvent } from '../../models/ai/ai.model.js';
-import { DAY, aiConfig } from './config.js';
+import { DAY } from './config.js';
 import { digest } from './identity.service.js';
 export async function consumeUsage(
   key: string,
@@ -84,7 +84,7 @@ export async function reserveUsage(
     await recordRisk(
       key,
       'usage_limit',
-      'Rate or daily AI budget exceeded',
+      'AI request rate exceeded',
       60,
       duration,
       now
@@ -94,15 +94,33 @@ export async function reserveUsage(
     });
   }
 }
+async function incrementProviderCounter(key: string) {
+  const bucket = Math.floor(Date.now() / DAY);
+  const query = { _id: `${key}:${bucket}` };
+  try {
+    await AiCounter.updateOne(
+      query,
+      {
+        $inc: { count: 1 },
+        $setOnInsert: { expiresAt: new Date((bucket + 2) * DAY) },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    if (!(
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 11000
+    ))
+      throw error;
+    await AiCounter.updateOne(query, { $inc: { count: 1 } });
+  }
+}
+// Historical counters remain compatible; recording attempts never enforces a daily budget.
 export async function reserveProviderCall(
   scope: 'interactive' | 'indexing' = 'interactive'
 ) {
-  // Reserve at least 75% of the daily allowance for interactive traffic.
-  if (scope === 'indexing')
-    await reserveUsage(
-      'provider-indexing',
-      Math.floor(aiConfig().dailyCalls / 4),
-      DAY
-    );
-  await reserveUsage('provider-global', aiConfig().dailyCalls, DAY);
+  await incrementProviderCounter('provider-global');
+  if (scope === 'indexing') await incrementProviderCounter('provider-indexing');
 }

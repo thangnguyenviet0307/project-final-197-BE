@@ -1,11 +1,5 @@
+import { environmentConnections } from './provider-environment.js';
 export function validateAiEnvironment(environment: NodeJS.ProcessEnv): void {
-  if (
-    environment['AI_CONFIG_ENCRYPTION_KEY'] &&
-    !/^[a-f0-9]{64}$/i.test(environment['AI_CONFIG_ENCRYPTION_KEY'])
-  )
-    throw new Error(
-      'AI_CONFIG_ENCRYPTION_KEY must contain 64 hexadecimal characters'
-    );
   for (const name of [
     'AI_INTENT_MAX_OUTPUT_TOKENS',
     'AI_CHAT_MAX_OUTPUT_TOKENS',
@@ -34,22 +28,34 @@ export function validateAiEnvironment(environment: NodeJS.ProcessEnv): void {
     )
       throw new Error(`Invalid ${name}`);
   }
-  const limit = environment['AI_DAILY_CALL_LIMIT'];
-  if (
-    limit !== undefined &&
-    (!/^\d+$/.test(limit) || Number(limit) < 1 || Number(limit) > 100000)
-  )
-    throw new Error('Invalid AI_DAILY_CALL_LIMIT');
   if (
     environment['AI_ENABLED'] === 'true' &&
-    (!environment['GEMINI_API_KEY']?.trim() || !limit)
+    !environmentConnections(environment).length
   )
-    throw new Error(
-      'AI_ENABLED requires GEMINI_API_KEY and AI_DAILY_CALL_LIMIT'
-    );
+    throw new Error('AI_ENABLED requires a configured AI provider');
   if (
     environment['AI_INDEX_ENABLED'] === 'true' &&
-    !environment['AI_VECTOR_INDEX']?.trim()
+    !environment['GEMINI_API_KEY']?.trim()
   )
-    throw new Error('AI_INDEX_ENABLED requires AI_VECTOR_INDEX');
+    throw new Error('AI_INDEX_ENABLED requires GEMINI_API_KEY');
+  const order = (
+    environment['AI_PROVIDER_ORDER'] || 'gemini,groq,openrouter,cloudflare'
+  )
+    .split(',')
+    .map((v) => v.trim());
+  if (
+    order.length > 4 ||
+    new Set(order).size !== order.length ||
+    order.some(
+      (v) => !['gemini', 'groq', 'openrouter', 'cloudflare'].includes(v)
+    )
+  )
+    throw new Error('Invalid AI_PROVIDER_ORDER');
+  if (
+    environment['CLOUDFLARE_API_KEY'] &&
+    !/^[a-f0-9]{32}$/i.test(environment['CLOUDFLARE_ACCOUNT_ID'] || '')
+  )
+    throw new Error('Invalid CLOUDFLARE_ACCOUNT_ID');
+  if (environmentConnections(environment).length > 12)
+    throw new Error('Maximum 12 AI model candidates');
 }

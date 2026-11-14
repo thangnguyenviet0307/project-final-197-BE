@@ -1,6 +1,9 @@
 import test from 'node:test';
+import mongoose from 'mongoose';
 import assert from 'node:assert/strict';
 import {
+  withAiRuntime,
+  environmentAiConfig,
   DAY,
   HOUR,
   guestExpiry,
@@ -162,8 +165,19 @@ test('AI activation requires explicit credentials; staff cannot administer AI', 
     () => validateAiEnvironment({ AI_INDEX_ENABLED: 'true' }),
     /configured embedding provider/
   );
-  assert.doesNotThrow(() => validateAiEnvironment({ AI_INDEX_ENABLED: 'true', OPENROUTER_API_KEY: 'mock-only' }));
-  assert.doesNotThrow(() => validateAiEnvironment({ AI_INDEX_ENABLED: 'true', CLOUDFLARE_API_KEY: 'mock-only', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32) }));
+  assert.doesNotThrow(() =>
+    validateAiEnvironment({
+      AI_INDEX_ENABLED: 'true',
+      OPENROUTER_API_KEY: 'mock-only',
+    })
+  );
+  assert.doesNotThrow(() =>
+    validateAiEnvironment({
+      AI_INDEX_ENABLED: 'true',
+      CLOUDFLARE_API_KEY: 'mock-only',
+      CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32),
+    })
+  );
   assert.equal(hasPermission('super_admin', Permission.AiManage), true);
   assert.equal(hasPermission('admin', Permission.AiManage), false);
   assert.equal(hasPermission('admin', Permission.AiView), true);
@@ -207,4 +221,50 @@ test('already-aborted AI calls never reach the provider or quota database', asyn
     (e) => e.name === 'AbortError'
   );
   assert.equal(calls.mock.callCount(), 0);
+});
+
+test('pre-aborted chat requests preserve cancellation before configuration and database checks', async (t) => {
+  const network = t.mock.method(globalThis, 'fetch', () => {
+    throw new Error('Unexpected provider request');
+  });
+  const database = t.mock.method(mongoose.Query.prototype, 'exec', () => {
+    throw new Error('Unexpected database query');
+  });
+  for (const enabled of [false, true]) {
+    for (const configured of [false, true]) {
+      await withAiRuntime(
+        {
+          config: { ...environmentAiConfig(), enabled },
+          apiKey: '',
+          connections: configured
+            ? [
+                {
+                  id: 'gemini:0',
+                  provider: 'gemini',
+                  model: 'test',
+                  apiKey: 'fixture',
+                  account: 'fixture',
+                },
+              ]
+            : [],
+        },
+        async () => {
+          for (const reason of [
+            new DOMException('Cancelled', 'AbortError'),
+            new Error('Caller cancellation'),
+          ]) {
+            const signal = AbortSignal.abort(reason);
+            await assert.rejects(
+              aiProvider.interpretQuery('text', signal),
+              (error) => error === reason
+            );
+            const stream = aiProvider.answerStream('text', [], [], signal);
+            await assert.rejects(stream.next(), (error) => error === reason);
+          }
+        }
+      );
+    }
+  }
+  assert.equal(network.mock.callCount(), 0);
+  assert.equal(database.mock.callCount(), 0);
 });

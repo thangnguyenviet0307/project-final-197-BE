@@ -58,6 +58,7 @@ async function interpretQuery(
   ...args: Parameters<typeof geminiAdapter.interpretQuery>
 ) {
   const signal = args[1];
+  signal?.throwIfAborted();
   const connections = aiRuntimeConnections();
   if (!aiConfig().enabled || !connections.length)
     throw aiError('AI_UNAVAILABLE', 503);
@@ -103,6 +104,7 @@ async function* answerStream(
   ...args: Parameters<typeof geminiAdapter.answerStream>
 ) {
   const signal = args[3];
+  signal.throwIfAborted();
   const connections = aiRuntimeConnections();
   if (!aiConfig().enabled || !connections.length)
     throw aiError('AI_UNAVAILABLE', 503);

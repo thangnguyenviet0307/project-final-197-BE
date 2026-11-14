@@ -173,7 +173,7 @@ export function startAiIndexWorker() {
           const versionController = new AbortController();
           controller = versionController;
           if (await runEmbeddingBuild(versionController.signal)) return;
-          if (await queueActiveEmbeddingRefresh()) return;
+          if (await queueActiveEmbeddingRefresh(false, versionController.signal)) return;
           if (!aiConfig().vectorIndex || !aiEmbeddingKey()) return;
           try {
             await AiIndexJob.updateOne(

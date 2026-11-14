@@ -1,3 +1,7 @@
+import {
+  embeddingDefinition,
+  validEmbedding,
+} from '../../services/ai/embedding-catalog.js';
 import { z } from 'zod';
 export const embeddingVersionInput = z
   .object({
@@ -5,18 +9,23 @@ export const embeddingVersionInput = z
     connectionId: z.uuid(),
     engine: z.enum(['exact', 'atlas']).optional(),
     startSync: z.boolean().optional(),
-    model: z.enum([
-      'gemini-embedding-001',
-      'gemini-embedding-2',
-      'text-embedding-3-small',
-      'text-embedding-3-large',
-    ]),
-    dimensions: z.union([z.literal(768), z.literal(1536), z.literal(3072)]),
+    model: z.string().min(1).max(160),
+    dimensions: z.number().int().min(1).max(4096),
   })
   .strict()
-  .refine((v) => v.model !== 'text-embedding-3-small' || v.dimensions <= 1536, {
-    message: 'This embedding model supports at most 1536 dimensions',
-    path: ['dimensions'],
+  .superRefine((input, context) => {
+    if (input.model) {
+      const definition = embeddingDefinition(input.model);
+      if (
+        !definition ||
+        !validEmbedding(definition.provider, input.model, input.dimensions)
+      )
+        context.addIssue({
+          code: 'custom',
+          path: ['model'],
+          message: 'Model embedding và số chiều vector không tương thích.',
+        });
+    }
   });
 export const embeddingActivationInput = z
   .object({

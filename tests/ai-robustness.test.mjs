@@ -128,9 +128,11 @@ test('provider requires a completed terminal event and propagates upstream failu
     if (previous.key === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = previous.key;
   });
-  t.mock.method(mongoose.Query.prototype, 'exec', async () => ({
-    modifiedCount: 1,
-  }));
+  t.mock.method(mongoose.Query.prototype, 'exec', async function () {
+    return this.model.modelName === 'AiProviderState' && this.op === 'findOne'
+      ? null
+      : { modifiedCount: 1 };
+  });
   let events = [];
   const requests = [];
   t.mock.method(Completions.prototype, 'create', async (request) => {

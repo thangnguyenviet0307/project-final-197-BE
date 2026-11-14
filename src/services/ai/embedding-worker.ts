@@ -1,3 +1,4 @@
+import { embeddingKey, validEmbedding } from './embedding-catalog.js';
 import { createHash, randomUUID } from 'node:crypto';
 import mongoose, { type ClientSession } from 'mongoose';
 import {
@@ -52,9 +53,17 @@ export async function runEmbeddingBuild(parentSignal?: AbortSignal) {
   const lease = randomUUID();
   const generation = await AiEmbeddingGeneration.findOneAndUpdate(
     {
+      provider: { $in: ['gemini', 'cloudflare', 'openrouter'] },
       state: { $in: ['queued', 'building', 'verifying'] },
-      nextRunAt: { $lte: new Date() },
-      $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }],
+      $and: [
+        {
+          $or: [
+            { nextRunAt: { $lte: new Date() } },
+            { failureCode: 'AI_USAGE_LIMIT' },
+          ],
+        },
+        { $or: [{ leaseUntil: null }, { leaseUntil: { $lte: new Date() } }] },
+      ],
     },
     { $set: { leaseId: lease, leaseUntil: new Date(Date.now() + 120000) } },
     { returnDocument: 'after', sort: { createdAt: 1 } }
@@ -312,7 +321,56 @@ export async function runEmbeddingBuild(parentSignal?: AbortSignal) {
   return true;
 }
 
-export async function queueActiveEmbeddingRefresh(force = false) {
+// Compare public source content and metadata before allocating another snapshot.
+// Read one source at a time so Atlas datasets do not need an unbounded in-memory map.
+async function knowledgeChanged(
+  active: { _id: string; provider: string; model: string; dimensions: number },
+  signal?: AbortSignal
+) {
+  let count = 0;
+  for await (const source of knowledgeSourceProvider.iterate({
+    ...(signal ? { signal } : {}),
+  })) {
+    signal?.throwIfAborted();
+    const existing = await AiEmbeddingChunk.find({
+      generation: active._id,
+      key: source.key,
+    })
+      .select('part hash title href')
+      .maxTimeMS(5000)
+      .lean();
+    const text = plainText(source.text);
+    let part = 0;
+    for (let offset = 0; offset < text.length; offset += 1000) {
+      const hash = createHash('sha256')
+        .update(
+          `${active.provider}:${active.model}:${active.dimensions}:${text.slice(offset, offset + 1200)}`
+        )
+        .digest('hex');
+      const previous = existing.find((chunk) => chunk.part === part);
+      if (
+        !previous ||
+        previous.hash !== hash ||
+        (previous.title ?? '') !== (source.title ?? '') ||
+        (previous.href ?? '') !== (source.href ?? '')
+      )
+        return true;
+      part++;
+      count++;
+    }
+    if (part !== existing.length) return true;
+  }
+  return (
+    count !==
+    (await AiEmbeddingChunk.countDocuments({ generation: active._id }))
+  );
+}
+
+export async function queueActiveEmbeddingRefresh(
+  force = false,
+  signal?: AbortSignal
+) {
+  signal?.throwIfAborted();
   let settings = await AiSettings.findById('global').lean();
   if (!settings?.activeEmbeddingGenerationId) return false;
   const active = await AiEmbeddingGeneration.findById(
@@ -320,23 +378,45 @@ export async function queueActiveEmbeddingRefresh(force = false) {
   ).lean();
   if (
     !active ||
+    !validEmbedding(active.provider, active.model, active.dimensions) ||
+    !embeddingKey(active.provider) ||
     (!force &&
       (!active.finishedAt ||
-        active.finishedAt.getTime() > Date.now() - 15 * 60000))
+        active.finishedAt.getTime() > Date.now() - 15 * 60000 ||
+        (active.nextRunAt && active.nextRunAt.getTime() > Date.now())))
   )
     return true;
   const pending = await AiEmbeddingGeneration.findOne({
-    parentId: active._id,
-    state: { $in: ['queued', 'building', 'verifying', 'failed'] },
+    $or: [
+      {
+        parentId: active._id,
+        state: {
+          $in: ['queued', 'building', 'verifying', 'failed', 'cancelled'],
+        },
+      },
+      {
+        provider: active.provider,
+        model: active.model,
+        dimensions: active.dimensions,
+        state: { $in: ['queued', 'building', 'verifying'] },
+      },
+    ],
   }).lean();
   if (pending) {
-    if (force && pending.state === 'failed')
+    if (force && ['failed', 'cancelled'].includes(pending.state))
       await changeEmbeddingVersion(
         pending._id,
         settings.revision,
         'worker',
         'retry'
       );
+    return true;
+  }
+  if (!force && !(await knowledgeChanged(active, signal))) {
+    await AiEmbeddingGeneration.updateOne(
+      { _id: active._id, state: 'ready' },
+      { $max: { nextRunAt: new Date(Date.now() + 15 * 60000) } }
+    );
     return true;
   }
   if ((await AiEmbeddingGeneration.countDocuments()) >= 20) {
@@ -367,12 +447,8 @@ export async function queueActiveEmbeddingRefresh(force = false) {
       revision: settings.revision,
       connectionId: active.connectionId,
       engine: isExactVectorIndex(active.indexName) ? 'exact' : 'atlas',
-      model: active.model as
-        | 'gemini-embedding-001'
-        | 'gemini-embedding-2'
-        | 'text-embedding-3-small'
-        | 'text-embedding-3-large',
-      dimensions: active.dimensions as 768 | 1536 | 3072,
+      model: active.model,
+      dimensions: active.dimensions,
     },
     'worker',
     true,

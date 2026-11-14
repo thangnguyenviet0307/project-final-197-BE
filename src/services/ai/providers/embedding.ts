@@ -1,6 +1,5 @@
-import OpenAI from 'openai';
 import { z } from 'zod';
-import { aiConfig, aiEmbeddingKey } from '../config.js';
+import { aiConfig, aiEmbeddingKey, aiCloudflareAccountId } from '../config.js';
 import { aiError } from '../failures.js';
 import { reserveProviderCall } from '../usage.service.js';
 export async function embed(
@@ -19,23 +18,7 @@ export async function embed(
     AbortSignal.timeout(60000),
   ]);
   let vector: unknown;
-  if (config.embeddingProvider === 'openai') {
-    const client = new OpenAI({
-      baseURL: 'https://api.openai.com/v1/',
-      apiKey: key,
-      timeout: 60000,
-      maxRetries: 0,
-    });
-    const result = await client.embeddings.create(
-      {
-        model: config.embeddingModel,
-        input: text.slice(0, 12000),
-        dimensions: config.embeddingDimensions,
-      },
-      { signal: requestSignal }
-    );
-    vector = result.data[0]?.embedding;
-  } else {
+  if (config.embeddingProvider === 'gemini') {
     const result = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.embeddingModel)}:embedContent`,
       {
@@ -61,7 +44,64 @@ export async function embed(
       .object({ embedding: z.object({ values: z.unknown() }) })
       .safeParse(response);
     vector = parsed.success ? parsed.data.embedding.values : undefined;
-  }
+  } else if (
+    config.embeddingProvider === 'cloudflare' ||
+    config.embeddingProvider === 'openrouter'
+  ) {
+    const cloudflare = config.embeddingProvider === 'cloudflare';
+    const account = aiCloudflareAccountId();
+    if (cloudflare && !/^[a-f0-9]{32}$/i.test(account))
+      throw aiError('AI_UNAVAILABLE', 503);
+    const result = await fetch(
+      cloudflare
+        ? `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${config.embeddingModel}`
+        : 'https://openrouter.ai/api/v1/embeddings',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(
+          cloudflare
+            ? { text: [text.slice(0, 12000)] }
+            : {
+                model: config.embeddingModel,
+                input: text.slice(0, 12000),
+                encoding_format: 'float',
+                dimensions: config.embeddingDimensions,
+                input_type:
+                  scope === 'indexing' ? 'search_document' : 'search_query',
+              }
+        ),
+        signal: requestSignal,
+        redirect: 'error',
+      }
+    );
+    if (!result.ok) {
+      await result.body?.cancel();
+      throw Object.assign(new Error('Embedding request failed'), {
+        status: result.status,
+      });
+    }
+    const response: unknown = await result.json();
+    if (cloudflare) {
+      const parsed = z
+        .object({
+          success: z.literal(true),
+          result: z.object({ data: z.array(z.unknown()).length(1) }),
+        })
+        .safeParse(response);
+      vector = parsed.success ? parsed.data.result.data[0] : undefined;
+    } else {
+      const parsed = z
+        .object({
+          data: z.array(z.object({ embedding: z.unknown() })).length(1),
+        })
+        .safeParse(response);
+      vector = parsed.success ? parsed.data.data[0]?.embedding : undefined;
+    }
+  } else throw aiError('AI_UNAVAILABLE', 503);
   requestSignal.throwIfAborted();
   const parsed = z
     .array(z.number().finite())

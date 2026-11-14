@@ -257,15 +257,15 @@ export async function cancelTurn(
       { $inc: { __v: 1 } },
       { session, returnDocument: 'after' }
     );
-    if (!conversation) throw createError(404, 'Conversation not found');
+    if (!conversation) throw createError(404, 'Không tìm thấy hội thoại.');
     let turn = await AiTurn.findOne({ conversationId: id, requestId }).session(
       session
     );
     if (turn && turn.content !== content)
-      throw createError(409, 'Request ID belongs to different content');
+      throw createError(409, 'Mã yêu cầu đã được dùng cho nội dung khác.');
     if (!turn) {
       if (conversation.status !== 'active')
-        throw createError(409, 'Conversation ended');
+        throw createError(409, 'Hội thoại đã kết thúc.');
       // Durable cancellation receipt: a delayed send replays cancelled and
       // never starts a paid generation, even on another API instance.
       const created = await AiTurn.create(
@@ -288,7 +288,11 @@ export async function cancelTurn(
         { session, returnDocument: 'after' }
       );
     }
-    if (!turn) throw createError(409, 'Turn changed; reload history');
+    if (!turn)
+      throw createError(
+        409,
+        'Lượt trả lời đã thay đổi. Vui lòng tải lại lịch sử hội thoại.'
+      );
     if (turn.status === 'cancelled') {
       await AiConversation.updateOne(
         { _id: id, activeRequestId: requestId },

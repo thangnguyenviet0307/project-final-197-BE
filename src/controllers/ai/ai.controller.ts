@@ -1,3 +1,4 @@
+import { readRoutingMonitor } from '../../services/ai/routing-monitor.service.js';
 import {
   AiEmbeddingChunk,
   AiEmbeddingGeneration,
@@ -140,7 +141,7 @@ export const reindex: RequestHandler = asyncHandler(async (_req, res) => {
     if (!aiConfig().enabled || !aiConfig().indexingEnabled)
       throw createError(
         409,
-        'Enable AI and knowledge indexing before synchronizing'
+        'Vui lòng bật trợ lý AI và tự động đồng bộ kiến thức trước khi yêu cầu đồng bộ.'
       );
     if (await queueActiveEmbeddingRefresh(true)) return;
     await AiIndexJob.updateOne(
@@ -154,3 +155,10 @@ export const reindex: RequestHandler = asyncHandler(async (_req, res) => {
   });
   sendResponse(res, 202, { message: 'Đã xếp lịch đồng bộ kiến thức.' });
 });
+
+export const routingMonitor: RequestHandler = asyncHandler(
+  async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    sendResponse(res, 200, { data: await readRoutingMonitor() });
+  }
+);

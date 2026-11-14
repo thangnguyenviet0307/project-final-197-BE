@@ -3,7 +3,7 @@ const generationSchema = new Schema(
   {
     _id: { type: String, required: true },
     connectionId: { type: String, required: true },
-    provider: { type: String, enum: ['gemini', 'openai'], required: true },
+    provider: { type: String, enum: ['gemini', 'openai', 'cloudflare', 'openrouter'], required: true },
     model: { type: String, required: true },
     dimensions: { type: Number, required: true },
     indexName: { type: String, required: true },

@@ -1,3 +1,4 @@
+import { AiRoutingRun } from './ai-routing-run.model.js';
 import { Schema, model } from 'mongoose';
 const sourceSchema = new Schema(
   { key: String, title: String, href: String },
@@ -131,6 +132,7 @@ const indexJobSchema = new Schema(
 );
 export const AiIndexJob = model('AiIndexJob', indexJobSchema);
 export const aiModels = [
+  AiRoutingRun,
   AiConversation,
   AiTurn,
   AiSocketTicket,

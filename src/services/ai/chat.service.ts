@@ -139,7 +139,7 @@ async function runChatWithConfig(
       status: 'active',
       activeRequestId: input.requestId,
     });
-    if (!active) throw new Error('Conversation ended');
+    if (!active) throw new Error('Hội thoại đã kết thúc.');
     signal.throwIfAborted();
     stage = 'persistence';
     const saved = await AiTurn.updateOne(

@@ -24,15 +24,25 @@ import {
   historyQuery,
   cancelTurnSchema,
 } from '../../../validations/ai/ai.validation.js';
+const createAiRateLimit = (limit: number, windowMs: number) =>
+  createAuthRateLimit(
+    limit,
+    windowMs,
+    'Bạn đã gửi quá nhiều yêu cầu AI. Vui lòng thử lại sau.'
+  );
 const router: ExpressRouter = Router();
 router.use(aiOrigin);
 const admin = Router();
 admin.use(authenticate, requirePermission(Permission.AiView));
-const adminRateLimit = createAuthRateLimit(30, 60000);
+const adminRateLimit = createAiRateLimit(30, 60000);
 admin.get('/settings', adminRateLimit, settings.read);
 admin.get('/embeddings', adminRateLimit, embeddings.read);
 admin.get('/status', adminRateLimit, controller.status);
-// Every operation below can change configuration, data, state or provider usage.
+admin.get(
+  '/routing-monitor',
+  createAiRateLimit(60, 60000),
+  controller.routingMonitor
+);
 admin.use(requirePermission(Permission.AiManage), adminRateLimit);
 admin.delete('/settings/audit', settings.clearAudit);
 admin.post('/embeddings', embeddings.create);
@@ -41,18 +51,15 @@ admin.post('/embeddings/:id/retry', embeddings.change('retry'));
 admin.post('/embeddings/:id/cancel', embeddings.change('cancel'));
 admin.delete('/embeddings/:id', embeddings.change('delete'));
 admin.post('/settings/initialize', settings.initialize);
-admin.put('/settings', settings.save);
-admin.post('/connections', settings.create);
-admin.put('/connections/:id', settings.update);
-admin.delete('/connections/:id', settings.remove);
 admin.post(
-  '/connections/:id/test',
-  createAuthRateLimit(4, 60000),
-  settings.test
+  '/settings/activate',
+  createAiRateLimit(2, 60000),
+  settings.activate
 );
+admin.put('/settings', settings.save);
 admin.post('/reindex', controller.reindex);
 router.use('/admin', admin);
-router.use(createAuthRateLimit(60, 60000));
+router.use(createAiRateLimit(60, 60000));
 router.use(
   asyncHandler(async (req, _res, next) => {
     await reserveUsage('http:' + digest(req.ip || 'unknown'), 80, 60000);
@@ -69,7 +76,7 @@ router.get(
 router.post(
   '/conversations',
   aiIdentity,
-  createAuthRateLimit(10, 60000),
+  createAiRateLimit(10, 60000),
   validate(z.object({}).strict()),
   controller.create
 );
@@ -94,7 +101,7 @@ router.post(
 router.post(
   '/socket-ticket',
   aiIdentity,
-  createAuthRateLimit(15, 60000),
+  createAiRateLimit(15, 60000),
   validate(z.object({}).strict()),
   controller.ticket
 );

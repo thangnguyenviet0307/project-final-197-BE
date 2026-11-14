@@ -1,3 +1,10 @@
+import {
+  embeddingDefinition,
+  embeddingKey,
+  embeddingModels,
+  embeddingConnectionIds,
+  validEmbedding,
+} from './embedding-catalog.js';
 import { randomUUID } from 'node:crypto';
 import { indexWorkerStatus } from './index-worker-control.js';
 import mongoose from 'mongoose';
@@ -14,7 +21,6 @@ import {
   vectorInfrastructure,
   vectorDefinition,
 } from './vector-infrastructure.js';
-import { decryptCredential } from './credentials.js';
 import { environmentAiConfig, type AiRuntime } from './config.js';
 
 export async function readEmbeddingVersions() {
@@ -38,6 +44,10 @@ export async function readEmbeddingVersions() {
       })
     ),
     collection: 'ai_embedding_chunks',
+    supportedModels: embeddingModels.map((item) => ({
+      ...item,
+      available: !!embeddingKey(item.provider),
+    })),
   };
 }
 export async function createEmbeddingVersion(
@@ -47,33 +57,56 @@ export async function createEmbeddingVersion(
   parentId: string | null = null
 ) {
   const doc = await editable(input.revision);
-  if (input.startSync && doc.dailyCalls < 4)
+  const model = input.model;
+  const definition = embeddingDefinition(model);
+  if (
+    !definition ||
+    !validEmbedding(definition.provider, model, input.dimensions)
+  )
     throw createError(
       400,
-      'Automatic indexing requires a daily call limit of at least 4'
+      'Model embedding, nhà cung cấp và số chiều vector không tương thích.'
     );
+  const provider = definition.provider;
   if (input.startSync && !doc.enabled)
     throw createError(
       409,
-      'Enable the AI assistant before starting synchronization'
+      'Vui lòng bật trợ lý AI trước khi bắt đầu đồng bộ kiến thức.'
     );
-  const connection = doc.connections.find(
-    (item) => item.id === input.connectionId
-  );
-  if (!connection || !connection.checkedOk)
-    throw createError(400, 'Choose a successfully tested connection');
-  const provider = input.model.startsWith('gemini-') ? 'gemini' : 'openai';
-  if (connection.provider !== provider)
+  if (!embeddingKey(provider))
     throw createError(
       400,
-      'Embedding model and connection provider do not match'
+      'Vui lòng cấu hình khóa API của nhà cung cấp embedding đã chọn trên máy chủ.'
+    );
+  if (
+    input.connectionId !== embeddingConnectionIds[provider] &&
+    !doc.connections.some(
+      (c) => c.id === input.connectionId && c.provider === provider
+    )
+  )
+    throw createError(
+      400,
+      'Kết nối embedding không thuộc nhà cung cấp của model đã chọn.'
     );
   const id = randomUUID();
   await mongoose.connection.transaction(async (session) => {
+    if (
+      await AiEmbeddingGeneration.exists({
+        provider,
+        model,
+        dimensions: input.dimensions,
+        state: { $in: ['queued', 'building', 'verifying'] },
+        indexName: input.engine === 'exact' ? /^ai_exact_/ : /^ai_vectors_/,
+      }).session(session)
+    )
+      throw createError(
+        409,
+        'Đã có phiên bản tương ứng đang chờ hoặc đang đồng bộ. Hãy chờ hoàn tất hoặc hủy phiên bản đó trước.'
+      );
     if ((await AiEmbeddingGeneration.countDocuments().session(session)) >= 20)
       throw createError(
         409,
-        'Maximum 20 embedding versions. Delete unused versions first.'
+        'Chỉ được lưu tối đa 20 phiên bản embedding. Vui lòng xóa phiên bản không còn sử dụng trước.'
       );
     const lock = await AiSettings.updateOne(
       { _id: 'global', revision: input.revision },
@@ -97,14 +130,17 @@ export async function createEmbeddingVersion(
       { session }
     );
     if (!lock.modifiedCount)
-      throw createError(409, 'AI configuration changed. Reload before saving.');
+      throw createError(
+        409,
+        'Cấu hình AI đã thay đổi. Vui lòng tải lại trang trước khi lưu.'
+      );
     await AiEmbeddingGeneration.create(
       [
         {
           _id: id,
           connectionId: input.connectionId,
           provider,
-          model: input.model,
+          model,
           dimensions: input.dimensions,
           indexName:
             (input.engine === 'exact' ? 'ai_exact_' : 'ai_vectors_') +
@@ -123,34 +159,37 @@ export async function createEmbeddingVersion(
 export async function generationRuntime(id: string): Promise<AiRuntime> {
   const [generation, settings] = await Promise.all([
     AiEmbeddingGeneration.findById(id).lean(),
-    AiSettings.findById('global').select('+connections.encryptedKey').lean(),
+    AiSettings.findById('global').lean(),
   ]);
-  const connection = settings?.connections.find(
-    (item) => item.id === generation?.connectionId
-  );
+  const key = generation ? embeddingKey(generation.provider) : '';
   if (
     !generation ||
-    !connection?.encryptedKey ||
-    connection.provider !== generation.provider
+    !validEmbedding(
+      generation.provider,
+      generation.model,
+      generation.dimensions
+    ) ||
+    !key
   )
-    throw createError(409, 'Embedding connection is unavailable');
-  const key = decryptCredential(connection.encryptedKey, connection.id);
+    throw createError(
+      409,
+      'Chưa có kết nối embedding hợp lệ. Vui lòng kiểm tra model và khóa API của nhà cung cấp trên máy chủ.'
+    );
   return {
     config: {
       ...environmentAiConfig(),
       enabled: true,
-      provider: connection.provider,
-      model: connection.model,
       source: 'database',
-      revision: settings!.revision,
-      dailyCalls: settings!.dailyCalls,
-      embeddingProvider: generation.provider,
+      revision: settings?.revision ?? 0,
+      embeddingProvider: generation.provider as
+        'gemini' | 'cloudflare' | 'openrouter',
       embeddingModel: generation.model,
       embeddingDimensions: generation.dimensions,
       embeddingGeneration: generation._id,
       vectorIndex: generation.indexName,
     },
     apiKey: key,
+    cloudflareAccountId: process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '',
     embeddingApiKey: key,
   };
 }
@@ -173,30 +212,34 @@ export async function activateEmbeddingVersion(
     ? await AiEmbeddingGeneration.findOne({ _id: id, state: 'ready' }).lean()
     : null;
   if (id && !generation)
-    throw createError(409, 'Embedding version is not ready');
+    throw createError(409, 'Phiên bản embedding chưa sẵn sàng để sử dụng.');
   if (generation) {
+    if (
+      !validEmbedding(
+        generation.provider,
+        generation.model,
+        generation.dimensions
+      ) ||
+      !embeddingKey(generation.provider)
+    )
+      throw createError(
+        409,
+        'Chưa có kết nối embedding hợp lệ. Vui lòng kiểm tra model và khóa API của nhà cung cấp trên máy chủ.'
+      );
     let indexId: string;
     try {
       indexId = await vectorInfrastructure.ensure(generation);
     } catch {
       throw createError(
         409,
-        'Vector index is not ready or has an incompatible definition'
+        'Chỉ mục vector chưa sẵn sàng hoặc có cấu hình không tương thích.'
       );
     }
     if (indexId !== generation.indexId)
       throw createError(
         409,
-        'The physical vector index changed. Rebuild this version before activation.'
+        'Chỉ mục vector đã thay đổi. Vui lòng tạo lại dữ liệu của phiên bản trước khi kích hoạt.'
       );
-    if (
-      !doc.connections.some(
-        (item) =>
-          item.id === generation.connectionId &&
-          item.provider === generation.provider
-      )
-    )
-      throw createError(409, 'Embedding connection is unavailable');
   }
   await mongoose.connection.transaction(async (session) => {
     if (generation) {
@@ -211,7 +254,10 @@ export async function activateEmbeddingVersion(
         { session }
       );
       if (!lock.modifiedCount)
-        throw createError(409, 'Embedding version changed');
+        throw createError(
+          409,
+          'Phiên bản embedding đã thay đổi. Vui lòng tải lại trang và thử lại.'
+        );
     }
     const result = await AiSettings.updateOne(
       {
@@ -246,7 +292,7 @@ export async function activateEmbeddingVersion(
     if (!result.modifiedCount)
       throw createError(
         409,
-        'AI configuration changed. Reload before switching.'
+        'Cấu hình AI đã thay đổi. Vui lòng tải lại trang trước khi chuyển phiên bản.'
       );
     if (
       doc.activeEmbeddingGenerationId &&
@@ -270,32 +316,56 @@ export async function changeEmbeddingVersion(
   if (doc.activeEmbeddingGenerationId === id)
     throw createError(
       409,
-      'Switch away from the active embedding version first'
+      'Vui lòng ngừng sử dụng hoặc chuyển sang phiên bản khác trước khi thực hiện thao tác này.'
     );
   await mongoose.connection.transaction(async (session) => {
     const generation = await AiEmbeddingGeneration.findById(id)
       .session(session)
       .lean();
-    if (!generation) throw createError(404, 'Embedding version not found');
+    if (!generation)
+      throw createError(404, 'Không tìm thấy phiên bản embedding.');
+    if (
+      action === 'retry' &&
+      (!validEmbedding(
+        generation.provider,
+        generation.model,
+        generation.dimensions
+      ) ||
+        !embeddingKey(generation.provider))
+    )
+      throw createError(
+        409,
+        'Chưa có kết nối embedding hợp lệ. Vui lòng kiểm tra model và khóa API của nhà cung cấp trên máy chủ.'
+      );
     if (
       action === 'retry' &&
       !['failed', 'cancelled', 'ready'].includes(generation.state)
     )
-      throw createError(409, 'Only terminal versions can be retried');
+      throw createError(
+        409,
+        'Chỉ có thể thử lại phiên bản đã hoàn tất, thất bại hoặc bị hủy.'
+      );
     if (
       action === 'cancel' &&
       !['queued', 'building', 'verifying'].includes(generation.state)
     )
-      throw createError(409, 'This version is not running');
+      throw createError(409, 'Phiên bản này không có tác vụ đang chạy để hủy.');
     if (
       action === 'delete' &&
-      (['queued', 'building', 'verifying'].includes(generation.state) ||
-        (generation.lastDeactivatedAt &&
-          generation.lastDeactivatedAt.getTime() > Date.now() - 5 * 60000))
+      ['queued', 'building', 'verifying'].includes(generation.state)
     )
       throw createError(
         409,
-        'Cancel pending work, and wait five minutes after deactivation before deletion'
+        'Vui lòng hủy tác vụ đang chờ hoặc đang đồng bộ trước khi xóa phiên bản.'
+      );
+    if (
+      action === 'delete' &&
+      generation.lastDeactivatedAt &&
+      generation.lastDeactivatedAt.getTime() > Date.now() - 5 * 60000
+    )
+      throw createError(
+        409,
+        'Vui lòng đợi ít nhất 5 phút sau khi ngừng sử dụng phiên bản trước khi xóa.'
       );
     const lock = await AiSettings.updateOne(
       { _id: 'global', revision },
@@ -318,7 +388,10 @@ export async function changeEmbeddingVersion(
       { session }
     );
     if (!lock.modifiedCount)
-      throw createError(409, 'AI configuration changed. Reload before saving.');
+      throw createError(
+        409,
+        'Cấu hình AI đã thay đổi. Vui lòng tải lại trang trước khi lưu.'
+      );
     if (action === 'delete') {
       await AiEmbeddingGeneration.deleteOne(
         { _id: id, revision: generation.revision },

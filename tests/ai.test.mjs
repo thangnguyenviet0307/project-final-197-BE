@@ -103,6 +103,7 @@ test('AI models declare snake_case collections and independent TTL indexes', () 
     'AiSocketTicket',
     'AiCounter',
     'AiRiskEvent',
+    'AiRoutingRun',
   ]) {
     const model = aiModels.find((m) => m.modelName === name);
     assert.ok(
@@ -152,19 +153,17 @@ test('disabled provider rejects before any paid requests', async (t) => {
     else process.env.AI_ENABLED = previous;
   }
 });
-test('AI activation requires explicit credentials/budget; staff cannot administer AI', () => {
+test('AI activation requires explicit credentials; staff cannot administer AI', () => {
   assert.throws(
     () => validateAiEnvironment({ AI_ENABLED: 'true' }),
     /requires/
   );
   assert.throws(
-    () => validateAiEnvironment({ AI_DAILY_CALL_LIMIT: '-1' }),
-    /Invalid/
-  );
-  assert.throws(
     () => validateAiEnvironment({ AI_INDEX_ENABLED: 'true' }),
-    /VECTOR_INDEX/
+    /configured embedding provider/
   );
+  assert.doesNotThrow(() => validateAiEnvironment({ AI_INDEX_ENABLED: 'true', OPENROUTER_API_KEY: 'mock-only' }));
+  assert.doesNotThrow(() => validateAiEnvironment({ AI_INDEX_ENABLED: 'true', CLOUDFLARE_API_KEY: 'mock-only', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32) }));
   assert.equal(hasPermission('super_admin', Permission.AiManage), true);
   assert.equal(hasPermission('admin', Permission.AiManage), false);
   assert.equal(hasPermission('admin', Permission.AiView), true);

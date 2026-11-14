@@ -20,6 +20,8 @@ test('all runtime models explicitly bind to the intended snake_case collections'
   const expected = {
     AiConversation: 'ai_conversations',
     AiSettings: 'ai_settings',
+    AiProviderState: 'ai_provider_states',
+    AiRoutingRun: 'ai_routing_runs',
     AiEmbeddingGeneration: 'ai_embedding_generations',
     AiEmbeddingChunk: 'ai_embedding_chunks',
     AiTurn: 'ai_messages',

@@ -5,7 +5,10 @@ export function credentialsReady() {
 }
 function encryptionKey() {
   if (!credentialsReady())
-    throw createError(503, 'AI configuration encryption is not configured');
+    throw createError(
+      503,
+      'Chưa cấu hình mã hóa thông tin kết nối AI trên máy chủ.'
+    );
   return Buffer.from(process.env['AI_CONFIG_ENCRYPTION_KEY']!, 'hex');
 }
 export function encryptCredential(value: string, id: string) {
@@ -39,6 +42,9 @@ export function decryptCredential(value: string, id: string) {
       decipher.final(),
     ]).toString('utf8');
   } catch {
-    throw createError(503, 'AI credential could not be decrypted');
+    throw createError(
+      503,
+      'Không thể đọc thông tin xác thực AI đã lưu. Vui lòng kiểm tra cấu hình máy chủ.'
+    );
   }
 }

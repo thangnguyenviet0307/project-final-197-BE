@@ -18,7 +18,11 @@ export const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
 const sign = (value: string) => {
   const secret = process.env['JWT_SECRET'];
-  if (!secret) throw createError(503, 'AI identity is not configured');
+  if (!secret)
+    throw createError(
+      503,
+      'Chưa cấu hình xác thực phiên AI trên máy chủ. Vui lòng liên hệ quản trị viên.'
+    );
   return createHmac('sha256', secret)
     .update('ai-guest:' + value)
     .digest('hex');
@@ -82,7 +86,10 @@ export const initializeAiSession: RequestHandler = identify(true);
 export async function checkCustomerToken(token: string): Promise<string> {
   const payload = verifyAccessToken(token);
   if (payload.accountType !== 'customer')
-    throw createError(403, 'Customer session required');
+    throw createError(
+      403,
+      'Vui lòng đăng nhập tài khoản khách hàng để tiếp tục.'
+    );
   const customer = await Customer.findById(payload.userId).select(
     '+tokenVersion'
   );
@@ -92,6 +99,9 @@ export async function checkCustomerToken(token: string): Promise<string> {
     customer.mustChangePassword ||
     (customer.tokenVersion ?? 0) !== payload.version
   )
-    throw createError(401, 'Customer session expired');
+    throw createError(
+      401,
+      'Phiên đăng nhập của khách hàng đã hết hạn. Vui lòng đăng nhập lại.'
+    );
   return payload.userId;
 }

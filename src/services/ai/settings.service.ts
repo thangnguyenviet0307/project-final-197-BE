@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { AiActivationLease } from '../../models/ai/ai-activation-lease.model.js';
+import { withRoutingOperation } from './routing-monitor.service.js';
 import {
   embeddingConnections,
   embeddingKey,
@@ -175,7 +178,7 @@ export async function clearAiSettingsAudit(revision: number) {
     );
   return readAiSettings();
 }
-export async function activateAi(
+async function activateAiWithLease(
   revision: number,
   actor: string,
   signal: AbortSignal
@@ -251,6 +254,44 @@ export async function activateAi(
       'Cấu hình AI đã thay đổi trong lúc kiểm tra. Hãy tải lại trang.'
     );
   return readAiSettings();
+}
+export async function activateAi(
+  revision: number,
+  actor: string,
+  signal: AbortSignal
+) {
+  signal.throwIfAborted();
+  const leaseId = randomUUID();
+  try {
+    await AiActivationLease.findOneAndUpdate(
+      { _id: 'global', expiresAt: { $lte: new Date() } },
+      { $set: { leaseId, expiresAt: new Date(Date.now() + 90000) } },
+      { upsert: true, returnDocument: 'after', maxTimeMS: 5000 }
+    );
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error &&
+      'code' in error &&
+      error.code === 11000
+    )
+      throw createError(
+        409,
+        'Đang kiểm tra kết nối AI. Vui lòng chờ thao tác hiện tại hoàn tất.'
+      );
+    throw error;
+  }
+  try {
+    return await withRoutingOperation(
+      'activation',
+      () => activateAiWithLease(revision, actor, signal),
+      signal
+    );
+  } finally {
+    await AiActivationLease.deleteOne({ _id: 'global', leaseId })
+      .maxTimeMS(5000)
+      .catch(() => {});
+  }
 }
 export async function saveAiSettings(
   input: z.infer<typeof settingsInput>,

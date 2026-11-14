@@ -1,9 +1,49 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import mongoose from 'mongoose';
 import { AiRoutingRun } from '../../models/ai/ai-routing-run.model.js';
 import type { EnvironmentConnection } from './provider-environment.js';
+type RoutingKind = 'activation' | 'chat' | 'provider';
+type RunStatus = 'completed' | 'failed' | 'cancelled';
+const operations = new AsyncLocalStorage<{
+  kind: RoutingKind;
+  started?: Promise<string | null>;
+  id?: string | null;
+  status?: RunStatus;
+}>();
+// A logical operation owns its phases; adapter runtime snapshots do not create new runs.
+export async function withRoutingOperation<T>(
+  kind: RoutingKind,
+  work: () => Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  if (operations.getStore()) return work();
+  const operation: NonNullable<ReturnType<typeof operations.getStore>> = {
+    kind,
+  };
+  return operations.run(operation, async () => {
+    try {
+      const result = await work();
+      if (operation.started) operation.id = await operation.started;
+      await finishRoutingRun(
+        operation.id ?? null,
+        signal?.aborted ? 'cancelled' : (operation.status ?? 'completed'),
+        true
+      );
+      return result;
+    } catch (error) {
+      if (operation.started) operation.id = await operation.started;
+      await finishRoutingRun(
+        operation.id ?? null,
+        signal?.aborted ? 'cancelled' : 'failed',
+        true
+      );
+      throw error;
+    }
+  });
+}
 // Observability is best effort and must never interrupt a customer's answer.
-export async function startRoutingRun(stage: 'intent' | 'answer') {
+async function createRun(stage: 'intent' | 'answer', kind: RoutingKind) {
   if (mongoose.connection.readyState !== 1) return null;
   const id = randomUUID();
   try {
@@ -11,6 +51,7 @@ export async function startRoutingRun(stage: 'intent' | 'answer') {
       { _id: id },
       {
         $setOnInsert: {
+          kind,
           stage,
           status: 'running',
           attempts: [],
@@ -24,9 +65,23 @@ export async function startRoutingRun(stage: 'intent' | 'answer') {
     return null;
   }
 }
+export async function startRoutingRun(stage: 'intent' | 'answer') {
+  const operation = operations.getStore();
+  if (!operation) return createRun(stage, 'provider');
+  operation.started ??= createRun(stage, operation.kind);
+  operation.id = await operation.started;
+  if (operation.id)
+    await AiRoutingRun.updateOne(
+      { _id: operation.id },
+      { $set: { stage } },
+      { maxTimeMS: 1000 }
+    ).catch(() => {});
+  return operation.id;
+}
 export async function startRoutingAttempt(
   id: string | null,
-  connection: EnvironmentConnection
+  connection: EnvironmentConnection,
+  phase: 'intent' | 'answer'
 ) {
   if (!id) return;
   await AiRoutingRun.updateOne(
@@ -34,6 +89,7 @@ export async function startRoutingAttempt(
     {
       $push: {
         attempts: {
+          phase,
           provider: connection.provider,
           model: connection.model,
           status: 'running',
@@ -62,9 +118,15 @@ export async function finishRoutingAttempt(
 }
 export async function finishRoutingRun(
   id: string | null,
-  status: 'completed' | 'failed' | 'cancelled'
+  status: 'completed' | 'failed' | 'cancelled',
+  force = false
 ) {
   if (!id) return;
+  const operation = operations.getStore();
+  if (!force && operation?.id === id) {
+    operation.status = status;
+    return;
+  }
   await AiRoutingRun.updateOne(
     { _id: id },
     { $set: { status } },
@@ -76,7 +138,7 @@ export async function readRoutingMonitor() {
     .sort({ updatedAt: -1 })
     .limit(30)
     .maxTimeMS(5000)
-    .select('stage status attempts createdAt updatedAt')
+    .select('kind stage status attempts createdAt updatedAt')
     .lean();
   const stale = Date.now() - 120000;
   return {

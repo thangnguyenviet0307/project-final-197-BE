@@ -1,6 +1,7 @@
 import { Schema, model } from 'mongoose';
 const attemptSchema = new Schema(
   {
+    phase: { type: String, enum: ['intent', 'answer'] },
     provider: { type: String, required: true },
     model: { type: String, required: true },
     status: {
@@ -16,6 +17,11 @@ const attemptSchema = new Schema(
 const schema = new Schema(
   {
     _id: { type: String, required: true },
+    kind: {
+      type: String,
+      enum: ['activation', 'chat', 'provider'],
+      default: 'provider',
+    },
     stage: { type: String, enum: ['intent', 'answer'], required: true },
     status: {
       type: String,

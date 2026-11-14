@@ -162,3 +162,9 @@ Audit reads batch-resolve User names and roles, retaining the original actor ID 
 ## Vietnamese notifications (2026-11-15)
 
 AI HTTP errors and rate-limit feedback use Vietnamese. The frontend error utility also translates legacy English AI messages so independently deployed backend versions do not expose untranslated toasts. Embedding deletion distinguishes a still-pending job from the existing five-minute deactivation waiting period; authorization, status codes and data-protection rules are unchanged.
+
+## One monitoring row per logical operation (2026-11-15)
+
+Activation/reconnection shares one monitoring operation across its required structured JSON and streaming probes. Chat intent extraction and answer generation likewise share one operation per request; concurrent customers remain isolated. Kind distinguishes activation, chat and standalone provider operations. Attempts retain their phase and all real provider transitions; the administration groups consecutive uses of the same model in its timeline. No timestamp-based deduplication merges different customers. Legacy rows lack an operation correlation and remain unchanged until their existing 24-hour expiration.
+
+An immediate browser guard blocks repeated confirmation clicks. A cross-instance MongoDB lease in ai_activation_leases serializes activation attempts, expires after 90 seconds (beyond the 70-second HTTP deadline), and is released conditionally by its owner. A rejected duplicate performs no provider calls. The existing revision check prevents replaying a completed activation against stale settings. Existing provider quota/cooldown, chat history and partial-stream behavior remain unchanged.

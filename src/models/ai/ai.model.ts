@@ -1,3 +1,4 @@
+import { AiActivationLease } from './ai-activation-lease.model.js';
 import { AiRoutingRun } from './ai-routing-run.model.js';
 import { Schema, model } from 'mongoose';
 const sourceSchema = new Schema(
@@ -132,6 +133,7 @@ const indexJobSchema = new Schema(
 );
 export const AiIndexJob = model('AiIndexJob', indexJobSchema);
 export const aiModels = [
+  AiActivationLease,
   AiRoutingRun,
   AiConversation,
   AiTurn,

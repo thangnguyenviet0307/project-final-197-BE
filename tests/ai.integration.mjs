@@ -3174,3 +3174,67 @@ test('embedding deletion explains pending work and the deactivation waiting peri
   await assert.rejects(changeEmbeddingVersion(id, 0, 'operator', 'delete'), (error) => error.statusCode === 409 && error.message === 'Vui lòng đợi ít nhất 5 phút sau khi ngừng sử dụng phiên bản trước khi xóa.');
   assert.equal((await AiSettings.findById('global')).revision, 0);
 });
+
+test('one activation records one operation with two phases and concurrent duplicate activation makes no extra provider calls', async (t) => {
+  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
+  const { AiActivationLease } = await import('../dist/models/ai/ai-activation-lease.model.js');
+  const { Completions } = await import('openai/resources/chat/completions');
+  const previous = { GEMINI_API_KEY: process.env.GEMINI_API_KEY, AI_FORCE_DISABLED: process.env.AI_FORCE_DISABLED };
+  process.env.GEMINI_API_KEY = 'activation-dedup-mock'; process.env.AI_FORCE_DISABLED = 'false';
+  await AiRoutingRun.deleteMany({});
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  t.after(async () => {
+    release.resolve(); await AiSettings.deleteOne({ _id: 'global' }); await AiRoutingRun.deleteMany({}); await AiActivationLease.deleteMany({});
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  });
+  t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
+  t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
+  const calls = t.mock.method(Completions.prototype, 'create', async (body) => {
+    if (!body.stream) {
+      entered.resolve(); await release.promise;
+      return { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ search: '', brand: null, category: null, minPrice: null, maxPrice: null }) } }] };
+    }
+    return { async *[Symbol.asyncIterator]() {
+      yield { choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }] };
+      yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+    } };
+  });
+  const first = management.activateAi(0, 'operator', new AbortController().signal);
+  await entered.promise;
+  await assert.rejects(management.activateAi(0, 'operator', new AbortController().signal), (error) => error.statusCode === 409);
+  assert.equal(calls.mock.callCount(), 1);
+  assert.equal(await AiRoutingRun.countDocuments({ kind: 'activation' }), 1);
+  assert.equal((await AiRoutingRun.findOne({ kind: 'activation' })).status, 'running');
+  release.resolve();
+  await first;
+  assert.equal(calls.mock.callCount(), 2); // One structured check and one streaming check are required.
+  const runs = await AiRoutingRun.find({ kind: 'activation' }).lean();
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].status, 'completed');
+  assert.deepEqual(runs[0].attempts.map((attempt) => attempt.phase), ['intent', 'answer']);
+  assert.equal(await AiActivationLease.countDocuments(), 0);
+  await assert.rejects(management.activateAi(0, 'operator', new AbortController().signal), (error) => error.statusCode === 409);
+  assert.equal(calls.mock.callCount(), 2);
+  assert.equal(await AiRoutingRun.countDocuments({ kind: 'activation' }), 1);
+});
+
+test('concurrent logical chat operations stay separate while each shares its intent and answer monitoring row', async (t) => {
+  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
+  const { withRoutingOperation } = await import('../dist/services/ai/routing-monitor.service.js');
+  const { Completions } = await import('openai/resources/chat/completions');
+  await AiRoutingRun.deleteMany({}); t.after(() => AiRoutingRun.deleteMany({}));
+  t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
+  t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
+  t.mock.method(Completions.prototype, 'create', async (body) => !body.stream
+    ? { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ search: '', brand: null, category: null, minPrice: null, maxPrice: null }) } }] }
+    : { async *[Symbol.asyncIterator]() { yield { choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }] }; yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }; } });
+  const run = () => withAiRuntime({ config: { ...environmentAiConfig(), enabled: true }, apiKey: 'mock-only', connections: [{ id: 'groq:0', provider: 'groq', model: 'llama-two-phases', apiKey: 'mock-only', account: randomUUID() }] }, () => withRoutingOperation('chat', async () => {
+    await aiProvider.interpretQuery('q');
+    for await (const _delta of aiProvider.answerStream('q', '{}', [], new AbortController().signal)) { /* consume */ }
+  }));
+  await Promise.all([run(), run()]);
+  const runs = await AiRoutingRun.find({ kind: 'chat' }).lean();
+  assert.equal(runs.length, 2);
+  assert.ok(runs.every((item) => item.status === 'completed' && item.attempts.length === 2));
+  assert.notEqual(runs[0]._id, runs[1]._id);
+});

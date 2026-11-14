@@ -69,7 +69,7 @@ async function interpretQuery(
     for (const c of connections) {
       signal?.throwIfAborted();
       if (!(await available(c, signal))) continue;
-      await startRoutingAttempt(runId, c);
+      await startRoutingAttempt(runId, c, 'intent');
       try {
         const result = await withAiRuntime(runtime(c), () =>
           adapters[c.provider].interpretQuery(...args)
@@ -115,7 +115,7 @@ async function* answerStream(
     for (const c of connections) {
       signal.throwIfAborted();
       if (!(await available(c, signal))) continue;
-      await startRoutingAttempt(runId, c);
+      await startRoutingAttempt(runId, c, 'answer');
       let delivered = false;
       const snapshot = runtime(c);
       const stream = adapters[c.provider].answerStream(...args);

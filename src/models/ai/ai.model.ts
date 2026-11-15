@@ -1,5 +1,4 @@
 import { AiActivationLease } from './ai-activation-lease.model.js';
-import { AiRoutingRun } from './ai-routing-run.model.js';
 import { Schema, model } from 'mongoose';
 const sourceSchema = new Schema(
   { key: String, title: String, href: String },
@@ -42,6 +41,7 @@ const turnSchema = new Schema(
       ),
       default: undefined,
     },
+    adminFailureDismissedAt: { type: Date, default: null },
     searchContext: {
       type: new Schema(
         {
@@ -64,6 +64,7 @@ const turnSchema = new Schema(
 turnSchema.index({ conversationId: 1, requestId: 1 }, { unique: true });
 turnSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 turnSchema.index({ conversationId: 1, createdAt: -1, _id: -1 });
+turnSchema.index({ status: 1, adminFailureDismissedAt: 1, updatedAt: -1, _id: -1 });
 export const AiTurn = model('AiTurn', turnSchema);
 const ticketSchema = new Schema(
   {
@@ -114,6 +115,7 @@ const riskSchema = new Schema(
   { collection: 'ai_risk_events', timestamps: true }
 );
 riskSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+riskSchema.index({ createdAt: -1, _id: -1 });
 riskSchema.index(
   { dedupeKey: 1 },
   { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } }
@@ -134,7 +136,6 @@ const indexJobSchema = new Schema(
 export const AiIndexJob = model('AiIndexJob', indexJobSchema);
 export const aiModels = [
   AiActivationLease,
-  AiRoutingRun,
   AiConversation,
   AiTurn,
   AiSocketTicket,

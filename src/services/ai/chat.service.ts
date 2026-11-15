@@ -1,4 +1,3 @@
-import { withRoutingOperation } from './routing-monitor.service.js';
 import { withAiConfig } from './config.js';
 import { AiConversation, AiTurn } from '../../models/ai/ai.model.js';
 import type { AiOwner, AiEvent } from '../../types/ai/ai.types.js';
@@ -225,9 +224,5 @@ async function runChatWithConfig(
 }
 
 export function runChat(...args: Parameters<typeof runChatWithConfig>) {
-  return withRoutingOperation(
-    'chat',
-    () => withAiConfig(() => runChatWithConfig(...args)),
-    args[2]
-  );
+  return withAiConfig(() => runChatWithConfig(...args));
 }

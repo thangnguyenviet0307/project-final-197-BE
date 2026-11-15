@@ -1,4 +1,3 @@
-import { readRoutingMonitor } from '../../services/ai/routing-monitor.service.js';
 import {
   AiEmbeddingChunk,
   AiEmbeddingGeneration,
@@ -116,6 +115,7 @@ export const status: RequestHandler = asyncHandler(async (_req, res) => {
         : AiIndexJob.findById('sync').lean(),
       AiTurn.find({
         status: 'failed',
+        adminFailureDismissedAt: null,
         error: { $exists: true },
         expiresAt: { $gt: new Date() },
       })
@@ -155,10 +155,3 @@ export const reindex: RequestHandler = asyncHandler(async (_req, res) => {
   });
   sendResponse(res, 202, { message: 'Đã xếp lịch đồng bộ kiến thức.' });
 });
-
-export const routingMonitor: RequestHandler = asyncHandler(
-  async (_req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    sendResponse(res, 200, { data: await readRoutingMonitor() });
-  }
-);

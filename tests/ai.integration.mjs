@@ -71,6 +71,7 @@ import {
 import { knowledgeSourceProvider } from '../dist/services/ai/knowledge-sources.js';
 import { withAiConfig, aiEmbeddingKey } from '../dist/services/ai/config.js';
 import { encryptCredential } from '../dist/services/ai/credentials.js';
+import { readAdminRecords, deleteAdminRecord } from '../dist/services/ai/admin-records.service.js';
 import { vectorMatches } from '../dist/services/ai/retrieval.service.js';
 const originalAIProvider = { ...aiProvider };
 const originalVectorInfrastructure = { ...vectorInfrastructure };
@@ -2528,7 +2529,7 @@ test('AI management endpoints require administrative permission and never serial
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
-    for (const path of ['/status', '/embeddings'])
+    for (const path of ['/status', '/embeddings', '/records/failures', '/records/usage', '/records/risks'])
       assert.equal(
         (await fetch(base + '/admin' + path, { headers: authorized })).status,
         200
@@ -2537,6 +2538,9 @@ test('AI management endpoints require administrative permission and never serial
       ['POST', '/settings/initialize'],
       ['PUT', '/settings'],
       ['DELETE', '/settings/audit'],
+      ['DELETE', '/records/failures/not-an-id'],
+      ['DELETE', '/records/usage/not-an-id'],
+      ['DELETE', '/records/risks/not-an-id'],
       ['POST', '/settings/activate'],
       ['POST', '/embeddings'],
       ['POST', '/embeddings/activate'],
@@ -3046,41 +3050,6 @@ test('AI audit resolves administrative names and roles and labels worker actions
   assert.ok(!JSON.stringify(result.audit).includes('test-hash'));
 });
 
-test('routing monitor records quota fallback across providers, is admin-only and never stores prompts, answers or keys', async (t) => {
-  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
-  const { AiProviderState } = await import('../dist/models/ai/ai-provider-state.model.js');
-  const { Completions } = await import('openai/resources/chat/completions');
-  await AiRoutingRun.deleteMany({});
-  t.after(async () => { await AiRoutingRun.deleteMany({}); await AiProviderState.deleteMany({}); });
-  t.mock.method(Completions.prototype, 'create', async () => {
-    if (aiConfig().provider === 'gemini') throw Object.assign(new Error('quota'), { status: 429 });
-    return { async *[Symbol.asyncIterator]() {
-      yield { choices: [{ index: 0, delta: { content: 'safe-private-answer' }, finish_reason: null }] };
-      yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-    } };
-  });
-  const connections = ['gemini', 'groq'].map((provider) => ({ id: `${provider}:0`, provider, model: provider === 'gemini' ? 'gemini-test' : 'llama-test', apiKey: 'secret-routing-key', account: randomUUID() }));
-  let answer = '';
-  await withAiRuntime({ config: { ...environmentAiConfig(), enabled: true }, apiKey: 'secret-routing-key', connections }, async () => {
-    for await (const delta of aiProvider.answerStream('private-monitor-question', '{}', [], new AbortController().signal)) answer += delta;
-  });
-  assert.equal(answer, 'safe-private-answer');
-  const run = await AiRoutingRun.findOne({ stage: 'answer' }).lean();
-  assert.equal(run.status, 'completed');
-  assert.deepEqual(run.attempts.map((attempt) => [attempt.provider, attempt.status]), [['gemini', 'quota'], ['groq', 'completed']]);
-  for (const secret of ['private-monitor-question', 'safe-private-answer', 'secret-routing-key']) assert.ok(!JSON.stringify(run).includes(secret));
-  assert.equal((await fetch(base + '/admin/routing-monitor', { headers: { Origin: 'http://localhost:5173' } })).status, 401);
-  for (const role of ['staff', 'admin', 'super_admin']) {
-    const user = await User.create({ firstName: 'Monitor', lastName: role, email: `monitor-${randomUUID()}@example.test`, password: 'test-hash', role });
-    const token = generateAccessToken({ id: String(user._id), accountType: 'user', tokenVersion: 0 });
-    const response = await fetch(base + '/admin/routing-monitor', { headers: { Origin: 'http://localhost:5173', Authorization: `Bearer ${token}` } });
-    assert.equal(response.status, 200);
-    const result = await response.json();
-    assert.equal(result.data.runs[0].attempts[1].model, 'llama-test');
-    await User.deleteOne({ _id: user._id });
-  }
-});
-
 test('Gemini, Cloudflare and free OpenRouter embedding versions build and query only their own model, key and dimensions', async (t) => {
   t.mock.method(aiProvider, 'embed', originalAIProvider.embed);
   t.mock.method(vectorInfrastructure, 'ensure', originalVectorInfrastructure.ensure);
@@ -3097,8 +3066,11 @@ test('Gemini, Cloudflare and free OpenRouter embedding versions build and query 
   const calls = [];
   const fixtures = [
     { provider: 'gemini', model: 'gemini-embedding-001', dimensions: 768, connectionId: '00000000-0000-4000-8000-000000000001' },
+    { provider: 'gemini', model: 'gemini-embedding-2', dimensions: 1536, connectionId: '00000000-0000-4000-8000-000000000001' },
     { provider: 'cloudflare', model: '@cf/baai/bge-base-en-v1.5', dimensions: 768, connectionId: '00000000-0000-4000-8000-000000000002' },
+    { provider: 'cloudflare', model: '@cf/baai/bge-m3', dimensions: 1024, connectionId: '00000000-0000-4000-8000-000000000002' },
     { provider: 'openrouter', model: 'nvidia/nemotron-3.5-embed-1b:free', dimensions: 2048, connectionId: '00000000-0000-4000-8000-000000000003' },
+    { provider: 'openrouter', model: 'nvidia/nemotron-3.5-embed-8b:free', dimensions: 4096, connectionId: '00000000-0000-4000-8000-000000000003' },
   ];
   let current;
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -3132,36 +3104,7 @@ test('Gemini, Cloudflare and free OpenRouter embedding versions build and query 
     const chunk = await AiEmbeddingChunk.findOne({ generation: generation._id }).select('+embedding').lean();
     assert.equal(chunk.embedding.length, fixture.dimensions);
   }
-  assert.equal(calls.length, 6);
-});
-
-test('routing monitor exposes the in-flight model while the answer has not emitted its first token', async (t) => {
-  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
-  const { Completions } = await import('openai/resources/chat/completions');
-  await AiRoutingRun.deleteMany({});
-  const release = Promise.withResolvers();
-  t.after(async () => { release.resolve(); await AiRoutingRun.deleteMany({}); });
-  t.mock.method(Completions.prototype, 'create', async () => ({ async *[Symbol.asyncIterator]() {
-    await release.promise;
-    yield { choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }] };
-    yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
-  } }));
-  await withAiRuntime({ config: { ...environmentAiConfig(), enabled: true }, apiKey: 'mock-only', connections: [{ id: 'groq:0', provider: 'groq', model: 'llama-in-flight', apiKey: 'mock-only', account: randomUUID() }] }, async () => {
-    const stream = aiProvider.answerStream('q', '{}', [], new AbortController().signal);
-    const first = stream.next();
-    let run;
-    for (let i = 0; i < 100; i++) {
-      run = await AiRoutingRun.findOne({ 'attempts.model': 'llama-in-flight' }).lean();
-      if (run) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    assert.equal(run.status, 'running');
-    assert.equal(run.attempts[0].status, 'running');
-    release.resolve();
-    assert.equal((await first).value, 'OK');
-    assert.equal((await stream.next()).done, true);
-    assert.equal((await AiRoutingRun.findById(run._id)).status, 'completed');
-  });
+  assert.equal(calls.length, fixtures.length * 2);
 });
 
 test('embedding deletion explains pending work and the deactivation waiting period in Vietnamese', async (t) => {
@@ -3175,16 +3118,14 @@ test('embedding deletion explains pending work and the deactivation waiting peri
   assert.equal((await AiSettings.findById('global')).revision, 0);
 });
 
-test('one activation records one operation with two phases and concurrent duplicate activation makes no extra provider calls', async (t) => {
-  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
+test('concurrent duplicate activation makes no extra provider calls', async (t) => {
   const { AiActivationLease } = await import('../dist/models/ai/ai-activation-lease.model.js');
   const { Completions } = await import('openai/resources/chat/completions');
   const previous = { GEMINI_API_KEY: process.env.GEMINI_API_KEY, AI_FORCE_DISABLED: process.env.AI_FORCE_DISABLED };
   process.env.GEMINI_API_KEY = 'activation-dedup-mock'; process.env.AI_FORCE_DISABLED = 'false';
-  await AiRoutingRun.deleteMany({});
   const entered = Promise.withResolvers(), release = Promise.withResolvers();
   t.after(async () => {
-    release.resolve(); await AiSettings.deleteOne({ _id: 'global' }); await AiRoutingRun.deleteMany({}); await AiActivationLease.deleteMany({});
+    release.resolve(); await AiSettings.deleteOne({ _id: 'global' }); await AiActivationLease.deleteMany({});
     for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   });
   t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
@@ -3203,38 +3144,80 @@ test('one activation records one operation with two phases and concurrent duplic
   await entered.promise;
   await assert.rejects(management.activateAi(0, 'operator', new AbortController().signal), (error) => error.statusCode === 409);
   assert.equal(calls.mock.callCount(), 1);
-  assert.equal(await AiRoutingRun.countDocuments({ kind: 'activation' }), 1);
-  assert.equal((await AiRoutingRun.findOne({ kind: 'activation' })).status, 'running');
   release.resolve();
   await first;
   assert.equal(calls.mock.callCount(), 2); // One structured check and one streaming check are required.
-  const runs = await AiRoutingRun.find({ kind: 'activation' }).lean();
-  assert.equal(runs.length, 1);
-  assert.equal(runs[0].status, 'completed');
-  assert.deepEqual(runs[0].attempts.map((attempt) => attempt.phase), ['intent', 'answer']);
   assert.equal(await AiActivationLease.countDocuments(), 0);
   await assert.rejects(management.activateAi(0, 'operator', new AbortController().signal), (error) => error.statusCode === 409);
   assert.equal(calls.mock.callCount(), 2);
-  assert.equal(await AiRoutingRun.countDocuments({ kind: 'activation' }), 1);
 });
 
-test('concurrent logical chat operations stay separate while each shares its intent and answer monitoring row', async (t) => {
-  const { AiRoutingRun } = await import('../dist/models/ai/ai-routing-run.model.js');
-  const { withRoutingOperation } = await import('../dist/services/ai/routing-monitor.service.js');
-  const { Completions } = await import('openai/resources/chat/completions');
-  await AiRoutingRun.deleteMany({}); t.after(() => AiRoutingRun.deleteMany({}));
-  t.mock.method(aiProvider, 'interpretQuery', originalAIProvider.interpretQuery);
-  t.mock.method(aiProvider, 'answerStream', originalAIProvider.answerStream);
-  t.mock.method(Completions.prototype, 'create', async (body) => !body.stream
-    ? { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ search: '', brand: null, category: null, minPrice: null, maxPrice: null }) } }] }
-    : { async *[Symbol.asyncIterator]() { yield { choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }] }; yield { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }; } });
-  const run = () => withAiRuntime({ config: { ...environmentAiConfig(), enabled: true }, apiKey: 'mock-only', connections: [{ id: 'groq:0', provider: 'groq', model: 'llama-two-phases', apiKey: 'mock-only', account: randomUUID() }] }, () => withRoutingOperation('chat', async () => {
-    await aiProvider.interpretQuery('q');
-    for await (const _delta of aiProvider.answerStream('q', '{}', [], new AbortController().signal)) { /* consume */ }
-  }));
-  await Promise.all([run(), run()]);
-  const runs = await AiRoutingRun.find({ kind: 'chat' }).lean();
-  assert.equal(runs.length, 2);
-  assert.ok(runs.every((item) => item.status === 'completed' && item.attempts.length === 2));
-  assert.notEqual(runs[0]._id, runs[1]._id);
+
+test('admin record pagination exposes all live rows and deletion preserves customer history and abuse counters', async (t) => {
+  const expiresAt = new Date('2099-01-01');
+  const turns = await AiTurn.create(Array.from({ length: 12 }, (_, i) => ({
+    conversationId: new mongoose.Types.ObjectId(), requestId: randomUUID(), content: 'private question', answer: 'private answer',
+    status: 'failed', error: { code: 'AI_UNAVAILABLE', stage: 'answer', message: 'failure' }, expiresAt,
+    createdAt: new Date('2098-01-01'), updatedAt: new Date(Date.UTC(2098, 0, 1, 0, 0, i)),
+  })));
+  const risk = await AiRiskEvent.create({ actorHash: 'private-actor', dedupeKey: randomUUID(), event: 'usage_limit', reason: 'fixture', score: 60, expiresAt });
+  const usageId = 'provider-global:900001';
+  const abuseId = 'http:' + randomUUID();
+  await AiCounter.create([{ _id: usageId, count: 5, expiresAt }, { _id: abuseId, count: 80, expiresAt }]);
+  t.after(async () => {
+    await AiTurn.deleteMany({ _id: { $in: turns.map(turn => turn._id) } });
+    await AiRiskEvent.deleteOne({ _id: risk._id });
+    await AiCounter.deleteMany({ _id: { $in: [usageId, abuseId] } });
+  });
+  const first = await readAdminRecords('failures', 1, 10);
+  const second = await readAdminRecords('failures', 2, 10);
+  assert.equal(first.rows.length, 10);
+  assert.ok(second.rows.length >= 2);
+  assert.equal(new Set([...first.rows, ...second.rows].map(row => String(row._id))).size, first.rows.length + second.rows.length);
+  assert.ok(!JSON.stringify(first).includes('private question'));
+  const turn = turns[0];
+  await deleteAdminRecord('failures', String(turn._id), turn.updatedAt.toISOString());
+  const stored = await AiTurn.findById(turn._id).lean();
+  assert.equal(stored.content, 'private question');
+  assert.equal(stored.answer, 'private answer');
+  assert.equal(stored.status, 'failed');
+  assert.equal(stored.error.code, turn.error.code);
+  assert.equal(+stored.updatedAt, +turn.updatedAt);
+  assert.equal(+stored.expiresAt, +expiresAt);
+  assert.ok(stored.adminFailureDismissedAt);
+  const remaining = await readAdminRecords('failures', 1, 50);
+  assert.ok(!remaining.rows.some(row => String(row._id) === String(turn._id)));
+  await assert.rejects(deleteAdminRecord('failures', String(turn._id), turn.updatedAt.toISOString()), error => error.statusCode === 409);
+  await assert.rejects(deleteAdminRecord('usage', abuseId, 80), error => error.statusCode === 400);
+  await AiCounter.updateOne({ _id: usageId }, { $inc: { count: 1 } });
+  await assert.rejects(deleteAdminRecord('usage', usageId, 5), error => error.statusCode === 409);
+  assert.equal((await AiCounter.findById(usageId)).count, 6);
+  await deleteAdminRecord('usage', usageId, 6);
+  assert.equal(await AiCounter.findById(usageId), null);
+  assert.equal((await AiCounter.findById(abuseId)).count, 80);
+  const risks = await readAdminRecords('risks', 1, 50);
+  assert.ok(!JSON.stringify(risks).includes('private-actor'));
+  assert.ok(!JSON.stringify(risks).includes(risk.dedupeKey));
+  await deleteAdminRecord('risks', String(risk._id), risk.updatedAt.toISOString());
+  assert.equal(await AiRiskEvent.findById(risk._id), null);
+  const last = await readAdminRecords('failures', 100000, 10);
+  assert.equal(last.page, Math.max(1, Math.ceil(last.total / 10)));
+});
+
+test('Super Admin record deletion requires confirmation and validates kind, id and stale snapshots', async () => {
+  const user = await User.findOne({ role: 'super_admin' });
+  const token = generateAccessToken({ id: String(user._id), accountType: 'user', tokenVersion: 0 });
+  const headers = { Origin: 'http://localhost:5173', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const id = new mongoose.Types.ObjectId().toString();
+  for (const [path, body, expected] of [
+    ['failures/' + id, { version: new Date().toISOString() }, 400],
+    ['failures/' + id, { confirm: true, version: new Date().toISOString() }, 409],
+    ['usage/http:protected', { confirm: true, version: 0 }, 400],
+    ['unknown/' + id, { confirm: true, version: 0 }, 400],
+  ]) {
+    const response = await fetch(base + '/admin/records/' + path, { method: 'DELETE', headers, body: JSON.stringify(body) });
+    assert.equal(response.status, expected);
+  }
+  const response = await fetch(base + '/admin/records/risks?page=0', { headers });
+  assert.equal(response.status, 400);
 });

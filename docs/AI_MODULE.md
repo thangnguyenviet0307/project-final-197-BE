@@ -149,13 +149,11 @@ New versions require an explicit model selected in administration. The model is 
 
 Every fifteen minutes, automatic refresh compares current public source chunks, titles, links and removals against the active snapshot. Unchanged knowledge advances the next check without allocating another version. Pending equivalent builds are rejected with 409, including concurrent creates. A cancelled successor is not silently recreated; explicit synchronization retries that same version. Existing snapshots and chat history are not deleted by this fix.
 
-## Per-version embedding providers and administrator routing monitoring (2026-11-15)
+## Per-version embedding providers (2026-11-15)
 
 This supersedes the Gemini-only and automatic-only creation UI described above. A Super Admin selects a supported embedding model for every new version; the backend catalog supplies its provider, allowed dimensions and environment availability. Supported catalog: Gemini embedding-001/embedding-2 (768/1536/3072), Cloudflare BGE base (768) and BGE M3 (1024), OpenRouter Nemotron 3.5 Embed 1B free (2048). Existing models are never silently replaced, and old OpenAI records stay readable but inactive. Chat routing and embedding model selection are independent. Each active version supplies its own provider key for both indexing and query embeddings. The legacy unversioned vector index remains Gemini-only.
 
 API keys remain in GEMINI_API_KEY, CLOUDFLARE_API_KEY + CLOUDFLARE_ACCOUNT_ID, and OPENROUTER_API_KEY. Groq has no embedding adapter. Chat models cannot be selected as embedding models. Model availability/free tiers are controlled by providers; requests do not silently substitute a paid OpenRouter model or switch vector spaces. Catalog sources: [Cloudflare BGE](https://developers.cloudflare.com/workers-ai/models/bge-base-en-v1.5/), [OpenRouter embeddings](https://openrouter.ai/docs/api/api-reference/embeddings/submit-an-embedding-request), [OpenRouter free embedding model](https://openrouter.ai/nvidia/nemotron-3.5-embed-1b:free).
-
-GET /api/v1/ai/admin/routing-monitor requires ai:view (Admin/Staff/Super Admin), with its own 60/minute limiter so 3-second monitoring does not consume the existing settings/status limiter. It returns the thirty latest operations from ai_routing_runs, including per-attempt provider/model, quota or completion status and timestamps. Concurrent operations are shown separately. Runs expire after 24 hours; running records older than two minutes are shown as interrupted. Monitoring is best effort with bounded database writes and stores no prompts, answers, API keys or customer identity. Only actual provider calls appear; cached/clarification answers need no provider run. Storefront events never include routing metadata. Quota fallback occurs during typing before any answer delta; partial emitted output is never concatenated with another model's answer.
 
 Audit reads batch-resolve User names and roles, retaining the original actor ID for compatibility. Automatic worker entries display Hệ thống (Tự động); deleted administrative accounts have an explicit unavailable-account label. Roles shown for old audit entries reflect the current account role, not a retroactive historical snapshot.
 
@@ -163,8 +161,21 @@ Audit reads batch-resolve User names and roles, retaining the original actor ID 
 
 AI HTTP errors and rate-limit feedback use Vietnamese. The frontend error utility also translates legacy English AI messages so independently deployed backend versions do not expose untranslated toasts. Embedding deletion distinguishes a still-pending job from the existing five-minute deactivation waiting period; authorization, status codes and data-protection rules are unchanged.
 
-## One monitoring row per logical operation (2026-11-15)
-
-Activation/reconnection shares one monitoring operation across its required structured JSON and streaming probes. Chat intent extraction and answer generation likewise share one operation per request; concurrent customers remain isolated. Kind distinguishes activation, chat and standalone provider operations. Attempts retain their phase and all real provider transitions; the administration groups consecutive uses of the same model in its timeline. No timestamp-based deduplication merges different customers. Legacy rows lack an operation correlation and remain unchanged until their existing 24-hour expiration.
+## Activation concurrency protection (2026-11-15)
 
 An immediate browser guard blocks repeated confirmation clicks. A cross-instance MongoDB lease in ai_activation_leases serializes activation attempts, expires after 90 seconds (beyond the 70-second HTTP deadline), and is released conditionally by its owner. A rejected duplicate performs no provider calls. The existing revision check prevents replaying a completed activation against stale settings. Existing provider quota/cooldown, chat history and partial-stream behavior remain unchanged.
+
+
+## Removed chatbot model monitor (2026-11-15)
+
+The administrative model-monitor card, polling hook, API, run model and per-call tracing have been removed. Chat provider fallback, quota cooldowns, activation concurrency protection, audit, embedding versions and customer conversations remain. No application code reads or writes the former monitoring collection. Existing database records are not dropped by this source change; an already-created MongoDB TTL index may expire historical records normally.
+
+## Embedding recommendations and administrative records (2026-11-15)
+
+Embedding models create retrieval vectors; chat models generate answers. They are independent and need not share a provider. Recommended catalog choices are Gemini `gemini-embedding-2` (768/1536/3072 dimensions), Cloudflare `@cf/baai/bge-m3` (1024), and OpenRouter `nvidia/nemotron-3.5-embed-8b:free` (4096). Existing options and saved versions remain compatible. The UI defaults to an available recommended option; dimensions default to 1536 where supported. Groq has no embedding adapter. Indexing and queries always use the active version's same model and dimensions, without cross-model fallback.
+
+Free availability is provider-specific: [Gemini Free Tier pricing](https://ai.google.dev/gemini-api/docs/pricing), [Cloudflare daily free allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/), [multilingual BGE-M3](https://developers.cloudflare.com/workers-ai/models/bge-m3/), [OpenRouter free 8B model](https://openrouter.ai/nvidia/nemotron-3.5-embed-8b:free). Configured billing plans and upstream rate limits still apply; a model recommendation does not enforce an account's billing plan. Only public store knowledge is indexed.
+
+`GET /api/v1/ai/admin/records/:kind?page=1&limit=10` lists `failures`, `usage` or `risks`, with `{rows,total,page,limit}`. Admin/Staff/Super Admin can read; `DELETE /api/v1/ai/admin/records/:kind/:id` requires Super Admin, `{confirm:true,version}` and the existing `ai:manage` permission. `version` is the row's `updatedAt` ISO timestamp for failures/risks, or `count` for usage. Stale snapshots return 409. IDs are action identifiers, not displayed credentials.
+
+Removing a failure dismisses only its admin diagnostic entry (`adminFailureDismissedAt`), preserving the customer's answer, error, expiration and timestamps. Risk deletion removes only that observation. Usage deletion is restricted to `provider-global:<day>` statistical rows; it cannot remove user/IP abuse counters or provider cooldowns. Existing TTL retention remains unchanged. No records are deleted merely by deploying these code changes. The status summary excludes dismissed failures for compatibility with older clients.

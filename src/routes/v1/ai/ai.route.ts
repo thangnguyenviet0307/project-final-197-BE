@@ -1,3 +1,4 @@
+import * as records from '../../../controllers/ai/ai-admin-records.controller.js';
 import { Router, type Router as ExpressRouter } from 'express';
 import { z } from 'zod';
 import * as controller from '../../../controllers/ai/ai.controller.js';
@@ -38,13 +39,11 @@ const adminRateLimit = createAiRateLimit(30, 60000);
 admin.get('/settings', adminRateLimit, settings.read);
 admin.get('/embeddings', adminRateLimit, embeddings.read);
 admin.get('/status', adminRateLimit, controller.status);
-admin.get(
-  '/routing-monitor',
-  createAiRateLimit(60, 60000),
-  controller.routingMonitor
-);
+admin.get('/records/:kind', createAiRateLimit(60, 60000), records.read);
+
 admin.use(requirePermission(Permission.AiManage), adminRateLimit);
 admin.delete('/settings/audit', settings.clearAudit);
+admin.delete('/records/:kind/:id', records.remove);
 admin.post('/embeddings', embeddings.create);
 admin.post('/embeddings/activate', embeddings.activate);
 admin.post('/embeddings/:id/retry', embeddings.change('retry'));

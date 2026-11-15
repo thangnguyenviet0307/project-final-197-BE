@@ -8,6 +8,7 @@ export const embeddingModels = [
   {
     provider: 'gemini',
     model: 'gemini-embedding-2',
+    recommended: true,
     dimensions: [768, 1536, 3072],
   },
   {
@@ -15,11 +16,22 @@ export const embeddingModels = [
     model: '@cf/baai/bge-base-en-v1.5',
     dimensions: [768],
   },
-  { provider: 'cloudflare', model: '@cf/baai/bge-m3', dimensions: [1024] },
+  {
+    provider: 'cloudflare',
+    model: '@cf/baai/bge-m3',
+    dimensions: [1024],
+    recommended: true,
+  },
   {
     provider: 'openrouter',
     model: 'nvidia/nemotron-3.5-embed-1b:free',
     dimensions: [2048],
+  },
+  {
+    provider: 'openrouter',
+    model: 'nvidia/nemotron-3.5-embed-8b:free',
+    dimensions: [4096],
+    recommended: true,
   },
 ] as const;
 export const embeddingConnectionIds = {

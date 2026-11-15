@@ -1,10 +1,4 @@
 import {
-  startRoutingRun,
-  startRoutingAttempt,
-  finishRoutingAttempt,
-  finishRoutingRun,
-} from '../routing-monitor.service.js';
-import {
   aiConfig,
   aiRuntimeConnections,
   aiCloudflareAccountId,
@@ -62,43 +56,22 @@ async function interpretQuery(
   const connections = aiRuntimeConnections();
   if (!aiConfig().enabled || !connections.length)
     throw aiError('AI_UNAVAILABLE', 503);
-  const runId = await startRoutingRun('intent');
-  let completed = false;
-  try {
-    let failure: unknown = aiError('AI_RATE_LIMITED', 429);
-    for (const c of connections) {
+  let failure: unknown = aiError('AI_RATE_LIMITED', 429);
+  for (const connection of connections) {
+    signal?.throwIfAborted();
+    if (!(await available(connection, signal))) continue;
+    try {
+      return await withAiRuntime(runtime(connection), () =>
+        adapters[connection.provider].interpretQuery(...args)
+      );
+    } catch (error) {
       signal?.throwIfAborted();
-      if (!(await available(c, signal))) continue;
-      await startRoutingAttempt(runId, c, 'intent');
-      try {
-        const result = await withAiRuntime(runtime(c), () =>
-          adapters[c.provider].interpretQuery(...args)
-        );
-        await finishRoutingAttempt(runId, 'completed');
-        completed = true;
-        return result;
-      } catch (error) {
-        await finishRoutingAttempt(
-          runId,
-          signal?.aborted
-            ? 'cancelled'
-            : quotaFailure(error)
-              ? 'quota'
-              : 'failed'
-        );
-        signal?.throwIfAborted();
-        if (!quotaFailure(error)) throw error;
-        failure = error;
-        await coolDown(c, error);
-      }
+      if (!quotaFailure(error)) throw error;
+      failure = error;
+      await coolDown(connection, error);
     }
-    throw failure;
-  } finally {
-    await finishRoutingRun(
-      runId,
-      completed ? 'completed' : signal?.aborted ? 'cancelled' : 'failed'
-    );
   }
+  throw failure;
 }
 async function* answerStream(
   ...args: Parameters<typeof geminiAdapter.answerStream>
@@ -108,60 +81,33 @@ async function* answerStream(
   const connections = aiRuntimeConnections();
   if (!aiConfig().enabled || !connections.length)
     throw aiError('AI_UNAVAILABLE', 503);
-  const runId = await startRoutingRun('answer');
-  let completed = false;
-  try {
-    let failure: unknown = aiError('AI_RATE_LIMITED', 429);
-    for (const c of connections) {
-      signal.throwIfAborted();
-      if (!(await available(c, signal))) continue;
-      await startRoutingAttempt(runId, c, 'answer');
-      let delivered = false;
-      const snapshot = runtime(c);
-      const stream = adapters[c.provider].answerStream(...args);
-      try {
-        while (true) {
-          const next = await withAiRuntime(snapshot, () => stream.next());
-          signal.throwIfAborted();
-          if (next.done) {
-            await finishRoutingAttempt(runId, 'completed');
-            completed = true;
-            return;
-          }
-          if (next.value) {
-            delivered = true;
-            yield next.value;
-          }
-        }
-      } catch (error) {
-        await finishRoutingAttempt(
-          runId,
-          signal.aborted
-            ? 'cancelled'
-            : quotaFailure(error)
-              ? 'quota'
-              : 'failed'
-        );
+  let failure: unknown = aiError('AI_RATE_LIMITED', 429);
+  for (const connection of connections) {
+    signal.throwIfAborted();
+    if (!(await available(connection, signal))) continue;
+    let delivered = false;
+    const snapshot = runtime(connection);
+    const stream = adapters[connection.provider].answerStream(...args);
+    try {
+      while (true) {
+        const next = await withAiRuntime(snapshot, () => stream.next());
         signal.throwIfAborted();
-        if (!quotaFailure(error)) throw error;
-        await coolDown(c, error);
-        if (delivered) throw error;
-        failure = error;
-      } finally {
-        await withAiRuntime(snapshot, () => stream.return(undefined));
+        if (next.done) return;
+        if (next.value) {
+          delivered = true;
+          yield next.value;
+        }
       }
+    } catch (error) {
+      signal.throwIfAborted();
+      if (!quotaFailure(error)) throw error;
+      await coolDown(connection, error);
+      if (delivered) throw error;
+      failure = error;
+    } finally {
+      await withAiRuntime(snapshot, () => stream.return(undefined));
     }
-    throw failure;
-  } finally {
-    if (!completed)
-      await finishRoutingAttempt(
-        runId,
-        signal.aborted ? 'cancelled' : 'failed'
-      );
-    await finishRoutingRun(
-      runId,
-      completed ? 'completed' : signal.aborted ? 'cancelled' : 'failed'
-    );
   }
+  throw failure;
 }
 export const aiProvider = { embed, interpretQuery, answerStream };

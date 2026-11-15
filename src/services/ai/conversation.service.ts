@@ -87,6 +87,7 @@ export async function history(id: string, owner: AiOwner, page = 1) {
     .sort({ createdAt: -1, _id: -1 })
     .skip((page - 1) * 20)
     .limit(20)
+    .select('-adminFailureDismissedAt')
     .lean();
   const cards = await productCardsByIds([
     ...new Set(rows.flatMap((t) => (t.productIds ?? []).map(String))),

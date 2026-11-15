@@ -106,7 +106,6 @@ test('AI models declare snake_case collections and independent TTL indexes', () 
     'AiSocketTicket',
     'AiCounter',
     'AiRiskEvent',
-    'AiRoutingRun',
   ]) {
     const model = aiModels.find((m) => m.modelName === name);
     assert.ok(

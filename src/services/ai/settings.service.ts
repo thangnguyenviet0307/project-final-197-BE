@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { AiActivationLease } from '../../models/ai/ai-activation-lease.model.js';
-import { withRoutingOperation } from './routing-monitor.service.js';
 import {
   embeddingConnections,
   embeddingKey,
@@ -282,11 +281,7 @@ export async function activateAi(
     throw error;
   }
   try {
-    return await withRoutingOperation(
-      'activation',
-      () => activateAiWithLease(revision, actor, signal),
-      signal
-    );
+    return await activateAiWithLease(revision, actor, signal);
   } finally {
     await AiActivationLease.deleteOne({ _id: 'global', leaseId })
       .maxTimeMS(5000)

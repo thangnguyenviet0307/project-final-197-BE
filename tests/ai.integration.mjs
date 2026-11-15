@@ -2,6 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
+import { createServer, request as httpRequest } from 'node:http';
 import mongoose from 'mongoose';
 import { io } from 'socket.io-client';
 import {
@@ -857,6 +858,75 @@ test('HTTP guest identity is cookie-only; Socket.IO uses single-use origin-bound
     428
   );
 });
+test('Socket.IO streams through an HTTP-only proxy without Origin and still rejects invalid tickets/origins', async (t) => {
+  const previous = { AI_ENABLED: process.env.AI_ENABLED, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
+  process.env.AI_ENABLED = 'true';
+  process.env.GEMINI_API_KEY = 'proxy-mock-only';
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  t.mock.method(aiProvider, 'answerStream', async function* () { yield 'Xin '; yield 'chào qua proxy'; });
+  t.mock.method(aiProvider, 'interpretQuery', async () => ({ search: '', brand: null, category: null, minPrice: null, maxPrice: null, referencePositions: [] }));
+  clearAiCache();
+  const target = new URL(base);
+  const proxy = createServer((req, res) => {
+    const upstream = httpRequest({ hostname: target.hostname, port: target.port, path: req.url, method: req.method, headers: req.headers }, response => {
+      res.writeHead(response.statusCode, response.headers);
+      response.pipe(res);
+    });
+    upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+    res.on('close', () => upstream.destroy());
+    req.pipe(upstream);
+  });
+  proxy.on('upgrade', (_req, socket) => socket.destroy());
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  t.after(async () => { proxy.closeAllConnections(); await new Promise(resolve => proxy.close(resolve)); });
+  const origin = `http://127.0.0.1:${proxy.address().port}`;
+  const owner = { kind: 'guest', id: randomUUID() };
+  const conversation = await chat.createConversation(owner);
+  const ticket = await chat.socketTicket(owner);
+  const options = { path: '/api/v1/ai/socket', autoConnect: false, reconnection: false, timeout: 3000 };
+  const blocked = io(origin, { ...options, transports: ['websocket'], auth: { ticket }, extraHeaders: { Origin: 'http://localhost:5173' } });
+  t.after(() => blocked.disconnect());
+  const rejected = once(blocked, 'connect_error');
+  blocked.connect();
+  await rejected;
+  blocked.disconnect();
+  const client = io(origin, { ...options, transports: ['websocket', 'polling'], tryAllTransports: true, auth: { ticket } });
+  t.after(() => client.disconnect());
+  const requestId = randomUUID();
+  const deltas = [];
+  const completed = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Polling stream timed out')), 8000);
+    client.on('connect_error', error => { clearTimeout(timer); reject(error); });
+    client.on('chat:ready', () => client.emit('chat:send', { conversationId: String(conversation._id), requestId, content: 'hello' }));
+    client.on('chat:delta', event => deltas.push(event.data));
+    client.on('chat:completed', event => { clearTimeout(timer); resolve(event); });
+    client.on('chat:error', event => { clearTimeout(timer); reject(new Error(event.data.message)); });
+  });
+  client.connect();
+  assert.equal((await completed).data.answer, 'Xin chào qua proxy');
+  assert.equal(client.io.engine.transport.name, 'polling');
+  assert.equal(deltas.join(''), 'Xin chào qua proxy');
+  assert.equal(await AiTurn.countDocuments({ conversationId: conversation._id, requestId }), 1);
+  client.disconnect();
+  for (const [auth, extraHeaders] of [
+    [{ ticket }, undefined], // consumed ticket cannot be reused through polling
+    [{ ticket: await chat.socketTicket(owner) }, { Origin: 'https://evil.example' }],
+    [{}, undefined],
+  ]) {
+    const rejectedClient = io(origin, { ...options, transports: ['polling'], auth, extraHeaders });
+    t.after(() => rejectedClient.disconnect());
+    const rejection = once(rejectedClient, 'connect_error');
+    rejectedClient.connect();
+    await rejection;
+    rejectedClient.disconnect();
+  }
+});
+
 test('customer socket authorization rejects revoked sessions', async () => {
   const customer = await Customer.create({
     firstName: 'Test',

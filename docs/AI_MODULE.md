@@ -179,3 +179,19 @@ Free availability is provider-specific: [Gemini Free Tier pricing](https://ai.go
 `GET /api/v1/ai/admin/records/:kind?page=1&limit=10` lists `failures`, `usage` or `risks`, with `{rows,total,page,limit}`. Admin/Staff/Super Admin can read; `DELETE /api/v1/ai/admin/records/:kind/:id` requires Super Admin, `{confirm:true,version}` and the existing `ai:manage` permission. `version` is the row's `updatedAt` ISO timestamp for failures/risks, or `count` for usage. Stale snapshots return 409. IDs are action identifiers, not displayed credentials.
 
 Removing a failure dismisses only its admin diagnostic entry (`adminFailureDismissedAt`), preserving the customer's answer, error, expiration and timestamps. Risk deletion removes only that observation. Usage deletion is restricted to `provider-global:<day>` statistical rows; it cannot remove user/IP abuse counters or provider cooldowns. Existing TTL retention remains unchanged. No records are deleted merely by deploying these code changes. The status summary excludes dismissed failures for compatibility with older clients.
+
+
+## Socket.IO through storefront HTTP rewrites (2026-11-15)
+
+Production REST requests and the Socket.IO endpoint use the same storefront `/api/v1` rewrite. Both client and server now enable HTTP long-polling followed by an optional WebSocket upgrade. An HTTP-only proxy can keep the conversation connected without a successful upgrade. Automatic reconnection remains disabled to avoid replaying a consumed ticket or duplicating a question.
+
+Same-origin polling GET requests can omit Origin. The gateway permits this transport handshake, but namespace admission still requires a short-lived single-use ticket, plus a valid matching customer token for customer sessions. Present untrusted origins remain rejected. Browser WebSocket handshakes still require an approved Origin. Administrative activation probes and embedding jobs use HTTP provider calls and do not prove that a customer's realtime transport works.
+
+Connection feedback distinguishes authenticated session rejection from network/transport failure. Vercel AI proxy responses are explicitly private/no-store. Integration coverage uses an isolated MongoDB and an HTTP proxy that rejects upgrades: forced WebSocket fails, polling streams successfully and persists one turn, while missing/reused tickets and untrusted origins fail. Vendor responses are mocked; no production acceptance or live-provider verification is implied. Redeploy both BE and FE for these changes to take effect; no new environment variables or embedding rebuild are required.
+
+
+## Direct Render realtime endpoint (2026-11-15)
+
+This supersedes the previous same-origin Socket.IO routing on production. REST stays on the Vercel same-origin rewrite for cookies. During every Vite build, the default Socket.IO endpoint is derived from the `/api/v1/:path*` Render destination in `vercel.json`; the endpoint is embedded into `import.meta.env.VITE_AI_SOCKET_URL`. No runtime host or duplicate hardcoded Render host is inferred. An optional public `VITE_AI_SOCKET_URL` override must specify the full HTTPS `/api/v1/ai/socket` endpoint and must use the same backend/database as REST. Build and client resolution reject credentials, query strings, fragments, incorrect paths and insecure HTTPS-page downgrades.
+
+Direct connections prefer WebSocket and enable `tryAllTransports` to try polling on transport failure; same-origin development proxies prefer polling with optional upgrade. Namespace rejection is not retried with a consumed ticket. Single-use ticket ownership, customer token verification, origin checks, question IDs, cancellations and retention are unchanged. The Render `FRONTEND_ORIGINS` allowlist must include the exact storefront domain. Deploy BE and rebuild/deploy FE; editing a local environment file does not alter hosted services. These changes do not require rebuilding embeddings.

@@ -17,13 +17,19 @@ export function attachAiGateway(server: HttpServer) {
     path: '/api/v1/ai/socket',
     maxHttpBufferSize: 12000,
     perMessageDeflate: false,
-    transports: ['websocket'],
+    transports: ['polling', 'websocket'],
     cors: { origin: frontendOrigins(), credentials: true },
-    allowRequest: (req, callback) =>
-      callback(
-        null,
-        !!req.headers.origin && frontendOrigins().includes(req.headers.origin)
-      ),
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      // Same-origin browser polling GETs can omit Origin (including through the
+      // storefront HTTP proxy). Namespace authentication still requires a
+      // short-lived, single-use ticket issued by the protected HTTP endpoint.
+      const polling =
+        new URL(req.url ?? '/', 'http://localhost').searchParams.get(
+          'transport'
+        ) === 'polling';
+      callback(null, origin ? frontendOrigins().includes(origin) : polling);
+    },
   });
   io.use((socket, next) => {
     void (async () => {
@@ -50,9 +56,16 @@ export function attachAiGateway(server: HttpServer) {
       socket.data['owner'] = owner;
       socket.data['accessToken'] = token;
       next();
-    })().catch(() =>
-      next(new Error('Phiên kết nối không hợp lệ hoặc đã hết hạn.'))
-    );
+    })().catch(() => {
+      next(
+        Object.assign(
+          new Error('Phiên kết nối không hợp lệ hoặc đã hết hạn.'),
+          {
+            data: { code: 'AI_SOCKET_SESSION_EXPIRED' },
+          }
+        )
+      );
+    });
   });
   io.on('connection', (socket) => {
     const owner = socket.data['owner'] as AiOwner;

@@ -137,6 +137,7 @@ export const articleIdParamSchema = z.strictObject({
 export const articleSlugParamSchema = z.strictObject({ slug: slugSchema });
 const queryBase = paginationSchema
   .extend({
+    categorySlug: slugSchema.optional(),
     search: z.string().trim().min(1).max(120).optional(),
     type: articleTypeSchema.optional(),
     category: z.string().trim().min(1).max(80).optional(),

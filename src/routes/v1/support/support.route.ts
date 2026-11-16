@@ -1,3 +1,4 @@
+import { resourceParamSchema } from '../../../validations/shared/resource-slug.validation.js';
 import {
   Router,
   type RequestHandler,
@@ -137,7 +138,7 @@ router.post(
 router.get(
   '/customer/requests/:id',
   authenticateCustomer,
-  validate({ params: idParamSchema }),
+  validate({ params: resourceParamSchema('bao-hanh') }),
   controller.customerDetail
 );
 router.post(
@@ -157,7 +158,7 @@ router.get(
 router.get(
   '/admin/requests/:id',
   authenticate,
-  validate({ params: idParamSchema }),
+  validate({ params: resourceParamSchema('bao-hanh') }),
   controller.adminDetail
 );
 router.patch(

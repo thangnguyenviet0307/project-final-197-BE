@@ -476,7 +476,7 @@ test('customer orders enforce ownership, pagination, snapshots and response allo
       async lean() {
         return [
           {
-            _id: 'order',
+            _id: 'c'.repeat(24),
             orderCode: 'ORD-ABC234',
             orderStatus: 1,
             orderDate: '2026-01-01',

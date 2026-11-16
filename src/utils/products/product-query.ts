@@ -126,7 +126,16 @@ export async function buildProductSearchQuery(
   signal?: AbortSignal
 ) {
   signal?.throwIfAborted();
-  const query = buildProductQuery(filters);
+  const resolved = { ...filters };
+  if (filters.categorySlug) {
+    const row = await Categories.findOne({ slug: filters.categorySlug }).select('_id').lean();
+    resolved.category = row ? String(row._id) : '000000000000000000000000';
+  }
+  if (filters.brandSlug) {
+    const row = await BrandModel.findOne({ slug: filters.brandSlug }).select('_id').lean();
+    resolved.brand = row ? String(row._id) : '000000000000000000000000';
+  }
+  const query = buildProductQuery(resolved);
   if (!filters.search?.trim()) return query;
   delete query['product_name'];
   const name = { $regex: escapeRegex(filters.search.trim()), $options: 'i' };

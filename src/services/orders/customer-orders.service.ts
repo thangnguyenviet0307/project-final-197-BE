@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import { Types } from 'mongoose';
 import { Order } from '../../models/orders/orders.model.js';
 import { calculateOrderTotal } from '../../utils/orders/order-total.js';
@@ -93,6 +94,7 @@ export async function listCustomerOrders(
   return {
     data: orders.map((order) => ({
       _id: order._id,
+      slug: resourceSlug('don-hang', order._id),
       orderCode: order.orderCode,
       orderStatus: order.orderStatus,
       orderDate: order.orderDate,

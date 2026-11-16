@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import { GuestContacts } from '../../models/customers/guest-contacts.model.js';
 import {
   addressToShipping,
@@ -114,7 +115,7 @@ export async function getCustomers(
     },
   ]);
   return {
-    data: result?.data ?? [],
+    data: (result?.data ?? []).map((row: { _id: unknown }) => ({ ...row, slug: resourceSlug('khach-hang', row._id) })),
     pagination: buildPagination(page, limit, result?.total?.[0]?.count ?? 0),
   };
 }
@@ -134,6 +135,7 @@ export async function getCustomerById(id: string) {
     ...customer?.toObject(),
     ...contact.toObject(),
     _id: customer?._id ?? contact._id,
+    slug: resourceSlug('khach-hang', customer?._id ?? contact._id),
     customerType: customer?.accountEnabled ? 'registered' : 'guest',
     contactSource: 'guest',
     displayName: contact.recipientName,

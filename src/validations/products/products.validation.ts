@@ -229,6 +229,8 @@ export const getProductsQuerySchema = paginationSchema
 
     stockStatus: z.enum(['in_stock', 'low_stock', 'out_of_stock']).optional(),
     search: z.string().trim().max(255).optional(),
+    categorySlug: z.string().max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
+    brandSlug: z.string().max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
     category: catalogIds.optional(),
     brand: catalogIds.optional(),
     minPrice: z.coerce.number().min(0).optional(),

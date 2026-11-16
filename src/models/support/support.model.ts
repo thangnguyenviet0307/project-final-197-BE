@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import {
   POLICY_SECTION_MAX_LENGTH,
   DESCRIPTION_MAX_LENGTH,
@@ -127,6 +128,9 @@ const warrantySchema = new Schema(
 warrantySchema.index({ orderId: 1 });
 warrantySchema.index({ customerId: 1, createdAt: -1, _id: -1 });
 warrantySchema.index({ status: 1, createdAt: -1, _id: -1 });
+warrantySchema.virtual('slug').get(function () { return resourceSlug('bao-hanh', this._id); });
+warrantySchema.set('toJSON', { virtuals: true });
+warrantySchema.set('toObject', { virtuals: true });
 export const WarrantyRequest = model('WarrantyRequest', warrantySchema);
 export type WarrantyDocument = HydratedDocument<
   InferSchemaType<typeof warrantySchema>

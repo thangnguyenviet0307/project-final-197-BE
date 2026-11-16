@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import { createHash, randomUUID } from 'node:crypto';
 import createHttpError from 'http-errors';
 import { Types, type ClientSession } from 'mongoose';
@@ -206,6 +207,7 @@ export function warrantyDto(
 ) {
   return {
     _id: doc._id,
+    slug: resourceSlug('bao-hanh', doc._id),
     __v: doc.__v,
     orderCode: doc.orderCode,
     productName: doc.productName,
@@ -306,6 +308,7 @@ export async function eligibleWarrantyOrders(
   return {
     data: orders.map((order) => ({
       _id: order._id,
+      slug: resourceSlug('don-hang', order._id),
       orderCode: order.orderCode ?? String(order._id),
       orderDate: order.orderDate,
       items: order.orderItems.map((item, itemIndex) => ({

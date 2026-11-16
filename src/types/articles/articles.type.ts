@@ -34,6 +34,7 @@ export type UpdateArticleInput = {
 
 export interface ArticleListQuery {
   summary?: boolean | undefined;
+  categorySlug?: string | undefined;
   page: number;
   limit: number;
   search?: string | undefined;

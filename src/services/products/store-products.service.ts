@@ -18,13 +18,13 @@ import { BrandModel } from '../../models/brands/brands.model.js';
 export const publicProductFields =
   '_id product_name slug sku price discount category categories brand description model_year thumbnail images.secure_url sourceImages stock is_active on_sale count_view is_best_seller is_new is_hot is_home variants._id variants.sku variants.variant_name variants.color variants.size variants.price variants.compare_at_price variants.stock variants.image variants.images variants.attributes tags weight dimensions warrantyInformation shippingInformation returnPolicy minimumOrderQuantity currency';
 const references = [
-  { path: 'category', select: '_id name' },
+  { path: 'category', select: '_id name slug' },
   {
     path: 'categories',
-    select: '_id name',
+    select: '_id name slug',
     match: { isActive: true, isDeleted: { $ne: true } },
   },
-  { path: 'brand', select: '_id name' },
+  { path: 'brand', select: '_id name slug' },
 ];
 
 // Lists do not render editorial content. Exclude it in MongoDB, before loading

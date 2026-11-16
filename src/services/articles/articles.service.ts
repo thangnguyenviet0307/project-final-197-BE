@@ -63,6 +63,13 @@ async function buildListFilter(
     conditions.push({
       categoryId: new mongoose.Types.ObjectId(query.categoryId),
     });
+  if (query.categorySlug) {
+    const category = await PostCategory.findOne({
+      slug: query.categorySlug,
+      ...(publicOnly ? { isActive: true } : {}),
+    }).select('_id').lean();
+    conditions.push({ categoryId: category?._id ?? { $in: [] } });
+  }
   if (query.category) conditions.push({ category: query.category });
   if (query.tag) conditions.push({ tags: query.tag });
   if (query.isFeatured !== undefined)

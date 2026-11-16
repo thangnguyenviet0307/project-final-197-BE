@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import { Schema, model } from 'mongoose';
 import type { IOrder, IOrderItem } from '../../types/orders/orders.type.js';
 import { OrderStatus, PaymentType } from '../../types/orders/orders.type.js';
@@ -105,6 +106,7 @@ const orderSchema = new Schema<IOrder>(
   }
 );
 
+orderSchema.virtual('slug').get(function () { return resourceSlug('don-hang', this._id); });
 orderSchema.index({ customerId: 1, orderDate: -1 });
 orderSchema.index({ contactCustomerId: 1, orderDate: -1 });
 orderSchema.index(

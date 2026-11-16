@@ -1,3 +1,4 @@
+import { resourceSlug } from '../../helpers/resourceSlug.helper.js';
 import { Schema, model } from 'mongoose';
 import { securityChallengeSchema } from '../auth/security-challenge.schema.js';
 import type { ICustomer } from '../../types/customers/customers.type.js';
@@ -67,6 +68,7 @@ const customerSchema = new Schema<ICustomer>(
   }
 );
 
+customerSchema.virtual('slug').get(function () { return resourceSlug('khach-hang', this._id); });
 customerSchema.index({ phone: 1 });
 customerSchema.index({ isActive: 1 });
 
@@ -82,6 +84,6 @@ const stripSecrets = (_doc: unknown, value: unknown) => {
     delete result[key];
   return result;
 };
-customerSchema.set('toJSON', { transform: stripSecrets });
-customerSchema.set('toObject', { transform: stripSecrets });
+customerSchema.set('toJSON', { virtuals: true, transform: stripSecrets });
+customerSchema.set('toObject', { virtuals: true, transform: stripSecrets });
 export const Customer = model<ICustomer>('Customer', customerSchema);

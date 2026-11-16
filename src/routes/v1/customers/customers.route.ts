@@ -1,3 +1,4 @@
+import { resourceParamSchema } from '../../../validations/shared/resource-slug.validation.js';
 import { Router, type Router as RouterType } from 'express';
 import { customerController } from '../../../controllers/customers/customers.controller.js';
 import {
@@ -32,7 +33,7 @@ router.get(
 router.get(
   '/:id',
   requirePermission(Permission.CustomerView),
-  validate({ params: idParamSchema }),
+  validate({ params: resourceParamSchema('khach-hang') }),
   customerController['getCustomerById']!
 );
 // Customer accounts can only be created by public registration.

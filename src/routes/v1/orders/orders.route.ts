@@ -1,3 +1,4 @@
+import { resourceParamSchema } from '../../../validations/shared/resource-slug.validation.js';
 import {
   updateOrderNoteSchema,
   orderAssigneesQuerySchema,
@@ -51,7 +52,7 @@ router.get(
 router.get(
   '/:id',
   requirePermission(Permission.OrderView),
-  validate({ params: idParamSchema }),
+  validate({ params: resourceParamSchema('don-hang') }),
   orderController['getOrderById']!
 );
 router.post(

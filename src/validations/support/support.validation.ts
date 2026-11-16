@@ -1,3 +1,4 @@
+import { resourceKeySchema } from '../shared/resource-slug.validation.js';
 import {
   POLICY_SECTION_MAX_LENGTH,
   DESCRIPTION_MAX_LENGTH,
@@ -55,7 +56,7 @@ export const createWarrantySchema = z
   .strict();
 export const eligibleWarrantyOrdersSchema = supportListSchema
   .omit({ status: true })
-  .extend({ orderId: objectId.optional() })
+  .extend({ orderId: resourceKeySchema('don-hang').optional() })
   .strict();
 export type EligibleWarrantyOrdersInput = z.infer<
   typeof eligibleWarrantyOrdersSchema

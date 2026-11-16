@@ -26,7 +26,7 @@ test('management list combines accounts and guest CRM with an explicit safe proj
     );
     return [
       {
-        data: [{ _id: 'guest', customerType: 'guest' }],
+        data: [{ _id: 'a'.repeat(24), customerType: 'guest' }],
         total: [{ count: 1 }],
       },
     ];

@@ -62,6 +62,8 @@ export interface UpdateProductInput extends OptionalUpdate<ProductInput> {
   expectedVersion?: number | undefined;
 }
 export interface GetProductsQuery extends IPaginationQuery {
+  categorySlug?: string | undefined;
+  brandSlug?: string | undefined;
   on_sale?: boolean | undefined;
   is_best_seller?: boolean | undefined;
   is_new?: boolean | undefined;

@@ -1,3 +1,4 @@
+import { resourceKeySchema } from '../shared/resource-slug.validation.js';
 import type {
   OrderItemInput,
   CreateOrderInput,
@@ -83,7 +84,7 @@ export const getOrdersQuerySchema = paginationSchema
     dateFrom: z.iso.datetime({ offset: true }).pipe(z.coerce.date()).optional(),
     dateTo: z.iso.datetime({ offset: true }).pipe(z.coerce.date()).optional(),
     orderStatus: z.coerce.number().pipe(orderStatusSchema).optional(),
-    customerId: objectId.optional(),
+    customerId: resourceKeySchema('khach-hang').optional(),
     userId: objectId.optional(),
   })
   .refine(

@@ -1,3 +1,6 @@
+import type { ClientSession } from 'mongoose';
+import { withRelationsTransaction } from '../../utils/shared/relations-transaction.js';
+import { queueRemovedEditorImages } from '../editor/editor-image-lifecycle.service.js';
 import {
   LONG_TEXT_MAX_LENGTH,
   POLICY_SECTION_MAX_LENGTH,
@@ -66,12 +69,12 @@ function documentDto(
     return publishedContent ? { content: publishedContent, ...metadata } : null;
   return { key, content, publishedContent, ...metadata, __v: doc?.__v ?? 0 };
 }
-export async function readDocument(key: DocumentKey, admin = false) {
+export async function readDocument(key: DocumentKey, admin = false, session?: ClientSession) {
   if (isPolicy(key)) {
-    const doc = await StorePolicy.findById('store-policy').lean();
+    const doc = await StorePolicy.findById('store-policy', null, { session: session ?? null }).lean();
     return documentDto(key, doc, admin);
   }
-  return documentDto(key, await StoreInformation.findById(key).lean(), admin);
+  return documentDto(key, await StoreInformation.findById(key, null, { session: session ?? null }).lean(), admin);
 }
 export async function listDocuments() {
   return Promise.all(documentKeys.map((key) => readDocument(key, true)));
@@ -82,6 +85,14 @@ export async function writeDocument(
   input: { content: string; publish: boolean; expectedVersion: number },
   remove = false
 ) {
+  return withRelationsTransaction((session) => writeDocumentInSession(key, input, remove, session));
+}
+async function writeDocumentInSession(
+  key: DocumentKey,
+  input: { content: string; publish: boolean; expectedVersion: number },
+  remove: boolean,
+  session: ClientSession
+) {
   const maxLength = isPolicy(key)
     ? POLICY_SECTION_MAX_LENGTH
     : LONG_TEXT_MAX_LENGTH;
@@ -90,7 +101,7 @@ export async function writeDocument(
       400,
       `Nội dung tối đa ${maxLength} ký tự bao gồm định dạng.`
     );
-  const current = await readDocument(key, true);
+  const current = await readDocument(key, true, session);
   if (!current || !('__v' in current) || current.__v !== input.expectedVersion)
     throw versionConflict();
   const now = new Date();
@@ -127,7 +138,7 @@ export async function writeDocument(
   };
   // MongoDB cannot create a dotted child below a legacy null published snapshot.
   if (isPolicy(key) && (input.publish || remove)) {
-    const snapshot = await StorePolicy.findById('store-policy').lean();
+    const snapshot = await StorePolicy.findById('store-policy', null, { session: session ?? null }).lean();
     if (!snapshot?.publishedContent) {
       delete set[publishedPath];
       set['publishedContent'] = { [key]: remove ? '' : input.content };
@@ -136,6 +147,7 @@ export async function writeDocument(
   const update = { $set: set, $inc: { __v: 1 } };
   try {
     const options = {
+      session,
       returnDocument: 'after' as const,
       upsert: input.expectedVersion === 0,
       runValidators: true,
@@ -145,7 +157,13 @@ export async function writeDocument(
       ? await StorePolicy.findOneAndUpdate(filter, update, options)
       : await StoreInformation.findOneAndUpdate(filter, update, options);
     if (!result) throw versionConflict();
-    return documentDto(key, result.toObject(), true);
+    const saved = documentDto(key, result.toObject(), true);
+    await queueRemovedEditorImages(
+      [current.content, current.publishedContent],
+      [saved?.content, saved && 'publishedContent' in saved ? saved.publishedContent : null],
+      session
+    );
+    return saved;
   } catch (error) {
     if (
       typeof error === 'object' &&

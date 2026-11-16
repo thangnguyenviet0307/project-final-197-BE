@@ -1,4 +1,5 @@
 import { enqueueImageCleanup } from './image-cleanup.service.js';
+import { queueRemovedEditorImages } from '../editor/editor-image-lifecycle.service.js';
 import { OPEN_ORDER_STATUSES } from '../../types/orders/orders.type.js';
 import { sumVariantStock } from '../../utils/orders/inventory.js';
 import { buildPagination } from '../../utils/shared/pagination.js';
@@ -482,8 +483,11 @@ const updateProduct = async (id: string, payload: UpdateProductInput) =>
     } else if (existing.variants.length && payload.stock !== undefined) {
       throw createHttpError(400, 'Update stock on individual variants');
     }
+    const previousDescription = existing.description;
     existing.set(updated);
     await existing.save({ session });
+    if (payload.description !== undefined)
+      await queueRemovedEditorImages([previousDescription], [existing.description], session);
     return existing.toObject();
   });
 

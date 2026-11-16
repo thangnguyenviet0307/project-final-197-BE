@@ -3,6 +3,7 @@ import { Schema, model } from 'mongoose';
 const schema = new Schema(
   {
     publicId: { type: String, required: true, unique: true },
+    checkEditorReferences: { type: Boolean, default: false },
     deliveryType: {
       type: String,
       enum: ['upload', 'authenticated'],

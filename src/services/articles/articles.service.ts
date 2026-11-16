@@ -3,7 +3,8 @@ import { PostCategory } from '../../models/articles/post-categories.model.js';
 import { withRelationsTransaction } from '../../utils/shared/relations-transaction.js';
 import createHttpError from 'http-errors';
 import mongoose from 'mongoose';
-import slugify from 'slugify';
+import { buildSlug } from '../../helpers/buildSlug.helper.js';
+import { queueRemovedEditorImages } from '../editor/editor-image-lifecycle.service.js';
 import { Article } from '../../models/articles/articles.model.js';
 import type { AuthUser } from '../../types/auth/auth.type.js';
 import type {
@@ -102,9 +103,7 @@ function toPublicArticle<
 }
 
 function normalizeSlug(title: string, slug?: string): string {
-  const normalized = slug
-    ? slugify(slug, { lower: true, strict: true, trim: true })
-    : slugify(title, { lower: true, strict: true, trim: true });
+  const normalized = buildSlug(slug || title);
   if (!normalized)
     throw createHttpError(
       400,
@@ -393,6 +392,7 @@ async function updateArticleInSession(
     fields.slug = slug;
   }
   const previousStatus = article.status as ArticleStatus;
+  const previousContent = article.content;
   if (fields.seo)
     fields.seo = {
       title: article.seo?.title ?? '',
@@ -420,6 +420,8 @@ async function updateArticleInSession(
       throw value;
     });
   }
+  if (fields.content !== undefined)
+    await queueRemovedEditorImages([previousContent], [article.content], session);
   return article;
 }
 

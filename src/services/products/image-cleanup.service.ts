@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { ClientSession } from 'mongoose';
 import { ImageCleanupJob } from '../../models/products/image-cleanup-jobs.model.js';
 import { configureCloudinary } from '../../config/cloudinary.js';
+import { isEditorImageReferenced } from '../editor/editor-image-cleanup.service.js';
 
 export async function enqueueImageCleanup(
   publicIds: string[],
   session?: ClientSession,
-  deliveryType: 'upload' | 'authenticated' = 'upload'
+  deliveryType: 'upload' | 'authenticated' = 'upload',
+  checkEditorReferences = false
 ) {
   const ids = [...new Set(publicIds)];
   if (!ids.length) return;
@@ -17,6 +19,7 @@ export async function enqueueImageCleanup(
         update: {
           $setOnInsert: {
             publicId,
+            ...(checkEditorReferences ? { checkEditorReferences: true } : {}),
             ...(deliveryType === 'authenticated' ? { deliveryType } : {}),
             runAt: new Date(),
             leaseUntil: new Date(0),
@@ -44,6 +47,10 @@ export async function processImageCleanupBatch() {
     if (!job) return;
     const claim = { _id: job._id, leaseToken };
     try {
+      if (job.checkEditorReferences && await isEditorImageReferenced(job.publicId)) {
+        await ImageCleanupJob.deleteOne(claim);
+        continue;
+      }
       const result: { result?: string } =
         await configureCloudinary().uploader.destroy(job.publicId, {
           resource_type: 'image',

@@ -1,6 +1,8 @@
 import createHttpError from 'http-errors';
 
 const folders = {
+  articles: ['CLOUDINARY_ARTICLE_FOLDER', 'project-final/articles/covers'],
+  hero: ['CLOUDINARY_HERO_FOLDER', 'project-final/hero/backgrounds'],
   editor: ['CLOUDINARY_EDITOR_FOLDER', 'project-final/editor'],
   products: ['CLOUDINARY_PRODUCT_FOLDER', 'project-final/products'],
   brands: ['CLOUDINARY_BRAND_FOLDER', 'project-final/brands'],

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import createHttpError from 'http-errors';
-import { Types } from 'mongoose';
+import { Types, type ClientSession } from 'mongoose';
+import { queueRemovedEditorImages } from '../editor/editor-image-lifecycle.service.js';
 import { withRelationsTransaction } from '../../utils/shared/relations-transaction.js';
 import type { UploadApiResponse } from 'cloudinary';
 import {
@@ -70,8 +71,15 @@ export async function savePolicy(input: {
   expectedVersion: number;
   publish: boolean;
 }) {
+  return withRelationsTransaction((session) => savePolicyInSession(input, session));
+}
+async function savePolicyInSession(input: {
+  content: PolicyContent;
+  expectedVersion: number;
+  publish: boolean;
+}, session: ClientSession) {
   const { content, expectedVersion, publish } = input;
-  const current = publish ? await StorePolicy.findById(policyId).lean() : null;
+  const current = await StorePolicy.findById(policyId, null, { session }).lean();
   const now = new Date();
   const metadata = publish
     ? (Object.assign(
@@ -106,6 +114,7 @@ export async function savePolicy(input: {
         $inc: { __v: 1 },
       },
       {
+        session,
         returnDocument: 'after',
         upsert: expectedVersion === 0,
         runValidators: true,
@@ -113,6 +122,12 @@ export async function savePolicy(input: {
       }
     );
     if (!policy) throw versionConflict();
+    const saved = policy.toObject();
+    await queueRemovedEditorImages(
+      [...Object.values(current?.content ?? {}), ...Object.values(current?.publishedContent ?? {})],
+      [...Object.values(saved.content ?? {}), ...Object.values(saved.publishedContent ?? {})],
+      session
+    );
     return policy;
   } catch (error) {
     if (

@@ -1,3 +1,10 @@
+import mongoose from 'mongoose';
+import { beforeEach } from 'node:test';
+import { SystemLock } from '../dist/models/shared/system-locks.model.js';
+beforeEach((t) => {
+  t.mock.method(mongoose.connection, 'transaction', (work) => work({}));
+  t.mock.method(SystemLock, 'updateOne', async () => ({}));
+});
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';

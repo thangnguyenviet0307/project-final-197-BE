@@ -1,3 +1,4 @@
+import { getCloudinaryFolder } from '../dist/config/cloudinary-folders.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { v2 as cloudinary } from 'cloudinary';
@@ -24,7 +25,7 @@ test('editor images require content-write permission and validate files before u
   );
   assert.equal(upload.mock.callCount(), 0);
 });
-test('editor upload stores validated images in a dedicated folder and returns a secure URL', async (t) => {
+for (const kind of ['editor', 'articles', 'hero']) test(`${kind} upload uses its dedicated folder and returns a secure URL`, async (t) => {
   const previous = { ...process.env };
   process.env.CLOUDINARY_CLOUD_NAME = 'test';
   process.env.CLOUDINARY_API_KEY = 'test';
@@ -42,7 +43,7 @@ test('editor upload stores validated images in a dedicated folder and returns a 
   t.mock.method(cloudinary.uploader, 'upload_stream', (options, callback) => {
     assert.equal(
       options.folder,
-      process.env.CLOUDINARY_EDITOR_FOLDER || 'project-final/editor'
+      getCloudinaryFolder(kind)
     );
     assert.deepEqual(options.allowed_formats, ['jpg', 'png', 'webp']);
     return {
@@ -57,7 +58,7 @@ test('editor upload stores validated images in a dedicated folder and returns a 
     await uploadEditorImage({
       buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
       mimetype: 'image/png',
-    }),
+    }, kind),
     { url: 'https://example.com/image.png', publicId: 'editor/test' }
   );
 });

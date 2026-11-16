@@ -246,6 +246,7 @@ test('legacy policy reads add an empty privacy section without writing or alteri
   assert.equal(write.mock.callCount(), 0);
 });
 test('unpublished policy returns null and draft writes never touch public content', async (t) => {
+  mockTransaction(t);
   t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => null }));
   assert.equal(await service.getPolicy(), null);
   const update = t.mock.method(
@@ -266,6 +267,7 @@ test('unpublished policy returns null and draft writes never touch public conten
   assert.equal(update.mock.callCount(), 1);
 });
 test('policy initial concurrent creation maps duplicate _id to a version conflict', async (t) => {
+  mockTransaction(t);
   t.mock.method(StorePolicy, 'findById', () => ({ lean: async () => null }));
   t.mock.method(StorePolicy, 'findOneAndUpdate', async () => {
     throw { code: 11000 };

@@ -14,6 +14,7 @@ const fields = {
 };
 export const createPostCategorySchema = z.strictObject({
   ...fields,
+  slug: fields.slug.optional(),
   description: fields.description.default(''),
   isActive: fields.isActive.default(true),
 });

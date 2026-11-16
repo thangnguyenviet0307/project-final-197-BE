@@ -1,3 +1,4 @@
+import { buildSlug } from '../../helpers/buildSlug.helper.js';
 import createHttpError from 'http-errors';
 import type { z } from 'zod';
 import { PostCategory } from '../../models/articles/post-categories.model.js';
@@ -15,7 +16,9 @@ export async function listPostCategories(publicOnly = false) {
 export async function createPostCategory(
   input: z.infer<typeof createPostCategorySchema>
 ) {
-  return PostCategory.create(input);
+  const slug = buildSlug(input.slug || input.name);
+  if (!slug) throw createHttpError(400, 'Category name must contain letters or numbers');
+  return PostCategory.create({ ...input, slug });
 }
 export async function updatePostCategory(
   id: string,

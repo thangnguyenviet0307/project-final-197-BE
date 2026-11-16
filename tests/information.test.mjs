@@ -1,3 +1,11 @@
+import mongoose from 'mongoose';
+import { beforeEach } from 'node:test';
+import { SystemLock } from '../dist/models/shared/system-locks.model.js';
+beforeEach((t) => {
+  t.mock.method(mongoose.connection, 'transaction', (work) => work({}));
+  t.mock.method(SystemLock, 'updateOne', async () => ({}));
+  t.mock.method(StoreInformation, 'findById', () => ({ lean: async () => null }));
+});
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StoreInformation } from '../dist/models/support/information.model.js';

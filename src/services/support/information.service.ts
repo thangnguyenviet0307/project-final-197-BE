@@ -1,3 +1,6 @@
+import type { ClientSession } from 'mongoose';
+import { withRelationsTransaction } from '../../utils/shared/relations-transaction.js';
+import { queueRemovedEditorImages } from '../editor/editor-image-lifecycle.service.js';
 import type { z } from 'zod';
 import { StoreInformation } from '../../models/support/information.model.js';
 import type { saveInformationSchema } from '../../validations/support/information.validation.js';
@@ -20,9 +23,14 @@ export async function saveInformation(
   slug: string,
   input: z.infer<typeof saveInformationSchema>
 ) {
-  const current = input.publish
-    ? await StoreInformation.findById(slug).lean()
-    : null;
+  return withRelationsTransaction((session) => saveInformationInSession(slug, input, session));
+}
+async function saveInformationInSession(
+  slug: string,
+  input: z.infer<typeof saveInformationSchema>,
+  session: ClientSession
+) {
+  const current = await StoreInformation.findById(slug, null, { session }).lean();
   const now = new Date();
   try {
     const document = await StoreInformation.findOneAndUpdate(
@@ -48,6 +56,7 @@ export async function saveInformation(
         $inc: { __v: 1 },
       },
       {
+        session,
         returnDocument: 'after',
         upsert: input.expectedVersion === 0,
         runValidators: true,
@@ -55,6 +64,11 @@ export async function saveInformation(
       }
     );
     if (!document) throw versionConflict();
+    await queueRemovedEditorImages(
+      [current?.content, current?.publishedContent],
+      [document.content, document.publishedContent],
+      session
+    );
     return {
       content: document.content,
       publishedAt: document.publishedAt,

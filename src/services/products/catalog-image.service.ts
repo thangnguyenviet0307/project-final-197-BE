@@ -26,7 +26,7 @@ export async function cleanupCatalogImage(publicId?: string) {
 }
 export async function withCatalogImage<T>(
   file: Express.Multer.File | undefined,
-  kind: 'brands' | 'categories' | 'editor',
+  kind: 'brands' | 'categories' | 'editor' | 'articles' | 'hero',
   save: (image?: { url: string; publicId: string }) => Promise<T>,
   oldImage: () => string | undefined = () => undefined
 ): Promise<T> {

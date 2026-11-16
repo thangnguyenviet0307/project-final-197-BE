@@ -11,20 +11,19 @@ export function validateProductImage(file: Express.Multer.File) {
   const data = file.buffer;
   if (data.length > 5 * 1024 * 1024)
     throw createHttpError(413, 'Product image must not exceed 5 MB');
-  const valid =
-    (file.mimetype === 'image/jpeg' &&
-      data[0] === 255 &&
-      data[1] === 216 &&
-      data[2] === 255) ||
-    (file.mimetype === 'image/png' &&
-      data
-        .subarray(0, 8)
-        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) ||
-    (file.mimetype === 'image/webp' &&
-      data.subarray(0, 4).toString('ascii') === 'RIFF' &&
-      data.subarray(8, 12).toString('ascii') === 'WEBP');
-  if (!valid)
-    throw createHttpError(400, 'Image content does not match its type');
+  // Browser MIME metadata can follow a renamed file extension. Trust only the
+  // supported binary signature, while retaining the declared-type allowlist.
+  let detectedType: string | undefined;
+  if (data[0] === 255 && data[1] === 216 && data[2] === 255)
+    detectedType = 'image/jpeg';
+  else if (data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+    detectedType = 'image/png';
+  else if (data.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    data.subarray(8, 12).toString('ascii') === 'WEBP')
+    detectedType = 'image/webp';
+  if (!detectedType || !['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))
+    throw createHttpError(400, 'Nội dung tệp không phải ảnh JPG, PNG hoặc WebP hợp lệ. Vui lòng xuất lại ảnh rồi thử lại.');
+  file.mimetype = detectedType;
 }
 
 export async function addProductImage(id: string, file?: Express.Multer.File) {

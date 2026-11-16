@@ -146,4 +146,10 @@ test('editor image HTTP route enforces authentication, permissions and upload va
     (await response.json()).data.url,
     'https://example.com/image.png'
   );
+  // A WebP downloaded/renamed as PNG must still reach the shared uploader.
+  body.set('image', new Blob([Buffer.from('RIFF\x04\x00\x00\x00WEBP', 'binary')], {
+    type: 'image/png',
+  }), 'renamed.png');
+  assert.equal((await fetch(url, { method: 'POST', headers, body })).status, 201);
+  assert.equal(upload.mock.callCount(), 2);
 });
